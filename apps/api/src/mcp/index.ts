@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { auth } from "../auth";
+import { verifyApiKey } from "../utils/verify-api-key";
 import {
   beginMcpAuthorization,
   decideMcpAuthorizationRequest,
@@ -23,37 +24,66 @@ import {
 } from "./schemas";
 import { registerMcpTools } from "./tools";
 
-const apiUrl = (process.env.KANEO_API_URL || "http://localhost:1337").replace(
-  /\/api\/?$/,
-  "",
-);
+// Keep public links/metadata separate from server-to-server API calls. The
+// bundled API runs on 1337 inside the container, while browsers must receive
+// the private Caddy URL rather than a container loopback address.
+const publicApiUrl = (
+  process.env.KANEO_PUBLIC_API_URL ||
+  process.env.KANEO_API_URL ||
+  "http://localhost:1337"
+).replace(/\/api\/?$/, "");
+const internalApiUrl = (
+  process.env.KANEO_INTERNAL_API_URL || "http://127.0.0.1:1337"
+).replace(/\/api\/?$/, "");
 
 const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
+type McpAuthMode = "bearer" | "x-api-key";
 
-function createMcpServerForUser(token: string): McpServer {
+type McpAuthResult = {
+  userId: string;
+  token: string;
+  authMode: McpAuthMode;
+};
+
+function createMcpServerForUser(authResult: McpAuthResult): McpServer {
   const server = new McpServer({
     name: "kaneo-mcp",
     version: "1.0.0",
   });
-  registerMcpTools(server, apiUrl, token);
+  registerMcpTools(
+    server,
+    internalApiUrl,
+    authResult.token,
+    authResult.authMode,
+  );
   return server;
 }
 
 async function validateBearerToken(
   req: Request,
-): Promise<{ userId: string; token: string } | null> {
+): Promise<McpAuthResult | null> {
   const authHeader = req.headers.get("authorization");
-  if (!authHeader) return null;
-  const match = authHeader.match(/^Bearer\s+(\S+)$/i);
-  if (!match?.[1]) return null;
-  const token = match[1];
+  const bearerMatch = authHeader?.match(/^Bearer\s+(\S+)$/i);
+  const apiKeyHeader = req.headers.get("x-api-key")?.trim();
+  const token = bearerMatch?.[1] ?? apiKeyHeader;
+  if (!token) return null;
+
+  // The REST auth middleware already accepts API keys as either x-api-key or
+  // Bearer. MCP bypasses that middleware, so verify the same key explicitly
+  // before falling back to a normal Better Auth bearer session.
+  const apiKeyResult = await verifyApiKey(token);
+  if (apiKeyResult?.valid && apiKeyResult.key?.userId) {
+    return { userId: apiKeyResult.key.userId, token, authMode: "x-api-key" };
+  }
+
+  if (!bearerMatch?.[1]) return null;
 
   const headers = new Headers();
   headers.set("authorization", `Bearer ${token}`);
   const session = await auth.api.getSession({ headers });
 
   if (!session?.user?.id) return null;
-  return { userId: session.user.id, token };
+  return { userId: session.user.id, token, authMode: "bearer" };
 }
 
 const mcp = new Hono();
@@ -238,17 +268,17 @@ mcp.post("/mcp/token", async (c) => {
 
 mcp.get("/.well-known/oauth-protected-resource/api/mcp", (c) =>
   c.json({
-    resource: `${apiUrl}/api/mcp`,
-    authorization_servers: [`${apiUrl}/api`],
+    resource: `${publicApiUrl}/api/mcp`,
+    authorization_servers: [`${publicApiUrl}/api`],
   }),
 );
 
 mcp.get("/.well-known/oauth-authorization-server/api", (c) =>
   c.json({
-    issuer: `${apiUrl}/api`,
-    authorization_endpoint: `${apiUrl}/api/mcp/authorize`,
-    token_endpoint: `${apiUrl}/api/mcp/token`,
-    registration_endpoint: `${apiUrl}/api/mcp/register`,
+    issuer: `${publicApiUrl}/api`,
+    authorization_endpoint: `${publicApiUrl}/api/mcp/authorize`,
+    token_endpoint: `${publicApiUrl}/api/mcp/token`,
+    registration_endpoint: `${publicApiUrl}/api/mcp/register`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code"],
     code_challenge_methods_supported: ["S256"],
@@ -259,7 +289,7 @@ mcp.get("/.well-known/oauth-authorization-server/api", (c) =>
 mcp.all("/mcp", async (c) => {
   const authResult = await validateBearerToken(c.req.raw);
   if (!authResult) {
-    const prmUrl = `${apiUrl}/api/.well-known/oauth-protected-resource/api/mcp`;
+    const prmUrl = `${publicApiUrl}/api/.well-known/oauth-protected-resource/api/mcp`;
     c.header("WWW-Authenticate", `Bearer resource_metadata="${prmUrl}"`);
     return c.json(
       {
@@ -294,7 +324,7 @@ mcp.all("/mcp", async (c) => {
     }
   };
 
-  const server = createMcpServerForUser(authResult.token);
+  const server = createMcpServerForUser(authResult);
   await server.connect(transport);
   const response = await transport.handleRequest(c.req.raw);
 

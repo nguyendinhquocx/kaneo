@@ -2,15 +2,22 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
+type McpAuthMode = "bearer" | "x-api-key";
+
 class ApiClient {
   constructor(
     private baseUrl: string,
     private token: string,
+    private authMode: McpAuthMode = "bearer",
   ) {}
 
   async json<T = unknown>(path: string, init?: RequestInit): Promise<T> {
     const headers = new Headers(init?.headers);
-    headers.set("Authorization", `Bearer ${this.token}`);
+    if (this.authMode === "x-api-key") {
+      headers.set("x-api-key", this.token);
+    } else {
+      headers.set("Authorization", `Bearer ${this.token}`);
+    }
     if (init?.body != null && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
@@ -177,8 +184,9 @@ export function registerMcpTools(
   server: McpServer,
   baseUrl: string,
   token: string,
+  authMode: McpAuthMode = "bearer",
 ): void {
-  const client = new ApiClient(baseUrl, token);
+  const client = new ApiClient(baseUrl, token, authMode);
 
   server.registerTool(
     "whoami",

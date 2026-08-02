@@ -14,6 +14,7 @@ const pluralForms = ["_zero", "_one", "_two", "_few", "_many", "_other"];
 
 const args = process.argv.slice(2);
 const shouldFix = args.includes("--fix");
+const allowDynamic = args.includes("--allow-dynamic");
 
 const { locales, reference } = await loadLocales();
 const localeKeys = flattenLocale(reference.data);
@@ -34,7 +35,11 @@ const unused = new Set(
   ),
 );
 
-if (missing.size === 0 && unused.size === 0 && dynamicCalls.length === 0) {
+if (
+  missing.size === 0 &&
+  unused.size === 0 &&
+  (allowDynamic || dynamicCalls.length === 0)
+) {
   console.log("i18n report is clean.");
 } else {
   if (missing.size > 0) {
@@ -78,7 +83,7 @@ if (shouldFix) {
   }
 }
 
-if (missing.size > 0 || dynamicCalls.length > 0) {
+if (missing.size > 0 || (!allowDynamic && dynamicCalls.length > 0)) {
   process.exit(1);
 }
 

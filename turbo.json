@@ -1,6 +1,11 @@
 {
 	"$schema": "https://turbo.build/schema.json",
 	"ui": "tui",
+	"globalEnv": [
+		"KANEO_API_URL",
+		"KANEO_PUBLIC_API_URL",
+		"KANEO_INTERNAL_API_URL"
+	],
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],

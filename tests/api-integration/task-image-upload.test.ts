@@ -18,9 +18,11 @@ describe("API integration: task image upload finalize", () => {
     process.env.S3_ACCESS_KEY_ID = "test-access-key";
     process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
     delete process.env.S3_KEY_PREFIX;
+    delete process.env.KANEO_PUBLIC_API_URL;
   });
 
   afterEach(() => {
+    delete process.env.KANEO_PUBLIC_API_URL;
     vi.restoreAllMocks();
   });
 
@@ -72,6 +74,54 @@ describe("API integration: task image upload finalize", () => {
     expect(payload).toHaveProperty("url");
     expect(payload.url).toBe(`http://kaneo.test:1337/api/asset/${payload.id}`);
     expect(payload.url).not.toContain("localhost");
+  });
+
+  it("prefers KANEO_PUBLIC_API_URL when the API URL is internal", async () => {
+    process.env.KANEO_API_URL = "http://127.0.0.1:1337";
+    process.env.KANEO_PUBLIC_API_URL = "https://kaneo.quoc.app";
+
+    const member = await createWorkspaceMember();
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+
+    const [task] = await db
+      .insert(schema.taskTable)
+      .values({
+        projectId: project.id,
+        userId: member.user.id,
+        title: "Public URL override test",
+        status: "to-do",
+        columnId: columns.todo.id,
+        priority: "medium",
+        number: 1,
+        position: 1,
+      })
+      .returning();
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    const key = `workspace/${member.workspace.id}/project/${project.id}/task/${task.id}/descriptions/public-url.png`;
+
+    const response = await app.request(
+      `/api/task/image-upload/${task.id}/finalize`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          key,
+          filename: "public-url.png",
+          contentType: "image/png",
+          size: 12345,
+          surface: "description",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as { id: string; url: string };
+    expect(payload.url).toBe(`https://kaneo.quoc.app/api/asset/${payload.id}`);
   });
 
   it("updates the URL when KANEO_API_URL changes", async () => {

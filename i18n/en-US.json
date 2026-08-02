@@ -151,6 +151,7 @@
 			"googleError": "Failed to sign in with Google",
 			"githubError": "Failed to sign in with GitHub",
 			"discordError": "Failed to sign in with Discord",
+			"instanceStatusError": "Couldn't reach the server. Please retry in a moment.",
 			"errors": {
 				"account_not_linked": "This identity could not be linked to the existing account. Sign in by email to verify the account, then try SSO again. If email sign-in is unavailable, contact your administrator.",
 				"oauth_code_verification_failed": "OAuth verification failed. Please try again.",
@@ -187,6 +188,9 @@
 			"invitationAlert": "After creating your account, you'll be able to accept your workspace invitation.",
 			"registrationDisabledAlert": "Registration is currently disabled. If you were invited, enter the email address that received the invitation to create your account.",
 			"passwordDisabledAlert": "Password-based account creation is disabled. Use a configured social or OIDC sign-in method from the sign-in page.",
+			"instanceAdminTitle": "Set up your Kaneo instance",
+			"instanceAdminSubtitle": "This account becomes the instance administrator with full access.",
+			"instanceStatusError": "Couldn't reach the server. Please retry in a moment.",
 			"signingIn": "Signing in...",
 			"continueAsGuest": "Continue as guest",
 			"toggleMessage": "Already have an account?",
@@ -559,6 +563,21 @@
 			"toastUpdateError": "Failed to update workspace",
 			"toastDeleted": "Workspace deleted successfully",
 			"toastDeleteError": "Failed to delete workspace",
+			"transferOwnership": {
+				"title": "Transfer ownership",
+				"subtitle": "Hand this workspace over to another member. You'll be demoted to admin and lose owner-only abilities.",
+				"pickerLabel": "New owner",
+				"noEligibleMembers": "Invite at least one other member before you can transfer ownership.",
+				"pickerHint": "They become the sole owner of this workspace.",
+				"pickerPlaceholder": "Select a member",
+				"button": "Transfer",
+				"dialogTitle": "Transfer ownership?",
+				"dialogDescription": "{{name}} will become the sole owner of {{workspace}}. You'll keep admin access but lose owner-only abilities like deleting the workspace or transferring it again.",
+				"transferring": "Transferring…",
+				"confirm": "Transfer ownership",
+				"toastSuccess": "Ownership transferred",
+				"toastError": "Failed to transfer ownership"
+			},
 			"validation": {
 				"nameRequired": "Workspace name is required",
 				"nameShort": "Workspace name must be at least 2 characters"
@@ -1450,6 +1469,15 @@
 				"copied": "Copied",
 				"dropImageToUpload": "Drop image to upload",
 				"previewImageAlt": "Preview image",
+				"table": {
+					"addColumnBefore": "Insert column left",
+					"addColumnAfter": "Insert column right",
+					"deleteColumn": "Delete column",
+					"addRowBefore": "Insert row above",
+					"addRowAfter": "Insert row below",
+					"deleteRow": "Delete row",
+					"deleteTable": "Delete table"
+				},
 				"codeLang": {
 					"bash": "Bash",
 					"csharp": "C#",
@@ -1474,6 +1502,17 @@
 		}
 	},
 	"tasks": {
+		"editor": {
+			"table": {
+				"addColumnBefore": "Insert column left",
+				"addColumnAfter": "Insert column right",
+				"deleteColumn": "Delete column",
+				"addRowBefore": "Insert row above",
+				"addRowAfter": "Insert row below",
+				"deleteRow": "Delete row",
+				"deleteTable": "Delete table"
+			}
+		},
 		"status": {
 			"label": "Status",
 			"to-do": "To Do",
@@ -1627,6 +1666,7 @@
 		},
 		"subtasks": {
 			"title": "Sub-tasks",
+			"completeAria": "Mark subtask complete",
 			"inputPlaceholder": "Subtask title...",
 			"addAction": "Add",
 			"empty": "No subtasks yet",

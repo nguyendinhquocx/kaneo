@@ -32,7 +32,11 @@ for (const locale of filteredLocales) {
     [...referenceKeys].filter((key) => !localeKeys.has(key)),
   );
   const extra = new Set(
-    [...localeKeys].filter((key) => !referenceKeys.has(key)),
+    [...localeKeys].filter(
+      (key) =>
+        !referenceKeys.has(key) &&
+        !isAllowedPluralVariant(key, referenceKeys),
+    ),
   );
 
   if (missing.size === 0 && extra.size === 0) {
@@ -72,3 +76,14 @@ if (!hasIssues) {
 }
 
 process.exit(shouldFix ? 0 : 1);
+
+function isAllowedPluralVariant(key, referenceKeys) {
+  const match = key.match(/^(.*)_(zero|one|two|few|many|other)$/u);
+  if (!match) return false;
+  const baseKey = match[1];
+  return [...referenceKeys].some(
+    (referenceKey) =>
+      referenceKey === baseKey ||
+      referenceKey.startsWith(`${baseKey}_`),
+  );
+}

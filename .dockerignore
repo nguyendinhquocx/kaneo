@@ -1,0 +1,17 @@
+.git
+.git/**
+.github
+.claude
+.agents
+skills
+node_modules
+**/node_modules
+.turbo
+**/.turbo
+coverage
+**/coverage
+.env
+.env.*
+!.env.sample
+*.log
+.DS_Store

@@ -582,15 +582,13 @@ export function createApp() {
   const invitationApi = api.route("/invitation", invitation);
   const workspaceApi = api.route("/workspace", workspace);
 
-  app.route(
-    "/",
-    mcpWellKnownRoutes(
-      (process.env.KANEO_API_URL || "http://localhost:1337").replace(
-        /\/api\/?$/,
-        "",
-      ),
-    ),
-  );
+  const publicApiUrl = (
+    process.env.KANEO_PUBLIC_API_URL ||
+    process.env.KANEO_API_URL ||
+    "http://localhost:1337"
+  ).replace(/\/api\/?$/, "");
+
+  app.route("/", mcpWellKnownRoutes(publicApiUrl));
 
   // User-scoped WebSocket endpoint — MUST be registered before /ws/:projectId
   // so the literal path "user" isn't consumed by the param route.

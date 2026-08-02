@@ -152,8 +152,11 @@
 			"githubError": "GitHub 로그인에 실패했습니다",
 			"discordError": "Discord 로그인에 실패했습니다",
 			"errors": {
-				"account_not_linked": "This identity could not be linked to the existing account. Sign in by email to verify the account, then try SSO again. If email sign-in is unavailable, contact your administrator."
-			}
+				"account_not_linked": "This identity could not be linked to the existing account. Sign in by email to verify the account, then try SSO again. If email sign-in is unavailable, contact your administrator.",
+				"oauth_code_verification_failed": "OAuth verification failed. Please try again.",
+				"registration_is_currently_disabled_you_need_a_valid_invitation_to_create_an_account_": "Registration is currently disabled. You need a valid invitation to create an account."
+			},
+			"instanceStatusError": "Couldn't reach the server. Please retry in a moment."
 		},
 		"providers": {
 			"google": "Google",
@@ -188,7 +191,10 @@
 			"signingIn": "로그인 중...",
 			"continueAsGuest": "게스트로 계속하기",
 			"toggleMessage": "이미 계정이 있으신가요?",
-			"toggleLink": "로그인"
+			"toggleLink": "로그인",
+			"instanceAdminSubtitle": "This account becomes the instance administrator with full access.",
+			"instanceAdminTitle": "Set up your Kaneo instance",
+			"instanceStatusError": "Couldn't reach the server. Please retry in a moment."
 		},
 		"verifyOtp": {
 			"pageTitle": "인증 코드 확인",
@@ -412,7 +418,21 @@
 			"toastPreferencesSaved": "알림 환경설정이 저장되었습니다",
 			"toastPreferencesSaveFailed": "알림 환경설정 저장에 실패했습니다",
 			"toastRuleSavedGeneric": "워크스페이스 알림 규칙이 저장되었습니다",
-			"toastRuleRemovedGeneric": "워크스페이스 알림 규칙이 제거되었습니다"
+			"toastRuleRemovedGeneric": "워크스페이스 알림 규칙이 제거되었습니다",
+			"eventComments": "Comments and mentions",
+			"eventCommentsHint": "Includes new comments on tasks assigned to you and direct @mentions.",
+			"eventDueDateReminders": "Due-date reminders",
+			"eventPreferencesDescription": "Choose which task events create in-app notifications and can be delivered to your connected channels.",
+			"eventPreferencesTitle": "Notify me about",
+			"eventStatusChanges": "Task status changes",
+			"eventTaskAssignments": "Task assignments",
+			"reminderLeadTimeHint": "Between 1 hour and 30 days before. Overdue notifications are sent separately.",
+			"reminderLeadTimeInvalid": "Enter a whole number between 1 and {{max}}.",
+			"reminderLeadTimeLabel": "Remind me before the due date",
+			"reminderLeadTimeUnitDays": "Days",
+			"reminderLeadTimeUnitHours": "Hours",
+			"saveEventPreferences": "Save notification types",
+			"workspaceEnabledLabel": "Enable notifications for {{workspaceName}}"
 		},
 		"preferencesPage": {
 			"title": "환경설정",
@@ -546,6 +566,21 @@
 			"validation": {
 				"nameRequired": "워크스페이스 이름은 필수입니다",
 				"nameShort": "워크스페이스 이름은 2자 이상이어야 합니다"
+			},
+			"transferOwnership": {
+				"button": "Transfer",
+				"confirm": "Transfer ownership",
+				"dialogDescription": "{{name}} will become the sole owner of {{workspace}}. You'll keep admin access but lose owner-only abilities like deleting the workspace or transferring it again.",
+				"dialogTitle": "Transfer ownership?",
+				"noEligibleMembers": "Invite at least one other member before you can transfer ownership.",
+				"pickerHint": "They become the sole owner of this workspace.",
+				"pickerLabel": "New owner",
+				"pickerPlaceholder": "Select a member",
+				"subtitle": "Hand this workspace over to another member. You'll be demoted to admin and lose owner-only abilities.",
+				"title": "Transfer ownership",
+				"toastError": "Failed to transfer ownership",
+				"toastSuccess": "Ownership transferred",
+				"transferring": "Transferring…"
 			}
 		},
 		"projectGeneral": {
@@ -904,11 +939,13 @@
 				"taskMoved": "작업 이동",
 				"taskDueDateChanged": "마감일 변경",
 				"taskAssigneeChanged": "담당자 변경",
-				"taskUnassigned": "할당 해제"
+				"taskUnassigned": "할당 해제",
+				"dueDateReminder": "Due-date reminders"
 			},
 			"connect": "웹훅 연결",
 			"saveChanges": "변경사항 저장",
-			"disconnect": "연결 해제"
+			"disconnect": "연결 해제",
+			"reminderLeadTimeLabel": "Send the webhook this many hours before"
 		},
 		"telegramIntegration": {
 			"validation": {
@@ -1019,6 +1056,168 @@
 			"merged": "병합됨",
 			"draft": "초안",
 			"open": "열림"
+		},
+		"workspaceLabels": {
+			"cardDescription": "Manage labels that can be assigned to tasks.",
+			"colorLabel": "Color",
+			"createDescription": "Create a new label that can be used across tasks in this workspace.",
+			"createError": "Failed to create label",
+			"createLabel": "Create Label",
+			"createSuccess": "Label created",
+			"deleteConfirmDescription": "This will permanently remove this label from all tasks. This action cannot be undone.",
+			"deleteConfirmTitle": "Delete this label?",
+			"deleteError": "Failed to delete label",
+			"deleteLabel": "Delete",
+			"deleteSuccess": "Label deleted",
+			"editDescription": "Update the name or color of this label.",
+			"editLabel": "Edit Label",
+			"empty": "No labels yet. Create your first label to get started.",
+			"nameLabel": "Label name",
+			"namePlaceholder": "Enter label name",
+			"nameRequired": "Label name is required",
+			"pageTitle": "Label Settings",
+			"saveLabel": "Save",
+			"subtitle": "Create, edit, and delete workspace-level labels.",
+			"title": "Labels",
+			"updateError": "Failed to update label",
+			"updateSuccess": "Label updated"
+		},
+		"workspaceRoles": {
+			"allChangesSaved": "All changes saved",
+			"createRole": "Create role",
+			"defaultBadge": "Default",
+			"defaultRoleDescriptions": {
+				"admin": "Has full access to the workspace.",
+				"member": "Can create and manage tasks and projects.",
+				"viewer": "Can view and comment on tasks."
+			},
+			"defaultRoleHelp": "Default role — name is reserved and the row can't be deleted.",
+			"deleteDialog": {
+				"description": "This will permanently delete the role \"{{role}}\". Members assigned to this role will lose its permissions.",
+				"title": "Delete role"
+			},
+			"deleteRole": "Delete role",
+			"discard": "Discard",
+			"emptyDescription": "Default roles will appear here once they're seeded for this workspace.",
+			"emptyTitle": "No roles yet",
+			"loadError": "Failed to load roles.",
+			"loading": "Loading…",
+			"nameHint": "Lowercase. Cannot be changed later.",
+			"nameLabel": "Name",
+			"namePlaceholder": "e.g. reviewer",
+			"newRole": "New role",
+			"noAccess": "You need admin or owner permissions to manage workspace roles.",
+			"pageTitle": "Roles",
+			"permissionCount_one": "{{count}} permission",
+			"permissionCount_other": "{{count}} permissions",
+			"permissions": {
+				"label": {
+					"create": {
+						"description": "Can create labels",
+						"label": "Create"
+					},
+					"delete": {
+						"description": "Can delete labels",
+						"label": "Delete"
+					},
+					"read": {
+						"description": "Can view labels",
+						"label": "Read"
+					},
+					"update": {
+						"description": "Can edit labels",
+						"label": "Update"
+					}
+				},
+				"project": {
+					"create": {
+						"description": "Can create new projects",
+						"label": "Create"
+					},
+					"delete": {
+						"description": "Can delete projects",
+						"label": "Delete"
+					},
+					"read": {
+						"description": "Can view projects",
+						"label": "Read"
+					},
+					"share": {
+						"description": "Can share projects",
+						"label": "Share"
+					},
+					"update": {
+						"description": "Can edit project settings",
+						"label": "Update"
+					}
+				},
+				"task": {
+					"assign": {
+						"description": "Can assign tasks to members",
+						"label": "Assign"
+					},
+					"create": {
+						"description": "Can create tasks",
+						"label": "Create"
+					},
+					"delete": {
+						"description": "Can delete tasks",
+						"label": "Delete"
+					},
+					"read": {
+						"description": "Can view tasks",
+						"label": "Read"
+					},
+					"update": {
+						"description": "Can edit tasks",
+						"label": "Update"
+					}
+				},
+				"workspace": {
+					"delete": {
+						"description": "Can delete workspace",
+						"label": "Delete"
+					},
+					"manage_settings": {
+						"description": "Can manage workspace settings",
+						"label": "Manage Settings"
+					},
+					"read": {
+						"description": "Can view workspace settings",
+						"label": "Read"
+					},
+					"update": {
+						"description": "Can update workspace settings",
+						"label": "Update"
+					}
+				}
+			},
+			"resources": {
+				"label": "Labels",
+				"project": "Projects",
+				"task": "Tasks",
+				"workspace": "Workspace"
+			},
+			"saveChanges": "Save changes",
+			"sectionSubtitle": "Edit the default roles or add a tailored one. Members keep their assigned role name across edits.",
+			"sectionTitle": "Workspace roles",
+			"subtitle": "Define which actions members can perform in {{workspaceName}}.",
+			"thisWorkspace": "this workspace",
+			"title": "Roles",
+			"toast": {
+				"created": "Role created",
+				"createError": "Failed to create role",
+				"deleted": "Role deleted",
+				"deleteError": "Failed to delete role",
+				"updated": "Role updated",
+				"updateError": "Failed to update role"
+			},
+			"unsavedChanges": "You have unsaved changes",
+			"validation": {
+				"nameExists": "A role with this name already exists",
+				"nameRequired": "Role name is required",
+				"permissionRequired": "At least one permission must be selected"
+			}
 		}
 	},
 	"navigation": {
@@ -1166,7 +1365,31 @@
 				"title": "시간 추적 시작됨",
 				"contentWithTask": "다음 작업의 시간 추적이 시작되었습니다: {{taskTitle}}",
 				"contentWithoutTask": "작업의 시간 추적이 시작되었습니다"
+			},
+			"due_date_reminder": {
+				"content": "{{taskTitle}} is due in {{leadTime}}",
+				"title": "Task due soon"
+			},
+			"task_comment": {
+				"content": "New comment on {{taskTitle}}: {{commentPreview}}",
+				"title": "{{commenterName}} commented on your task"
+			},
+			"task_mention": {
+				"content": "{{mentionerName}} mentioned you in: {{taskTitle}}",
+				"title": "{{mentionerName}} mentioned you"
+			},
+			"task_overdue": {
+				"content": "{{taskTitle}} is past its due date",
+				"title": "Task overdue"
 			}
+		},
+		"reminderLeadTime": {
+			"days_one": "{{count}} day",
+			"days_other": "{{count}} days",
+			"hours_one": "{{count}} hour",
+			"hours_other": "{{count}} hours",
+			"minutes_one": "{{count}} minute",
+			"minutes_other": "{{count}} minutes"
 		}
 	},
 	"activity": {
@@ -1265,6 +1488,15 @@
 					"swift": "Swift",
 					"typescript": "TypeScript",
 					"yaml": "YAML"
+				},
+				"table": {
+					"addColumnAfter": "Insert column right",
+					"addColumnBefore": "Insert column left",
+					"addRowAfter": "Insert row below",
+					"addRowBefore": "Insert row above",
+					"deleteColumn": "Delete column",
+					"deleteRow": "Delete row",
+					"deleteTable": "Delete table"
 				}
 			}
 		}
@@ -1417,7 +1649,8 @@
 			"selectTask": "연결할 작업 선택",
 			"types": {
 				"blocks": "차단함",
-				"related": "관련됨"
+				"related": "관련됨",
+				"blocked_by": "blocked by"
 			}
 		},
 		"subtasks": {
@@ -1430,7 +1663,8 @@
 			"deleteError": "작업 삭제에 실패했습니다",
 			"deleteDialogTitle": "작업을 삭제하시겠습니까?",
 			"deleteDialogDescription": "작업과 모든 데이터가 영구적으로 제거됩니다. 이 작업은 취소할 수 없습니다.",
-			"deleteAction": "작업 삭제"
+			"deleteAction": "작업 삭제",
+			"completeAria": "Mark subtask complete"
 		},
 		"properties": {
 			"title": "속성",
@@ -1659,6 +1893,17 @@
 			"searchActions": "작업 검색...",
 			"noActionsFound": "작업을 찾을 수 없습니다.",
 			"changeStatus": "상태 변경"
+		},
+		"editor": {
+			"table": {
+				"addColumnAfter": "Insert column right",
+				"addColumnBefore": "Insert column left",
+				"addRowAfter": "Insert row below",
+				"addRowBefore": "Insert row above",
+				"deleteColumn": "Delete column",
+				"deleteRow": "Delete row",
+				"deleteTable": "Delete table"
+			}
 		}
 	},
 	"invitations": {
@@ -1707,7 +1952,8 @@
 				"complete": "완료",
 				"inProgress": "진행 중"
 			},
-			"noDueDate": "마감일 없음"
+			"noDueDate": "마감일 없음",
+			"emptyDescriptionReadOnly": "There are no projects in this workspace yet. Ask an admin to create one."
 		},
 		"search": {
 			"pageTitle": "검색",
@@ -1747,11 +1993,13 @@
 		"roles": {
 			"owner": "소유자",
 			"admin": "관리자",
-			"member": "멤버"
+			"member": "멤버",
+			"viewer": "Viewer"
 		},
 		"members": {
 			"pageTitle": "멤버",
-			"inviteMember": "멤버 초대"
+			"inviteMember": "멤버 초대",
+			"you": "You"
 		},
 		"inviteModal": {
 			"title": "팀 멤버 초대",
@@ -1782,7 +2030,13 @@
 			"removeSuccess": "팀 멤버가 제거되었습니다",
 			"removeError": "팀 멤버 제거에 실패했습니다",
 			"cancelInviteSuccess": "초대가 취소되었습니다",
-			"cancelInviteError": "초대 취소에 실패했습니다"
+			"cancelInviteError": "초대 취소에 실패했습니다",
+			"roleUpdateError": "Failed to update role",
+			"roleUpdateSuccess": "Role updated"
+		},
+		"invitations": {
+			"expires": "Expires {{date}}",
+			"pendingBadge": "pending"
 		}
 	},
 	"publicProject": {
