@@ -10,6 +10,7 @@ import {
   taskTable,
   workspaceTable,
 } from "../database/schema";
+import { publishEvent } from "../events";
 import { taskSchema } from "../schemas";
 import {
   assertTaskImageKeyMatchesContext,
@@ -808,6 +809,11 @@ const task = new Hono<{
           process.env.KANEO_API_URL ||
           new URL(c.req.url).origin,
       );
+      await publishEvent("asset.created", {
+        taskId: taskContext.taskId,
+        projectId: taskContext.projectId,
+      });
+
       return c.json({
         id: asset.id,
         url: `${apiBaseUrl}/asset/${asset.id}`,

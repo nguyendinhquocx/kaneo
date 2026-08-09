@@ -256,6 +256,7 @@ const taskUpdateEvents = [
   "task.label_deleted",
   "task-relation.created",
   "task-relation.deleted",
+  "asset.created",
   "comment.created",
   "comment.deleted",
   "comment.updated",

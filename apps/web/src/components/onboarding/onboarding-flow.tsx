@@ -7,7 +7,6 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Trans, useTranslation } from "react-i18next";
 import { z } from "zod/v4";
-import { Logo } from "@/components/common/logo";
 import PageTitle from "@/components/page-title";
 import useAuth from "@/components/providers/auth-provider/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -112,8 +111,6 @@ export function OnboardingFlow() {
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
       className="w-full max-w-sm mx-auto"
     >
-      <Logo className="mx-auto mb-6 w-full flex items-end justify-center" />
-
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="text-center mb-6">
           <h1 className="text-xl font-semibold text-foreground mb-2">
@@ -192,8 +189,6 @@ export function OnboardingFlow() {
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
       className="w-full max-w-sm mx-auto"
     >
-      <Logo className="mx-auto mb-6 w-full flex items-end justify-center" />
-
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 bg-success/12 rounded-full flex items-center justify-center mx-auto">
