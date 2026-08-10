@@ -106,6 +106,7 @@ const execution = new Hono<{
       const { projectId } = c.req.valid("param");
       const manifest = await upsertExecutionManifest(
         projectId,
+        c.get("userId"),
         c.req.valid("json"),
       );
       return c.json(manifest);

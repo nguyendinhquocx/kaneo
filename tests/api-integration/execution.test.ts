@@ -126,6 +126,11 @@ describe("API integration: execution Task 1", () => {
     expect(firstRun.leaseToken).toBeTruthy();
     expect(firstRun.leaseEpoch).toBe(1);
     expect(firstRun.state).toBe("in_progress");
+    const firstRuntimeId =
+      firstRun.agentPrincipalId === laptop.id ? "pi-laptop" : "pi-prodesk";
+    expect(firstRun.branchName).toMatch(
+      new RegExp(`^${firstRuntimeId}/${task.id}-${firstRun.id}-[a-z0-9-]+$`),
+    );
 
     const retryResponse = await claim(
       firstRun.agentPrincipalId,
@@ -261,5 +266,92 @@ describe("API integration: execution Task 1", () => {
     >;
     expect(listedRuns).toHaveLength(2);
     expect(listedRuns.every((run) => !("leaseTokenHash" in run))).toBe(true);
+  });
+
+  it("keeps execution principals owned by the user and active", async () => {
+    const { member, project } = await createTaskFixture();
+    const foreignMember = await createWorkspaceMember({
+      userName: "Foreign Execution User",
+    });
+    const [foreignPrincipal] = await db
+      .insert(schema.agentPrincipalTable)
+      .values({
+        userId: foreignMember.user.id,
+        runtimeId: "pi-foreign",
+        hostId: "foreign-host",
+      })
+      .returning();
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+    const createAgentResponse = await app.request(
+      `/api/execution/project/${project.id}/agents`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runtimeId: "pi-active", hostId: "laptop" }),
+      },
+    );
+    expect(createAgentResponse.status).toBe(201);
+    const activePrincipal = (await createAgentResponse.json()) as {
+      id: string;
+    };
+
+    const [inactivePrincipal] = await db
+      .insert(schema.agentPrincipalTable)
+      .values({
+        userId: member.user.id,
+        runtimeId: "pi-inactive",
+        hostId: "old-laptop",
+        isActive: false,
+      })
+      .returning();
+
+    const rejectedManifest = await app.request(
+      `/api/execution/project/${project.id}/manifest`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          baseBranch: "main",
+          verificationProfile: "kaneo-api-test",
+          allowedAgentIds: [foreignPrincipal.id],
+        }),
+      },
+    );
+    expect(rejectedManifest.status).toBe(400);
+
+    const acceptedManifest = await app.request(
+      `/api/execution/project/${project.id}/manifest`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          baseBranch: "main",
+          verificationProfile: "kaneo-api-test",
+          allowedAgentIds: [activePrincipal.id],
+        }),
+      },
+    );
+    expect(acceptedManifest.status).toBe(200);
+
+    const globalAgents = await app.request("/api/execution/agents");
+    expect(globalAgents.status).toBe(200);
+    expect(
+      ((await globalAgents.json()) as Array<{ id: string }>).map(
+        (agent) => agent.id,
+      ),
+    ).toEqual([activePrincipal.id]);
+
+    const projectAgents = await app.request(
+      `/api/execution/project/${project.id}/agents`,
+    );
+    expect(projectAgents.status).toBe(200);
+    expect(
+      ((await projectAgents.json()) as Array<{ id: string }>).map(
+        (agent) => agent.id,
+      ),
+    ).toEqual([activePrincipal.id]);
+    expect(inactivePrincipal.isActive).toBe(false);
   });
 });

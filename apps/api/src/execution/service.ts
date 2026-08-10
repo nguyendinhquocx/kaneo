@@ -386,6 +386,7 @@ export async function getExecutionManifest(projectId: string) {
 
 export async function upsertExecutionManifest(
   projectId: string,
+  userId: string,
   input: ExecutionManifestInput,
 ) {
   const baseBranch = validateBranchName(input.baseBranch);
@@ -429,6 +430,7 @@ export async function upsertExecutionManifest(
         .where(
           and(
             inArray(agentPrincipalTable.id, allowedAgentIds),
+            eq(agentPrincipalTable.userId, userId),
             eq(agentPrincipalTable.isActive, true),
           ),
         );
@@ -499,6 +501,7 @@ export async function listAgentPrincipals(userId: string, projectId?: string) {
       .where(
         and(
           eq(agentPrincipalTable.userId, userId),
+          eq(agentPrincipalTable.isActive, true),
           inArray(agentPrincipalTable.id, allowedAgentIds),
         ),
       )
@@ -508,7 +511,12 @@ export async function listAgentPrincipals(userId: string, projectId?: string) {
   return db
     .select()
     .from(agentPrincipalTable)
-    .where(eq(agentPrincipalTable.userId, userId))
+    .where(
+      and(
+        eq(agentPrincipalTable.userId, userId),
+        eq(agentPrincipalTable.isActive, true),
+      ),
+    )
     .orderBy(agentPrincipalTable.runtimeId);
 }
 
@@ -666,7 +674,7 @@ export async function claimTaskRun({
     }
 
     const runId = createId();
-    const branchName = `${principal.runtimeId}/${taskId}-${taskSlug(task.title)}-${runId.slice(0, 8)}`;
+    const branchName = `${principal.runtimeId}/${taskId}-${runId}-${taskSlug(task.title)}`;
     const leaseToken = createLeaseToken();
     const [run] = await tx
       .insert(taskRunTable)
