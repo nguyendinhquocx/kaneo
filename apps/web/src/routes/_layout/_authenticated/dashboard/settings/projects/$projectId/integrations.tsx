@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  Bot,
   ChevronDown,
   FolderGit,
   Github,
@@ -12,6 +13,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import PageTitle from "@/components/page-title";
 import { DiscordIntegrationSettings } from "@/components/project/discord-integration-settings";
+import { ExecutionManifestSettings } from "@/components/project/execution-manifest-settings";
 import { GenericWebhookIntegrationSettings } from "@/components/project/generic-webhook-integration-settings";
 import { GiteaIntegrationSettings } from "@/components/project/gitea-integration-settings";
 import { GitHubIntegrationSettings } from "@/components/project/github-integration-settings";
@@ -36,7 +38,7 @@ function RouteComponent() {
   return (
     <>
       <PageTitle title={t("settings:projectIntegrations.pageTitle")} />
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="mx-auto min-w-0 max-w-4xl space-y-8">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">
             {t("settings:projectIntegrations.title")}
@@ -47,6 +49,17 @@ function RouteComponent() {
         </div>
 
         <div className="space-y-6">
+          <IntegrationSection
+            defaultOpen
+            icon={<Bot className="size-4" />}
+            subtitle={t(
+              "settings:projectIntegrations.agentExecutionSectionSubtitle",
+            )}
+            title={t("settings:projectIntegrations.agentExecutionSectionTitle")}
+          >
+            <ExecutionManifestSettings projectId={projectId} />
+          </IntegrationSection>
+
           <IntegrationSection
             icon={<Github className="size-4" />}
             subtitle={t("settings:projectIntegrations.githubSectionSubtitle")}

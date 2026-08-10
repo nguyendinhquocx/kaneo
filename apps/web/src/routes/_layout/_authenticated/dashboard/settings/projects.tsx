@@ -97,8 +97,8 @@ function RouteComponent() {
   );
 
   return (
-    <div className="flex gap-6 h-full">
-      <aside className="w-64 flex-shrink-0">
+    <div className="flex h-full min-w-0 flex-col gap-6 md:flex-row">
+      <aside className="w-full flex-shrink-0 md:w-64">
         <div className="p-2">
           <div className="mb-1 flex items-center gap-3 rounded-md px-2 py-2">
             <Avatar className="h-8 w-8">

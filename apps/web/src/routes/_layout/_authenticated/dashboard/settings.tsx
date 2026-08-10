@@ -67,8 +67,11 @@ function SettingsLayout() {
               {t("navigation:page.settingsTitle")}
             </h1>
 
-            <Tabs value={activeTab} className="w-[400px] pt-2">
-              <TabsList className="bg-sidebar gap-2">
+            <Tabs
+              value={activeTab}
+              className="w-full max-w-full overflow-x-auto pt-2"
+            >
+              <TabsList className="w-max min-w-full bg-sidebar gap-2">
                 <TabsTrigger
                   className="[&[data-state=active]]:border [&[data-state=active]]:border-border [&[data-state=active]]:rounded-md [&[data-state=active]]:bg-card"
                   value="account"
@@ -101,7 +104,7 @@ function SettingsLayout() {
             </Tabs>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-w-0 flex-1 overflow-y-auto">
             <Outlet />
           </div>
         </div>
