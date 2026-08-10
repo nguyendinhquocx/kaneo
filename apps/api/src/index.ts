@@ -28,6 +28,7 @@ import { prepareDatabaseStartup } from "./database/prepare-database-startup";
 import { waitForDatabase } from "./database/wait-for-database";
 import discordIntegration from "./discord-integration";
 import { eventContext } from "./events";
+import execution from "./execution";
 import externalLink from "./external-link";
 import genericWebhookIntegration from "./generic-webhook-integration";
 import giteaIntegration, { handleGiteaWebhookRoute } from "./gitea-integration";
@@ -578,6 +579,7 @@ export function createApp() {
   );
   const taskRelationApi = api.route("/task-relation", taskRelation);
   const externalLinkApi = api.route("/external-link", externalLink);
+  const executionApi = api.route("/execution", execution);
   const workflowRuleApi = api.route("/workflow-rule", workflowRule);
   const invitationApi = api.route("/invitation", invitation);
   const workspaceApi = api.route("/workspace", workspace);
@@ -724,6 +726,7 @@ export function createApp() {
     configApi,
     discordIntegrationApi,
     externalLinkApi,
+    executionApi,
     genericWebhookIntegrationApi,
     githubIntegrationApi,
     giteaIntegrationApi,
@@ -839,6 +842,7 @@ const {
   commentApi,
   configApi,
   discordIntegrationApi,
+  executionApi,
   externalLinkApi,
   genericWebhookIntegrationApi,
   githubIntegrationApi,
@@ -889,6 +893,7 @@ export type AppType =
   | typeof telegramIntegrationApi
   | typeof taskRelationApi
   | typeof externalLinkApi
+  | typeof executionApi
   | typeof workflowRuleApi
   | typeof invitationApi
   | typeof workspaceApi

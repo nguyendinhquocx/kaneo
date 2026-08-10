@@ -2,10 +2,13 @@ import { relations } from "drizzle-orm";
 import {
   accountTable,
   activityTable,
+  agentPrincipalTable,
   apikeyTable,
   assetTable,
   columnTable,
   commentTable,
+  executionIdempotencyTable,
+  executionManifestTable,
   externalLinkTable,
   githubIntegrationTable,
   integrationTable,
@@ -16,6 +19,8 @@ import {
   sessionTable,
   taskRelationTable,
   taskReminderSentTable,
+  taskRunEvidenceTable,
+  taskRunTable,
   taskTable,
   teamMemberTable,
   teamTable,
@@ -43,11 +48,26 @@ export const userTableRelations = relations(userTable, ({ many, one }) => ({
   comments: many(commentTable),
   assets: many(assetTable),
   notifications: many(notificationTable),
+  agentPrincipals: many(agentPrincipalTable),
+  executionIdempotencyRecords: many(executionIdempotencyTable),
   notificationPreference: one(userNotificationPreferenceTable),
   notificationWorkspaceRules: many(userNotificationWorkspaceRuleTable),
   sentInvitations: many(invitationTable),
   apikeys: many(apikeyTable),
 }));
+
+export const agentPrincipalTableRelations = relations(
+  agentPrincipalTable,
+  ({ one, many }) => ({
+    user: one(userTable, {
+      fields: [agentPrincipalTable.userId],
+      references: [userTable.id],
+    }),
+    runs: many(taskRunTable),
+    evidence: many(taskRunEvidenceTable),
+    idempotencyRecords: many(executionIdempotencyTable),
+  }),
+);
 
 export const sessionTableRelations = relations(sessionTable, ({ one }) => ({
   user: one(userTable, {
@@ -108,6 +128,36 @@ export const projectTableRelations = relations(
     githubIntegration: many(githubIntegrationTable),
     integrations: many(integrationTable),
     notificationWorkspaceProjects: many(userNotificationWorkspaceProjectTable),
+    executionManifest: one(executionManifestTable),
+  }),
+);
+
+export const executionIdempotencyTableRelations = relations(
+  executionIdempotencyTable,
+  ({ one }) => ({
+    user: one(userTable, {
+      fields: [executionIdempotencyTable.userId],
+      references: [userTable.id],
+    }),
+    agentPrincipal: one(agentPrincipalTable, {
+      fields: [executionIdempotencyTable.agentPrincipalId],
+      references: [agentPrincipalTable.id],
+    }),
+    run: one(taskRunTable, {
+      fields: [executionIdempotencyTable.runId],
+      references: [taskRunTable.id],
+    }),
+  }),
+);
+
+export const executionManifestTableRelations = relations(
+  executionManifestTable,
+  ({ one, many }) => ({
+    project: one(projectTable, {
+      fields: [executionManifestTable.projectId],
+      references: [projectTable.id],
+    }),
+    runs: many(taskRunTable),
   }),
 );
 
@@ -156,6 +206,7 @@ export const taskTableRelations = relations(taskTable, ({ one, many }) => ({
   sourceRelations: many(taskRelationTable, { relationName: "sourceTask" }),
   targetRelations: many(taskRelationTable, { relationName: "targetTask" }),
   remindersSent: many(taskReminderSentTable),
+  runs: many(taskRunTable),
 }));
 
 export const timeEntryTableRelations = relations(timeEntryTable, ({ one }) => ({
@@ -368,6 +419,40 @@ export const externalLinkTableRelations = relations(
     integration: one(integrationTable, {
       fields: [externalLinkTable.integrationId],
       references: [integrationTable.id],
+    }),
+  }),
+);
+
+export const taskRunTableRelations = relations(
+  taskRunTable,
+  ({ one, many }) => ({
+    task: one(taskTable, {
+      fields: [taskRunTable.taskId],
+      references: [taskTable.id],
+    }),
+    manifest: one(executionManifestTable, {
+      fields: [taskRunTable.manifestId],
+      references: [executionManifestTable.id],
+    }),
+    agentPrincipal: one(agentPrincipalTable, {
+      fields: [taskRunTable.agentPrincipalId],
+      references: [agentPrincipalTable.id],
+    }),
+    evidence: many(taskRunEvidenceTable),
+    idempotencyRecords: many(executionIdempotencyTable),
+  }),
+);
+
+export const taskRunEvidenceTableRelations = relations(
+  taskRunEvidenceTable,
+  ({ one }) => ({
+    run: one(taskRunTable, {
+      fields: [taskRunEvidenceTable.runId],
+      references: [taskRunTable.id],
+    }),
+    agentPrincipal: one(agentPrincipalTable, {
+      fields: [taskRunEvidenceTable.agentPrincipalId],
+      references: [agentPrincipalTable.id],
     }),
   }),
 );

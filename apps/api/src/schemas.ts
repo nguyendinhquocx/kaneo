@@ -261,6 +261,74 @@ export const commentSchema = v.object({
   ),
 });
 
+export const agentPrincipalSchema = v.object({
+  id: v.string(),
+  userId: v.string(),
+  runtimeId: v.string(),
+  hostId: v.string(),
+  scopes: v.array(v.string()),
+  isActive: v.boolean(),
+  createdAt: v.date(),
+  updatedAt: v.date(),
+});
+
+export const executionManifestSchema = v.object({
+  id: v.string(),
+  projectId: v.string(),
+  repositoryOwner: v.string(),
+  repositoryName: v.string(),
+  baseBranch: v.string(),
+  docs: v.array(v.string()),
+  verificationProfile: v.string(),
+  allowedAgentIds: v.array(v.string()),
+  policy: v.record(v.string(), v.unknown()),
+  manifestVersion: v.number(),
+  protocolVersion: v.number(),
+  createdAt: v.date(),
+  updatedAt: v.date(),
+});
+
+export const taskRunEvidenceSchema = v.object({
+  id: v.string(),
+  runId: v.string(),
+  agentPrincipalId: v.nullable(v.string()),
+  kind: v.string(),
+  payload: v.record(v.string(), v.unknown()),
+  createdAt: v.date(),
+});
+
+export const taskRunSchema = v.object({
+  id: v.string(),
+  taskId: v.string(),
+  manifestId: v.nullable(v.string()),
+  manifestVersion: v.number(),
+  protocolVersion: v.number(),
+  repositoryOwner: v.string(),
+  repositoryName: v.string(),
+  baseBranch: v.string(),
+  state: v.string(),
+  role: v.string(),
+  agentPrincipalId: v.nullable(v.string()),
+  hostId: v.string(),
+  branchName: v.string(),
+  scope: v.array(v.string()),
+  baseSha: v.nullable(v.string()),
+  commitSha: v.nullable(v.string()),
+  prNumber: v.nullable(v.number()),
+  prUrl: v.nullable(v.string()),
+  prState: v.nullable(v.string()),
+  evidence: v.record(v.string(), v.unknown()),
+  blocker: v.nullable(v.string()),
+  nextAction: v.nullable(v.string()),
+  leaseEpoch: v.number(),
+  leaseActive: v.boolean(),
+  leaseExpiresAt: v.date(),
+  lastHeartbeatAt: v.date(),
+  createdAt: v.date(),
+  updatedAt: v.date(),
+  leaseToken: v.optional(v.string()),
+});
+
 export const configSchema = v.object({
   disableRegistration: v.nullable(v.boolean()),
   disablePasswordRegistration: v.nullable(v.boolean()),

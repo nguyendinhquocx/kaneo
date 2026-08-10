@@ -36,6 +36,38 @@ export const userTable = pgTable("user", {
   banExpires: timestamp("ban_expires", { mode: "date" }),
 });
 
+export const agentPrincipalTable = pgTable(
+  "agent_principal",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => userTable.id, { onDelete: "cascade" }),
+    runtimeId: text("runtime_id").notNull(),
+    hostId: text("host_id").notNull(),
+    scopes: jsonb("scopes")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("agent_principal_userId_idx").on(table.userId),
+    unique("agent_principal_user_runtime_unique").on(
+      table.userId,
+      table.runtimeId,
+    ),
+    unique("agent_principal_runtime_unique").on(table.runtimeId),
+  ],
+);
+
 export const sessionTable = pgTable(
   "session",
   {
@@ -255,6 +287,43 @@ export const projectTable = pgTable(
   ],
 );
 
+export const executionManifestTable = pgTable(
+  "execution_manifest",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      })
+      .unique(),
+    repositoryOwner: text("repository_owner").notNull(),
+    repositoryName: text("repository_name").notNull(),
+    baseBranch: text("base_branch").notNull().default("main"),
+    docs: jsonb("docs").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    verificationProfile: text("verification_profile").notNull(),
+    allowedAgentIds: jsonb("allowed_agent_ids")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    policy: jsonb("policy")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    manifestVersion: integer("manifest_version").notNull().default(1),
+    protocolVersion: integer("protocol_version").notNull().default(1),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("execution_manifest_projectId_idx").on(table.projectId)],
+);
+
 export const columnTable = pgTable(
   "column",
   {
@@ -354,6 +423,135 @@ export const taskTable = pgTable(
     index("task_assigneeId_idx").on(table.userId),
     index("task_columnId_idx").on(table.columnId),
     unique("task_project_number_unique").on(table.projectId, table.number),
+  ],
+);
+
+export const taskRunTable = pgTable(
+  "task_run",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    manifestId: text("manifest_id").references(
+      () => executionManifestTable.id,
+      {
+        onDelete: "set null",
+        onUpdate: "cascade",
+      },
+    ),
+    manifestVersion: integer("manifest_version").notNull(),
+    protocolVersion: integer("protocol_version").notNull(),
+    repositoryOwner: text("repository_owner").notNull(),
+    repositoryName: text("repository_name").notNull(),
+    baseBranch: text("base_branch").notNull(),
+    state: text("state").notNull().default("in_progress"),
+    role: text("role").notNull().default("worker"),
+    agentPrincipalId: text("agent_principal_id").references(
+      () => agentPrincipalTable.id,
+      { onDelete: "set null", onUpdate: "cascade" },
+    ),
+    hostId: text("host_id").notNull(),
+    branchName: text("branch_name").notNull(),
+    scope: jsonb("scope").$type<string[]>().notNull(),
+    baseSha: text("base_sha"),
+    commitSha: text("commit_sha"),
+    prNumber: integer("pr_number"),
+    prUrl: text("pr_url"),
+    prState: text("pr_state"),
+    evidence: jsonb("evidence")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    blocker: text("blocker"),
+    nextAction: text("next_action"),
+    requestKey: text("request_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    leaseEpoch: integer("lease_epoch").notNull().default(1),
+    leaseTokenHash: text("lease_token_hash").notNull(),
+    leaseActive: boolean("lease_active").notNull().default(true),
+    leaseExpiresAt: timestamp("lease_expires_at", { mode: "date" }).notNull(),
+    lastHeartbeatAt: timestamp("last_heartbeat_at", { mode: "date" })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("task_run_taskId_idx").on(table.taskId),
+    index("task_run_agentPrincipalId_idx").on(table.agentPrincipalId),
+    index("task_run_leaseExpiresAt_idx").on(table.leaseExpiresAt),
+    unique("task_run_requestKey_unique").on(table.requestKey),
+    uniqueIndex("task_run_active_task_unique")
+      .on(table.taskId)
+      .where(sql`${table.leaseActive} = true`),
+  ],
+);
+
+export const taskRunEvidenceTable = pgTable(
+  "task_run_evidence",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => taskRunTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    agentPrincipalId: text("agent_principal_id").references(
+      () => agentPrincipalTable.id,
+      { onDelete: "set null", onUpdate: "cascade" },
+    ),
+    kind: text("kind").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("task_run_evidence_runId_idx").on(table.runId),
+    index("task_run_evidence_agentPrincipalId_idx").on(table.agentPrincipalId),
+  ],
+);
+
+export const executionIdempotencyTable = pgTable(
+  "execution_idempotency",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => userTable.id, { onDelete: "cascade" }),
+    agentPrincipalId: text("agent_principal_id").references(
+      () => agentPrincipalTable.id,
+      { onDelete: "set null", onUpdate: "cascade" },
+    ),
+    runId: text("run_id").references(() => taskRunTable.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+    operation: text("operation").notNull(),
+    requestKey: text("request_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    response: jsonb("response").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("execution_idempotency_userId_idx").on(table.userId),
+    index("execution_idempotency_runId_idx").on(table.runId),
+    unique("execution_idempotency_operation_key_unique").on(
+      table.operation,
+      table.requestKey,
+    ),
   ],
 );
 
