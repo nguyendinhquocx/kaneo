@@ -36,8 +36,7 @@ export async function migrateGitHubIntegration() {
     const oldIntegrations = await db.query.githubIntegrationTable.findMany();
 
     if (oldIntegrations.length === 0) {
-      console.log("No old integrations to migrate");
-      await dropOldTable();
+      console.log("No old integrations to migrate; keeping compatibility table");
       return;
     }
 
@@ -76,9 +75,7 @@ export async function migrateGitHubIntegration() {
 
     await migrateTaskLinks();
 
-    await dropOldTable();
-
-    console.log("✅ GitHub integration migration complete!");
+    console.log("✅ GitHub integration migration complete; compatibility table retained!");
   } catch (error) {
     console.error("Failed to migrate GitHub integration:", error);
     throw error;
@@ -164,10 +161,4 @@ async function migrateTaskLinks() {
 
   console.log(`✓ Created ${linksCreated} external links`);
   console.log(`✓ Cleaned ${descriptionsUpdated} task descriptions`);
-}
-
-async function dropOldTable() {
-  console.log("🗑️ Dropping old github_integration table...");
-  await db.execute(sql`DROP TABLE IF EXISTS github_integration CASCADE`);
-  console.log("✓ Dropped github_integration table");
 }
