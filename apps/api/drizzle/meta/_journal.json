@@ -253,6 +253,13 @@
 			"when": 1786351162003,
 			"tag": "0035_fantastic_blue_blade",
 			"breakpoints": true
+		},
+		{
+			"idx": 36,
+			"version": "7",
+			"when": 1786383932626,
+			"tag": "0036_repair_github_integration",
+			"breakpoints": true
 		}
 	]
 }
