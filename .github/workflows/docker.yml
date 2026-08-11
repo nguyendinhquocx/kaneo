@@ -25,7 +25,7 @@ jobs:
       matrix:
         include:
           - dockerfile: ./Dockerfile.kaneo
-            image: ghcr.io/${{ github.repository_owner }}/kaneo
+            image: ghcr.io/${{ github.repository_owner }}/kaneo-vi-mcp
           - dockerfile: ./apps/web/Dockerfile
             image: ghcr.io/${{ github.repository_owner }}/web
           - dockerfile: ./apps/api/Dockerfile
