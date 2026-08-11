@@ -192,6 +192,24 @@ describe("API integration: execution Task 1", () => {
     );
     expect(staleHeartbeat.status).toBe(409);
 
+    const staleReport = await app.request(
+      `/api/execution/task/${task.id}/runs/${firstRun.id}/report`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "stale-report-1",
+          "X-Kaneo-Lease-Token": firstRun.leaseToken ?? "",
+        },
+        body: JSON.stringify({
+          leaseEpoch: firstRun.leaseEpoch,
+          state: "blocked",
+          blocker: "stale worker",
+        }),
+      },
+    );
+    expect(staleReport.status).toBe(409);
+
     const forbiddenFinalization = await app.request(
       `/api/execution/task/${task.id}/runs/${takeoverRun.id}/report`,
       {
@@ -222,6 +240,8 @@ describe("API integration: execution Task 1", () => {
         body: JSON.stringify({
           leaseEpoch: takeoverRun.leaseEpoch,
           state: "in_review",
+          baseSha: "a".repeat(40),
+          commitSha: "b".repeat(40),
           evidence: { tests: "pass" },
         }),
       },
@@ -239,11 +259,179 @@ describe("API integration: execution Task 1", () => {
         body: JSON.stringify({
           leaseEpoch: takeoverRun.leaseEpoch,
           state: "in_review",
+          baseSha: "a".repeat(40),
+          commitSha: "b".repeat(40),
           evidence: { tests: "pass" },
         }),
       },
     );
     expect(reviewReplay.status).toBe(200);
+
+    const selfReview = await app.request(
+      `/api/execution/task/${task.id}/runs/${takeoverRun.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "parent-review-self-1",
+          "X-Kaneo-Agent-Principal": takeoverRun.agentPrincipalId,
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          verification: {
+            verificationProfile: "kaneo-api-test",
+            baseSha: "a".repeat(40),
+            commitSha: "b".repeat(40),
+            changedFiles: ["apps/api/src/execution/service.ts"],
+            commands: ["pnpm test"],
+            diffWithinScope: true,
+            branchValid: true,
+            testsPassed: true,
+          },
+        }),
+      },
+    );
+    expect(selfReview.status).toBe(403);
+
+    const missingReviewEvidence = await app.request(
+      `/api/execution/task/${task.id}/runs/${takeoverRun.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "parent-review-missing-evidence-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          verification: {
+            verificationProfile: "kaneo-api-test",
+            baseSha: "a".repeat(40),
+            commitSha: "b".repeat(40),
+            changedFiles: ["apps/api/src/execution/service.ts"],
+            commands: ["pnpm test"],
+            diffWithinScope: true,
+            branchValid: true,
+            testsPassed: false,
+          },
+        }),
+      },
+    );
+    expect(missingReviewEvidence.status).toBe(409);
+
+    const missingCommitEvidence = await app.request(
+      `/api/execution/task/${task.id}/runs/${takeoverRun.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "parent-review-missing-commit-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          verification: {
+            verificationProfile: "kaneo-api-test",
+            baseSha: "a".repeat(40),
+            commitSha: "c".repeat(40),
+            changedFiles: ["apps/api/src/execution/service.ts"],
+            commands: ["pnpm test"],
+            diffWithinScope: true,
+            branchValid: true,
+            testsPassed: true,
+          },
+        }),
+      },
+    );
+    expect(missingCommitEvidence.status).toBe(409);
+
+    const scopeEscape = await app.request(
+      `/api/execution/task/${task.id}/runs/${takeoverRun.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "parent-review-scope-escape-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          verification: {
+            verificationProfile: "kaneo-api-test",
+            baseSha: "a".repeat(40),
+            commitSha: "b".repeat(40),
+            changedFiles: ["README.md"],
+            commands: ["pnpm test"],
+            diffWithinScope: true,
+            branchValid: true,
+            testsPassed: true,
+          },
+        }),
+      },
+    );
+    expect(scopeEscape.status).toBe(409);
+
+    const parentReview = await app.request(
+      `/api/execution/task/${task.id}/runs/${takeoverRun.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "parent-review-approve-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          verification: {
+            verificationProfile: "kaneo-api-test",
+            baseSha: "a".repeat(40),
+            commitSha: "b".repeat(40),
+            changedFiles: ["apps/api/src/execution/service.ts"],
+            commands: ["pnpm test"],
+            diffWithinScope: true,
+            branchValid: true,
+            testsPassed: true,
+          },
+        }),
+      },
+    );
+    expect(parentReview.status).toBe(200);
+    expect(await parentReview.json()).toMatchObject({
+      id: takeoverRun.id,
+      state: "done",
+      leaseActive: false,
+      blocker: null,
+    });
+    const finalizedTask = await db
+      .select({ status: schema.taskTable.status })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id));
+    expect(finalizedTask[0]?.status).toBe("done");
+
+    const parentReviewReplay = await app.request(
+      `/api/execution/task/${task.id}/runs/${takeoverRun.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "parent-review-approve-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          verification: {
+            verificationProfile: "kaneo-api-test",
+            baseSha: "a".repeat(40),
+            commitSha: "b".repeat(40),
+            changedFiles: ["apps/api/src/execution/service.ts"],
+            commands: ["pnpm test"],
+            diffWithinScope: true,
+            branchValid: true,
+            testsPassed: true,
+          },
+        }),
+      },
+    );
+    expect(parentReviewReplay.status).toBe(200);
+    expect(await parentReviewReplay.json()).toMatchObject({
+      id: takeoverRun.id,
+      state: "done",
+    });
 
     const evidenceResponse = await app.request(
       `/api/execution/task/${task.id}/runs/${takeoverRun.id}/evidence`,
@@ -254,6 +442,11 @@ describe("API integration: execution Task 1", () => {
         runId: takeoverRun.id,
         kind: "worker_report",
         payload: expect.objectContaining({ state: "in_review" }),
+      }),
+      expect.objectContaining({
+        runId: takeoverRun.id,
+        kind: "parent_review",
+        payload: expect.objectContaining({ decision: "approve" }),
       }),
     ]);
 
@@ -266,6 +459,293 @@ describe("API integration: execution Task 1", () => {
     >;
     expect(listedRuns).toHaveLength(2);
     expect(listedRuns.every((run) => !("leaseTokenHash" in run))).toBe(true);
+  });
+
+  it("blocks PR actions when the host credential/policy gate is unavailable", async () => {
+    const { member, project, task } = await createTaskFixture();
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    const agentResponse = await app.request(
+      `/api/execution/project/${project.id}/agents`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runtimeId: "pi-laptop", hostId: "pi-laptop" }),
+      },
+    );
+    expect(agentResponse.status).toBe(201);
+    const agent = (await agentResponse.json()) as { id: string };
+    const manifestResponse = await app.request(
+      `/api/execution/project/${project.id}/manifest`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          baseBranch: "main",
+          verificationProfile: "kaneo-api-test",
+          allowedAgentIds: [agent.id],
+          policy: {},
+        }),
+      },
+    );
+    expect(manifestResponse.status).toBe(200);
+
+    const claimResponse = await app.request(
+      `/api/execution/task/${task.id}/runs/claim`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "credential-block-claim-1",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: agent.id,
+          scope: ["apps/api/src"],
+        }),
+      },
+    );
+    expect(claimResponse.status).toBe(201);
+    const claimed = (await claimResponse.json()) as RunResponse;
+
+    const reportResponse = await app.request(
+      `/api/execution/task/${task.id}/runs/${claimed.id}/report`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "credential-block-report-1",
+          "X-Kaneo-Lease-Token": claimed.leaseToken ?? "",
+        },
+        body: JSON.stringify({
+          leaseEpoch: claimed.leaseEpoch,
+          state: "in_review",
+          baseSha: "a".repeat(40),
+          commitSha: "b".repeat(40),
+        }),
+      },
+    );
+    expect(reportResponse.status).toBe(200);
+
+    const directFinalization = await app.request(
+      `/api/task/status/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "done" }),
+      },
+    );
+    expect(directFinalization.status).toBe(409);
+
+    const blocked = await app.request(
+      `/api/execution/task/${task.id}/runs/${claimed.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "credential-block-review-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          action: "create_pr",
+          verification: {
+            verificationProfile: "kaneo-api-test",
+            baseSha: "a".repeat(40),
+            commitSha: "b".repeat(40),
+            changedFiles: ["apps/api/src/execution/service.ts"],
+            commands: ["pnpm test"],
+            diffWithinScope: true,
+            branchValid: true,
+            testsPassed: true,
+          },
+        }),
+      },
+    );
+    expect(blocked.status).toBe(200);
+    expect(await blocked.json()).toMatchObject({
+      id: claimed.id,
+      state: "blocked",
+      blocker: "credential_blocked",
+      leaseActive: false,
+    });
+    const unchangedTask = await db
+      .select({ status: schema.taskTable.status })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id));
+    expect(unchangedTask[0]?.status).toBe("to-do");
+  });
+
+  it("records a host-adapter PR, keeps the human merge gate open, then finalizes after merge evidence", async () => {
+    const { member, project, task } = await createTaskFixture();
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    const agentResponse = await app.request(
+      `/api/execution/project/${project.id}/agents`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runtimeId: "pi-laptop", hostId: "pi-laptop" }),
+      },
+    );
+    expect(agentResponse.status).toBe(201);
+    const agent = (await agentResponse.json()) as { id: string };
+    const manifestResponse = await app.request(
+      `/api/execution/project/${project.id}/manifest`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          baseBranch: "main",
+          verificationProfile: "kaneo-api-test",
+          allowedAgentIds: [agent.id],
+          policy: { allowPrCreate: true, allowMerge: true },
+        }),
+      },
+    );
+    expect(manifestResponse.status).toBe(200);
+
+    const claimResponse = await app.request(
+      `/api/execution/task/${task.id}/runs/claim`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "pr-adapter-claim-1",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: agent.id,
+          scope: ["apps/api/src"],
+        }),
+      },
+    );
+    expect(claimResponse.status).toBe(201);
+    const claimed = (await claimResponse.json()) as RunResponse;
+    const verification = {
+      verificationProfile: "kaneo-api-test",
+      baseSha: "a".repeat(40),
+      commitSha: "b".repeat(40),
+      changedFiles: ["apps/api/src/execution/service.ts"],
+      commands: ["pnpm test"],
+      diffWithinScope: true,
+      branchValid: true,
+      testsPassed: true,
+    };
+    const reportResponse = await app.request(
+      `/api/execution/task/${task.id}/runs/${claimed.id}/report`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "pr-adapter-report-1",
+          "X-Kaneo-Lease-Token": claimed.leaseToken ?? "",
+        },
+        body: JSON.stringify({
+          leaseEpoch: claimed.leaseEpoch,
+          state: "in_review",
+          baseSha: verification.baseSha,
+          commitSha: verification.commitSha,
+        }),
+      },
+    );
+    expect(reportResponse.status).toBe(200);
+
+    const createPr = await app.request(
+      `/api/execution/task/${task.id}/runs/${claimed.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "pr-adapter-create-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          action: "create_pr",
+          verification,
+          prResult: {
+            status: "PASS",
+            operation: "create_pr",
+            prNumber: 41,
+            prUrl: "https://github.com/owner/repository/pull/41",
+            prState: "open",
+          },
+        }),
+      },
+    );
+    expect(createPr.status).toBe(200);
+    const createdRun = await createPr.json();
+    expect(createdRun).toMatchObject({
+      id: claimed.id,
+      state: "in_review",
+      prNumber: 41,
+      prState: "open",
+      leaseActive: false,
+    });
+    const afterCreate = await db
+      .select({ status: schema.taskTable.status })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id));
+    expect(afterCreate[0]?.status).toBe("to-do");
+
+    const mismatchedMerge = await app.request(
+      `/api/execution/task/${task.id}/runs/${claimed.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "pr-adapter-merge-mismatch-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          action: "merge",
+          verification,
+          prResult: {
+            status: "PASS",
+            operation: "merge",
+            prNumber: 42,
+            prUrl: "https://github.com/owner/repository/pull/42",
+            prState: "merged",
+          },
+        }),
+      },
+    );
+    expect(mismatchedMerge.status).toBe(409);
+
+    const mergePr = await app.request(
+      `/api/execution/task/${task.id}/runs/${claimed.id}/review`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "pr-adapter-merge-1",
+        },
+        body: JSON.stringify({
+          decision: "approve",
+          action: "merge",
+          verification,
+          prResult: {
+            status: "PASS",
+            operation: "merge",
+            prNumber: 41,
+            prUrl: "https://github.com/owner/repository/pull/41",
+            prState: "merged",
+          },
+        }),
+      },
+    );
+    expect(mergePr.status).toBe(200);
+    expect(await mergePr.json()).toMatchObject({
+      id: claimed.id,
+      state: "done",
+      prNumber: 41,
+      prState: "merged",
+      leaseActive: false,
+    });
+    const afterMerge = await db
+      .select({ status: schema.taskTable.status })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id));
+    expect(afterMerge[0]?.status).toBe("done");
   });
 
   it("keeps execution principals owned by the user and active", async () => {

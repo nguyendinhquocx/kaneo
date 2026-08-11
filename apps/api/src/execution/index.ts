@@ -20,6 +20,7 @@ import {
   listTaskRuns,
   releaseTaskRun,
   reportTaskRun,
+  reviewTaskRun,
   toTaskRunResponse,
   upsertExecutionManifest,
 } from "./service";
@@ -370,6 +371,55 @@ const execution = new Hono<{
         blocker: body.blocker,
         nextAction: body.nextAction,
         requestKey,
+      });
+      return c.json(run);
+    },
+  )
+  .post(
+    "/task/:taskId/runs/:runId/review",
+    describeRoute({
+      operationId: "reviewTaskRun",
+      tags: ["Execution"],
+      description:
+        "Approve or reject a worker run through the parent review and PR/merge gate",
+      responses: {
+        200: {
+          description: "Parent review result",
+          content: {
+            "application/json": { schema: resolver(taskRunSchema) },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string(), runId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        decision: v.picklist(["approve", "reject"]),
+        action: v.optional(v.picklist(["none", "create_pr", "merge"])),
+        reason: v.optional(v.string()),
+        verification: v.optional(v.record(v.string(), v.unknown())),
+        prResult: v.optional(v.record(v.string(), v.unknown())),
+      }),
+    ),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c) => {
+      const { taskId, runId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const run = await reviewTaskRun({
+        taskId,
+        runId,
+        userId: c.get("userId"),
+        decision: body.decision,
+        action: body.action,
+        reason: body.reason,
+        verification: body.verification,
+        prResult: body.prResult,
+        requestKey,
+        reviewerPrincipalId:
+          c.req.header("X-Kaneo-Agent-Principal")?.trim() || undefined,
       });
       return c.json(run);
     },

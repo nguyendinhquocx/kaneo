@@ -2,6 +2,7 @@ export type ProjectBroadcastMessage = {
   type: string;
   projectId: string;
   taskId?: string;
+  runId?: string;
   sourceTaskId?: string;
   targetTaskId?: string;
 };

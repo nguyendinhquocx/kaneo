@@ -14,6 +14,7 @@ import useGetTask from "@/hooks/queries/task/use-get-task";
 import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-relations";
 import type { ExternalLink } from "@/types/external-link";
 import TaskDescription from "./task-description";
+import TaskExecutionPanel from "./task-execution-panel";
 import TaskRelations from "./task-relations";
 import TaskSubtasks from "./task-subtasks";
 import TaskTitle from "./task-title";
@@ -79,6 +80,7 @@ export default function TaskDetailsContent({
         <TaskTitle taskId={taskId} />
         <TaskDescription taskId={taskId} />
       </div>
+      <TaskExecutionPanel taskId={taskId} />
       {!isLoadingExternalLinks && externalLinks.length > 0 && (
         <div className="mt-4">
           <ExternalLinksAccordion

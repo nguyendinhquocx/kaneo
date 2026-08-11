@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import {
   agentPrincipalTable,
+  columnTable,
   executionIdempotencyTable,
   executionManifestTable,
   githubIntegrationTable,
@@ -12,6 +13,7 @@ import {
   taskRunTable,
   taskTable,
 } from "../database/schema";
+import { publishEvent } from "../events";
 import {
   createLeaseToken,
   EXECUTION_PROTOCOL_VERSION,
@@ -52,6 +54,38 @@ export type CreateAgentPrincipalInput = {
   runtimeId: unknown;
   hostId: unknown;
   scopes?: unknown;
+};
+
+export type ParentReviewInput = {
+  decision: unknown;
+  action?: unknown;
+  reason?: unknown;
+  verification?: unknown;
+  prResult?: unknown;
+  requestKey: string;
+  reviewerPrincipalId?: string;
+};
+
+type ParentReviewDecision = "approve" | "reject";
+type ParentReviewAction = "none" | "create_pr" | "merge";
+type ParentReviewPrResult = {
+  status: "PASS" | "BLOCKED";
+  operation: "create_pr" | "merge";
+  prNumber?: number;
+  prUrl?: string;
+  prState?: string;
+  blocker?: string;
+  reason?: string;
+};
+type ParentReviewVerification = {
+  verificationProfile: string;
+  baseSha: string;
+  commitSha: string;
+  changedFiles: string[];
+  commands: string[];
+  diffWithinScope: true;
+  branchValid: true;
+  testsPassed: true;
 };
 
 type ReadExecutor = Pick<typeof db, "select">;
@@ -121,12 +155,361 @@ function assertReportState(state: TaskRunState) {
   }
 }
 
+function validateParentReviewDecision(value: unknown): ParentReviewDecision {
+  if (value !== "approve" && value !== "reject") {
+    throw new HTTPException(400, {
+      message: "Parent review decision must be approve or reject",
+    });
+  }
+  return value;
+}
+
+function validateParentReviewAction(value: unknown): ParentReviewAction {
+  if (value === undefined) return "none";
+  if (value !== "none" && value !== "create_pr" && value !== "merge") {
+    throw new HTTPException(400, {
+      message: "Parent review action must be none, create_pr or merge",
+    });
+  }
+  return value;
+}
+
+function validateReviewPath(value: unknown, field: string): string {
+  if (typeof value !== "string") {
+    throw new HTTPException(400, { message: `${field} must be a string` });
+  }
+  const path = value.trim().replace(/\\/g, "/");
+  if (
+    !path ||
+    path.startsWith("/") ||
+    /^[A-Za-z]:\//.test(path) ||
+    path
+      .split("/")
+      .some(
+        (segment: string) => !segment || segment === "." || segment === "..",
+      )
+  ) {
+    throw new HTTPException(400, {
+      message: `${field} must be an explicit relative path`,
+    });
+  }
+  return path;
+}
+
+function validateParentReviewVerification(
+  value: unknown,
+): ParentReviewVerification {
+  const input = validateJsonObject(value, "verification");
+  const verificationProfile = input.verificationProfile;
+  if (typeof verificationProfile !== "string" || !verificationProfile.trim()) {
+    throw new HTTPException(400, {
+      message: "verification.verificationProfile is required",
+    });
+  }
+  const baseSha = validateGitSha(input.baseSha, "verification.baseSha");
+  const commitSha = validateGitSha(input.commitSha, "verification.commitSha");
+  if (!baseSha || !commitSha) {
+    throw new HTTPException(400, {
+      message: "verification.baseSha and verification.commitSha are required",
+    });
+  }
+  const changedFiles = input.changedFiles;
+  if (
+    !Array.isArray(changedFiles) ||
+    changedFiles.length === 0 ||
+    changedFiles.length > 2_000
+  ) {
+    throw new HTTPException(400, {
+      message: "verification.changedFiles must contain 1-2000 paths",
+    });
+  }
+  const commands = input.commands;
+  if (
+    !Array.isArray(commands) ||
+    commands.length === 0 ||
+    commands.length > 100 ||
+    commands.some(
+      (command) =>
+        typeof command !== "string" ||
+        command.trim().length === 0 ||
+        command.length > 500,
+    )
+  ) {
+    throw new HTTPException(400, {
+      message: "verification.commands must contain 1-100 bounded commands",
+    });
+  }
+  if (
+    input.diffWithinScope !== true ||
+    input.branchValid !== true ||
+    input.testsPassed !== true
+  ) {
+    throw new HTTPException(409, {
+      message:
+        "Parent approval requires passing diff, branch and test verification",
+    });
+  }
+  return {
+    verificationProfile: verificationProfile.trim(),
+    baseSha,
+    commitSha,
+    changedFiles: changedFiles.map((path, index) =>
+      validateReviewPath(path, `verification.changedFiles[${index}]`),
+    ),
+    commands: commands.map((command) => command.trim()),
+    diffWithinScope: true,
+    branchValid: true,
+    testsPassed: true,
+  };
+}
+
+function validateParentReviewPrResult(
+  value: unknown,
+  action: ParentReviewAction,
+): ParentReviewPrResult | undefined {
+  if (action === "none") {
+    if (value !== undefined) {
+      throw new HTTPException(400, {
+        message: "PR result is only valid for create_pr or merge actions",
+      });
+    }
+    return undefined;
+  }
+  if (value === undefined) return undefined;
+  const input = validateJsonObject(value, "prResult");
+  const status = input.status;
+  if (status !== "PASS" && status !== "BLOCKED") {
+    throw new HTTPException(400, {
+      message: "prResult.status must be PASS or BLOCKED",
+    });
+  }
+  const operationValue = input.operation;
+  if (operationValue !== action) {
+    throw new HTTPException(400, {
+      message: "prResult.operation must match the requested review action",
+    });
+  }
+  const operation = action;
+  const blocker = input.blocker;
+  if (
+    blocker !== undefined &&
+    (typeof blocker !== "string" ||
+      ![
+        "credential_blocked",
+        "policy_blocked",
+        "merge_conflict",
+        "pr_conflict",
+        "pr_create_failed",
+        "merge_failed",
+      ].includes(blocker))
+  ) {
+    throw new HTTPException(400, {
+      message: "prResult.blocker is not a recognized fail-closed blocker",
+    });
+  }
+  const reason = input.reason;
+  if (
+    reason !== undefined &&
+    (typeof reason !== "string" || reason.trim().length > 500)
+  ) {
+    throw new HTTPException(400, {
+      message: "prResult.reason must be a bounded string",
+    });
+  }
+  if (status === "BLOCKED") {
+    return {
+      status,
+      operation,
+      blocker:
+        typeof blocker === "string"
+          ? (blocker as ParentReviewPrResult["blocker"])
+          : "credential_blocked",
+      reason: typeof reason === "string" ? reason.trim() : undefined,
+    };
+  }
+  const prNumber = input.prNumber;
+  if (
+    typeof prNumber !== "number" ||
+    !Number.isInteger(prNumber) ||
+    prNumber < 1 ||
+    prNumber > 2_147_483_647
+  ) {
+    throw new HTTPException(400, {
+      message: "prResult.prNumber must be a positive integer",
+    });
+  }
+  const prUrl = input.prUrl;
+  if (typeof prUrl !== "string" || prUrl.length > 2_048) {
+    throw new HTTPException(400, {
+      message: "prResult.prUrl must be a bounded URL",
+    });
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(prUrl);
+  } catch {
+    throw new HTTPException(400, { message: "prResult.prUrl is invalid" });
+  }
+  if (
+    parsedUrl.protocol !== "https:" ||
+    parsedUrl.hostname !== "github.com" ||
+    parsedUrl.port ||
+    parsedUrl.username ||
+    parsedUrl.password ||
+    parsedUrl.search ||
+    parsedUrl.hash ||
+    !/^\/[^/]+\/[^/]+\/pull\/[1-9][0-9]*(?:\/.*)?$/.test(parsedUrl.pathname)
+  ) {
+    throw new HTTPException(400, {
+      message: "prResult.prUrl must be an HTTPS GitHub pull-request URL",
+    });
+  }
+  const prState =
+    typeof input.prState === "string" ? input.prState.trim().toLowerCase() : "";
+  const expectedState = action === "create_pr" ? "open" : "merged";
+  if (prState !== expectedState) {
+    throw new HTTPException(409, {
+      message: `prResult.prState must be ${expectedState} for ${action}`,
+    });
+  }
+  return {
+    status,
+    operation,
+    prNumber: prNumber as number,
+    prUrl: prUrl as string,
+    prState,
+    reason: typeof reason === "string" ? reason.trim() : undefined,
+  };
+}
+
+function assertPrResultMatchesIntegration(
+  result: ParentReviewPrResult,
+  integration: typeof githubIntegrationTable.$inferSelect,
+): void {
+  if (result.status !== "PASS" || !result.prUrl) return;
+  const parsedUrl = new URL(result.prUrl);
+  const segments = parsedUrl.pathname.split("/").filter(Boolean);
+  const [owner, repository, kind] = segments;
+  if (
+    !owner ||
+    !repository ||
+    segments.length < 4 ||
+    owner.toLowerCase() !== integration.repositoryOwner.toLowerCase() ||
+    repository.toLowerCase() !== integration.repositoryName.toLowerCase() ||
+    kind !== "pull"
+  ) {
+    throw new HTTPException(409, {
+      message: "PR result does not belong to the active GitHub repository",
+    });
+  }
+}
+
+function pathMatchesReviewScope(path: string, pattern: string): boolean {
+  const normalizedPath = path.replace(/\\/g, "/");
+  const normalizedPattern = pattern.replace(/\\/g, "/");
+  if (
+    normalizedPattern.includes("*") ||
+    normalizedPattern.includes("?") ||
+    normalizedPattern.includes("[")
+  ) {
+    const regexSpecialCharacters = new Set([
+      ".",
+      "+",
+      "^",
+      "$",
+      "{",
+      "}",
+      "(",
+      ")",
+      "|",
+      "[",
+      "]",
+      "\\",
+    ]);
+    const escaped = [...normalizedPattern]
+      .map((character) =>
+        regexSpecialCharacters.has(character) ? `\\${character}` : character,
+      )
+      .join("")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".");
+    return new RegExp(`^${escaped}(?:/|$)`).test(normalizedPath);
+  }
+  return (
+    normalizedPath === normalizedPattern ||
+    normalizedPath.startsWith(`${normalizedPattern.replace(/\/+$/, "")}/`)
+  );
+}
+
+function assertParentReviewableRun(
+  run: typeof taskRunTable.$inferSelect,
+  principalRuntimeId: string,
+  manifest: typeof executionManifestTable.$inferSelect,
+  verification: ParentReviewVerification,
+): void {
+  if (run.state !== "in_review") {
+    throw new HTTPException(409, {
+      message: "Only a worker run in in_review state can be approved",
+    });
+  }
+  if (!run.commitSha || run.commitSha !== verification.commitSha) {
+    throw new HTTPException(409, {
+      message: "Worker commit evidence is missing or does not match the run",
+    });
+  }
+  if (!run.baseSha || run.baseSha !== verification.baseSha) {
+    throw new HTTPException(409, {
+      message:
+        "Worker base commit evidence is missing or does not match the run",
+    });
+  }
+  if (
+    run.manifestId !== manifest.id ||
+    run.manifestVersion !== manifest.manifestVersion ||
+    run.protocolVersion !== manifest.protocolVersion ||
+    run.repositoryOwner !== manifest.repositoryOwner ||
+    run.repositoryName !== manifest.repositoryName ||
+    run.baseBranch !== manifest.baseBranch
+  ) {
+    throw new HTTPException(409, {
+      message:
+        "Task run snapshot no longer matches the active execution manifest",
+    });
+  }
+  if (verification.verificationProfile !== manifest.verificationProfile) {
+    throw new HTTPException(409, {
+      message:
+        "Verification profile does not match the project execution manifest",
+    });
+  }
+  const expectedPrefix = `${principalRuntimeId}/${run.taskId}-${run.id}-`;
+  if (
+    !run.branchName.startsWith(expectedPrefix) ||
+    run.branchName === run.baseBranch ||
+    ["main", "master", "develop"].includes(run.branchName)
+  ) {
+    throw new HTTPException(409, {
+      message: "Worker branch does not match the server-issued task branch",
+    });
+  }
+  const outsideScope = verification.changedFiles.filter(
+    (path) =>
+      !run.scope.some((pattern) => pathMatchesReviewScope(path, pattern)),
+  );
+  if (outsideScope.length > 0) {
+    throw new HTTPException(409, {
+      message: `Parent diff verification found files outside the run scope: ${outsideScope.slice(0, 10).join(", ")}`,
+    });
+  }
+}
+
 type TaskRunResponse = ReturnType<typeof serializeRun>;
 
 const IDEMPOTENCY_OPERATIONS = {
   heartbeat: "task_run.heartbeat",
   report: "task_run.report",
   release: "task_run.release",
+  review: "task_run.review",
 } as const;
 
 function requireIdempotencyKey(value: string): string {
@@ -311,11 +694,34 @@ async function getOwnedPrincipal(
   return principal;
 }
 
+async function publishTaskRunUpdated(
+  taskId: string,
+  runId: string,
+  userId: string,
+  state: string,
+): Promise<void> {
+  const [task] = await db
+    .select({ projectId: taskTable.projectId })
+    .from(taskTable)
+    .where(eq(taskTable.id, taskId))
+    .limit(1);
+  if (!task) return;
+
+  await publishEvent("task_run.updated", {
+    projectId: task.projectId,
+    taskId,
+    runId,
+    userId,
+    state,
+  });
+}
+
 async function getTaskContext(taskId: string, tx: ReadExecutor = db) {
   const [task] = await tx
     .select({
       id: taskTable.id,
       title: taskTable.title,
+      status: taskTable.status,
       projectId: taskTable.projectId,
       workspaceId: projectTable.workspaceId,
     })
@@ -596,7 +1002,7 @@ export async function claimTaskRun({
     scope: normalizedScope,
   });
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [existingRequest] = await tx
       .select()
       .from(taskRunTable)
@@ -708,6 +1114,8 @@ export async function claimTaskRun({
 
     return { run, leaseToken: leaseToken.raw };
   });
+  await publishTaskRunUpdated(taskId, result.run.id, userId, result.run.state);
+  return result;
 }
 
 async function assertCurrentLease(
@@ -784,7 +1192,7 @@ export async function heartbeatTaskRun({
     leaseTokenHash,
   });
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const replay = await getIdempotencyReplay(tx, {
       userId,
       operation: IDEMPOTENCY_OPERATIONS.heartbeat,
@@ -834,6 +1242,8 @@ export async function heartbeatTaskRun({
       response: serializeRun(updated),
     });
   });
+  await publishTaskRunUpdated(taskId, result.id, userId, result.state);
+  return result;
 }
 
 export async function reportTaskRun({
@@ -901,7 +1311,7 @@ export async function reportTaskRun({
     nextAction: nextAction ?? null,
   });
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const replay = await getIdempotencyReplay(tx, {
       userId,
       operation: IDEMPOTENCY_OPERATIONS.report,
@@ -985,6 +1395,8 @@ export async function reportTaskRun({
       response: serializeRun(updated),
     });
   });
+  await publishTaskRunUpdated(taskId, result.id, userId, result.state);
+  return result;
 }
 
 export async function releaseTaskRun({
@@ -1021,7 +1433,7 @@ export async function releaseTaskRun({
     state: nextState,
   });
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const replay = await getIdempotencyReplay(tx, {
       userId,
       operation: IDEMPOTENCY_OPERATIONS.release,
@@ -1071,6 +1483,301 @@ export async function releaseTaskRun({
       response: serializeRun(updated),
     });
   });
+  await publishTaskRunUpdated(taskId, result.id, userId, result.state);
+  return result;
+}
+
+export async function reviewTaskRun({
+  taskId,
+  runId,
+  userId,
+  decision,
+  action,
+  reason,
+  verification,
+  prResult,
+  requestKey,
+  reviewerPrincipalId,
+}: {
+  taskId: string;
+  runId: string;
+  userId: string;
+} & ParentReviewInput): Promise<TaskRunResponse> {
+  const normalizedDecision = validateParentReviewDecision(decision);
+  const normalizedAction = validateParentReviewAction(action);
+  const normalizedReason =
+    reason === undefined
+      ? undefined
+      : typeof reason === "string"
+        ? reason.trim()
+        : "";
+  if (normalizedDecision === "reject" && !normalizedReason) {
+    throw new HTTPException(400, {
+      message: "A rejection reason is required",
+    });
+  }
+  const normalizedKey = requireIdempotencyKey(requestKey);
+  const normalizedVerification =
+    normalizedDecision === "approve"
+      ? validateParentReviewVerification(verification)
+      : verification === undefined
+        ? undefined
+        : validateJsonObject(verification, "verification");
+  const normalizedPrResult =
+    normalizedDecision === "approve"
+      ? validateParentReviewPrResult(prResult, normalizedAction)
+      : undefined;
+  const requestHash = stableHash({
+    taskId,
+    runId,
+    decision: normalizedDecision,
+    action: normalizedAction,
+    reason: normalizedReason ?? null,
+    verification: normalizedVerification ?? null,
+    prResult: normalizedPrResult ?? null,
+  });
+
+  const result = await db.transaction(async (tx) => {
+    const replay = await getIdempotencyReplay(tx, {
+      userId,
+      operation: IDEMPOTENCY_OPERATIONS.review,
+      requestKey: normalizedKey,
+      requestHash,
+      runId,
+    });
+    if (replay) return { response: replay, taskStatusChanged: null };
+
+    const { task, manifest, integration } = await getTaskContext(taskId, tx);
+    const [run] = await tx
+      .select()
+      .from(taskRunTable)
+      .where(and(eq(taskRunTable.id, runId), eq(taskRunTable.taskId, taskId)))
+      .limit(1)
+      .for("update");
+    if (!run) throw new HTTPException(404, { message: "Task run not found" });
+    if (!run.agentPrincipalId) {
+      throw new HTTPException(409, {
+        message: "Task run has no worker principal to review",
+      });
+    }
+    if (reviewerPrincipalId) {
+      const [reviewer] = await tx
+        .select({
+          id: agentPrincipalTable.id,
+          userId: agentPrincipalTable.userId,
+        })
+        .from(agentPrincipalTable)
+        .where(
+          and(
+            eq(agentPrincipalTable.id, reviewerPrincipalId),
+            eq(agentPrincipalTable.userId, userId),
+            eq(agentPrincipalTable.isActive, true),
+          ),
+        )
+        .limit(1);
+      if (!reviewer) {
+        throw new HTTPException(403, {
+          message:
+            "Review principal is not active or is not owned by the current user",
+        });
+      }
+      if (reviewer.id === run.agentPrincipalId) {
+        throw new HTTPException(403, {
+          message: "A worker principal cannot finalize its own run",
+        });
+      }
+    }
+
+    if (run.state === "done" || run.state === "rejected") {
+      throw new HTTPException(409, {
+        message: "Terminal task runs cannot be reviewed again",
+      });
+    }
+
+    const [principal] = await tx
+      .select({ runtimeId: agentPrincipalTable.runtimeId })
+      .from(agentPrincipalTable)
+      .where(eq(agentPrincipalTable.id, run.agentPrincipalId))
+      .limit(1);
+    if (!principal) {
+      throw new HTTPException(409, {
+        message: "Task run worker principal is no longer available",
+      });
+    }
+
+    let nextState: TaskRunState;
+    let blocker: string | null = null;
+    let nextAction: string | null = null;
+    let prFields: {
+      prNumber?: number;
+      prUrl?: string;
+      prState?: string;
+    } = {};
+    if (normalizedDecision === "reject") {
+      nextState = "rejected";
+    } else {
+      if (
+        !normalizedVerification ||
+        !("verificationProfile" in normalizedVerification)
+      ) {
+        throw new HTTPException(400, {
+          message: "Approval verification is required",
+        });
+      }
+      const approvalVerification =
+        normalizedVerification as ParentReviewVerification;
+      assertParentReviewableRun(
+        run,
+        principal.runtimeId,
+        manifest,
+        approvalVerification,
+      );
+      if (normalizedAction !== "none") {
+        const policyKey =
+          normalizedAction === "create_pr" ? "allowPrCreate" : "allowMerge";
+        const policyAllowsAction = manifest.policy[policyKey] === true;
+        if (!policyAllowsAction) {
+          nextState = "blocked";
+          blocker = "credential_blocked";
+          nextAction = `Manifest policy ${policyKey} must be true and a reviewed host credential adapter is required`;
+        } else if (normalizedPrResult?.status !== "PASS") {
+          nextState = "blocked";
+          blocker = normalizedPrResult?.blocker ?? "credential_blocked";
+          nextAction =
+            normalizedPrResult?.reason ??
+            `A passing host credential adapter result is required for ${normalizedAction}`;
+        } else {
+          assertPrResultMatchesIntegration(normalizedPrResult, integration);
+          if (
+            normalizedAction === "merge" &&
+            (!run.prNumber ||
+              normalizedPrResult.prNumber !== run.prNumber ||
+              (run.prUrl && normalizedPrResult.prUrl !== run.prUrl))
+          ) {
+            throw new HTTPException(409, {
+              message:
+                "Merge evidence must match the pull request recorded on the run",
+            });
+          }
+          prFields = {
+            prNumber: normalizedPrResult.prNumber,
+            prUrl: normalizedPrResult.prUrl,
+            prState: normalizedPrResult.prState,
+          };
+          if (normalizedAction === "create_pr") {
+            // Creating a PR records the review and leaves the final merge gate open.
+            nextState = "in_review";
+            nextAction =
+              "Human merge gate is required before task finalization";
+          } else {
+            nextState = "done";
+          }
+        }
+      } else {
+        nextState = "done";
+      }
+    }
+
+    let taskStatusChanged: {
+      taskId: string;
+      projectId: string;
+      title: string;
+      oldStatus: string;
+    } | null = null;
+    if (nextState === "done") {
+      const [doneColumn] = await tx
+        .select({ id: columnTable.id })
+        .from(columnTable)
+        .where(
+          and(
+            eq(columnTable.projectId, task.projectId),
+            eq(columnTable.slug, "done"),
+          ),
+        )
+        .limit(1);
+      if (!doneColumn) {
+        throw new HTTPException(409, {
+          message: "Project has no done column for parent finalization",
+        });
+      }
+      if (task.status !== "done") {
+        await tx
+          .update(taskTable)
+          .set({ status: "done", columnId: doneColumn.id })
+          .where(eq(taskTable.id, taskId));
+        taskStatusChanged = {
+          taskId,
+          projectId: task.projectId,
+          title: task.title,
+          oldStatus: task.status,
+        };
+      }
+    }
+
+    const parentReview = {
+      decision: normalizedDecision,
+      action: normalizedAction,
+      reason: normalizedReason ?? null,
+      verification: normalizedVerification ?? null,
+      prResult: normalizedPrResult ?? null,
+      blocker,
+      nextAction,
+    };
+    const nextEvidence = {
+      ...(run.evidence ?? {}),
+      parentReview,
+    };
+    const [updated] = await tx
+      .update(taskRunTable)
+      .set({
+        state: nextState,
+        leaseActive: false,
+        blocker,
+        nextAction,
+        evidence: nextEvidence,
+        ...prFields,
+        updatedAt: new Date(),
+      })
+      .where(eq(taskRunTable.id, runId))
+      .returning();
+    if (!updated) {
+      throw new HTTPException(409, {
+        message: "Task run changed before review",
+      });
+    }
+
+    await tx.insert(taskRunEvidenceTable).values({
+      runId,
+      agentPrincipalId: run.agentPrincipalId,
+      kind: "parent_review",
+      payload: parentReview,
+    });
+
+    const response = await saveIdempotencyResponse(tx, {
+      userId,
+      agentPrincipalId: run.agentPrincipalId,
+      runId,
+      operation: IDEMPOTENCY_OPERATIONS.review,
+      requestKey: normalizedKey,
+      requestHash,
+      response: serializeRun(updated),
+    });
+    return { response, taskStatusChanged };
+  });
+
+  await publishTaskRunUpdated(taskId, runId, userId, result.response.state);
+  if (result.taskStatusChanged) {
+    await publishEvent("task.status_changed", {
+      taskId: result.taskStatusChanged.taskId,
+      projectId: result.taskStatusChanged.projectId,
+      userId,
+      oldStatus: result.taskStatusChanged.oldStatus,
+      newStatus: "done",
+      title: result.taskStatusChanged.title,
+      type: "status_changed",
+    });
+  }
+  return result.response;
 }
 
 export function toTaskRunResponse(

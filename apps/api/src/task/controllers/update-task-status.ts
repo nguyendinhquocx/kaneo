@@ -1,7 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
-import { columnTable, taskTable } from "../../database/schema";
+import { columnTable, taskRunTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { assertValidTaskStatus } from "../validate-task-fields";
 
@@ -25,6 +25,20 @@ async function updateTaskStatus({
   }
 
   await assertValidTaskStatus(status, existingTask.projectId);
+
+  if (status === "done") {
+    const [latestRun] = await db
+      .select({ id: taskRunTable.id, state: taskRunTable.state })
+      .from(taskRunTable)
+      .where(eq(taskRunTable.taskId, id))
+      .orderBy(desc(taskRunTable.leaseEpoch), desc(taskRunTable.createdAt))
+      .limit(1);
+    if (latestRun && latestRun.state !== "done") {
+      throw new HTTPException(409, {
+        message: "Task completion is owned by the parent review/merge gate",
+      });
+    }
+  }
 
   const column = await db.query.columnTable.findFirst({
     where: and(

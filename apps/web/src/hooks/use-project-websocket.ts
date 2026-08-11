@@ -56,6 +56,25 @@ export function useProjectWebSocket(projectId: string) {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          if (message.type === "TASK_RUN_UPDATED") {
+            queryClient.invalidateQueries({
+              queryKey: ["execution-runs", message.taskId],
+            });
+            if (message.runId) {
+              queryClient.invalidateQueries({
+                queryKey: ["execution-run", message.taskId, message.runId],
+              });
+              queryClient.invalidateQueries({
+                queryKey: [
+                  "execution-run-evidence",
+                  message.taskId,
+                  message.runId,
+                ],
+              });
+            }
+            return;
+          }
+
           if (
             message.type === "TASK_UPDATED" ||
             message.type === "TASK_CREATED" ||

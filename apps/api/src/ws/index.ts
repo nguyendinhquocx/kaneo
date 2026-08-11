@@ -235,6 +235,7 @@ type TaskEvent = {
   userId: string;
   initiatorId?: string;
   taskId: string;
+  runId: string | undefined;
   sourceTaskId: string | undefined;
   targetTaskId: string | undefined;
 };
@@ -260,6 +261,7 @@ const taskUpdateEvents = [
   "comment.created",
   "comment.deleted",
   "comment.updated",
+  "task_run.updated",
 ];
 
 subscribeToEvent<{
@@ -348,6 +350,9 @@ for (const eventName of taskUpdateEvents) {
       case "comment.updated":
         type = "COMMENT_UPDATED";
         break;
+      case "task_run.updated":
+        type = "TASK_RUN_UPDATED";
+        break;
       default:
         type = "TASK_UPDATED";
     }
@@ -358,6 +363,7 @@ for (const eventName of taskUpdateEvents) {
         type,
         projectId,
         taskId: taskId,
+        runId: data.runId,
         sourceTaskId: data.sourceTaskId,
         targetTaskId: data.targetTaskId,
       },
