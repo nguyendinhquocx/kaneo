@@ -1,3 +1,63 @@
+## [2.17.5](https://github.com/usekaneo/kaneo/compare/v2.17.4...v2.17.5) (2026-08-11)
+
+
+### Bug Fixes
+
+* **billing:** send one trial reminder per owner, not per workspace ([ae2e579](https://github.com/usekaneo/kaneo/commit/ae2e57919d4703b4fcb2e4452b2c7b171abedd97))
+## [2.17.4](https://github.com/usekaneo/kaneo/compare/v2.17.3...v2.17.4) (2026-08-11)
+
+
+### Bug Fixes
+
+* **billing:** throttle trial reminders so they cannot exhaust the quota ([c4150a8](https://github.com/usekaneo/kaneo/commit/c4150a89f826ce5a4f7bbf24346c313b7fd2c5d4))
+## [2.17.3](https://github.com/usekaneo/kaneo/compare/v2.17.2...v2.17.3) (2026-08-11)
+
+
+### Bug Fixes
+
+* **planka-import:** default to the real Kaneo Cloud host ([3863eb6](https://github.com/usekaneo/kaneo/commit/3863eb6ba1d5a6ec9833e4b4a383cffc3fa10fff))
+
+
+### Features
+
+* **billing:** email trial reminders before and after expiry ([0e481a9](https://github.com/usekaneo/kaneo/commit/0e481a9c8223f36b03a35ad0cbb7456af99466d9))
+## [2.17.2](https://github.com/usekaneo/kaneo/compare/v2.17.1...v2.17.2) (2026-08-11)
+
+
+### Bug Fixes
+
+* **auth:** resolve the client IP behind multiple proxy hops ([9e8a448](https://github.com/usekaneo/kaneo/commit/9e8a44835768a70d6d2f68dc3e1add53e90bbc10))
+* **billing:** grant the trial once per owner, not per workspace ([14adb9d](https://github.com/usekaneo/kaneo/commit/14adb9dfd8af0d0dbe5951d0994d1bcf0fcdf8b1))
+* use internal URL for MCP tool requests ([#1556](https://github.com/usekaneo/kaneo/issues/1556)) ([7d9d9d2](https://github.com/usekaneo/kaneo/commit/7d9d9d212d13e98e9aa3d84c0179f4a49384b9fc))
+
+
+### Features
+
+* **planka-import:** add PLANKA to Kaneo migration CLI ([5c91feb](https://github.com/usekaneo/kaneo/commit/5c91febedf4e2cbb356c451676d4df3ae2acc6fa))
+* **planka-import:** authenticate with a PLANKA API key ([ff5e3fc](https://github.com/usekaneo/kaneo/commit/ff5e3fc6b91ae351c6002fb358d75265a0435dbd))
+* **site:** add PLANKA comparison page ([579a975](https://github.com/usekaneo/kaneo/commit/579a9752f7775e9239680053a6ed68d437d90e36))
+## [2.17.1](https://github.com/usekaneo/kaneo/compare/v2.17.0...v2.17.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* **github:** match a branch whose title segment is empty ([#1522](https://github.com/usekaneo/kaneo/issues/1522)) ([829f5ad](https://github.com/usekaneo/kaneo/commit/829f5addf2759bd0bfc10e0c231a8a0762f85262))
+* preserve time entry end time ([#1554](https://github.com/usekaneo/kaneo/issues/1554)) ([5e02130](https://github.com/usekaneo/kaneo/commit/5e0213009a6a35659a69543e6708b56c4d5593be))
+* **security:** block the shared address space in webhook destinations ([#1523](https://github.com/usekaneo/kaneo/issues/1523)) ([028c905](https://github.com/usekaneo/kaneo/commit/028c905fd505c7f2bc787c529d156088dd118d8b))
+* **time-entry:** reject a start time later than the end time ([99e41ad](https://github.com/usekaneo/kaneo/commit/99e41ad8efcd12b06f17dab8096ef39902596130)), closes [#1554](https://github.com/usekaneo/kaneo/issues/1554)
+# [2.17.0](https://github.com/usekaneo/kaneo/compare/v2.16.4...v2.17.0) (2026-08-10)
+
+
+### Bug Fixes
+
+* **mcp:** guard media type and share the tool registrar ([1167ec6](https://github.com/usekaneo/kaneo/commit/1167ec6a980385a6658230831ba80254429b3db3))
+* **web:** omit unassigned userId when creating tasks ([#1552](https://github.com/usekaneo/kaneo/issues/1552)) ([b69fae3](https://github.com/usekaneo/kaneo/commit/b69fae35a3a3b25241d6b3e348bb594bc442a26a))
+
+
+### Features
+
+* **mcp:** expose members, search, columns, time and activity tools ([37b2fc3](https://github.com/usekaneo/kaneo/commit/37b2fc3138c3c1cac682590530342c5d852a7020))
+* **mcp:** support stateless 2026 protocol ([#1540](https://github.com/usekaneo/kaneo/issues/1540)) ([7fe3610](https://github.com/usekaneo/kaneo/commit/7fe3610d6b949e3a8acc4158ba6e4185335efcb8))
 ## [2.16.4](https://github.com/usekaneo/kaneo/compare/v2.16.3...v2.16.4) (2026-08-10)
 
 
