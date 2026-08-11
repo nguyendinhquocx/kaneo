@@ -267,6 +267,13 @@
 			"when": 1786383932627,
 			"tag": "0037_restore_github_integration",
 			"breakpoints": true
+		},
+		{
+			"idx": 38,
+			"version": "7",
+			"when": 1786431126411,
+			"tag": "0038_backfill_github_compatibility",
+			"breakpoints": true
 		}
 	]
 }
