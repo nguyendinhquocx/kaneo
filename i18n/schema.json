@@ -3266,6 +3266,202 @@
 						},
 						"telegramSectionSubtitle": {
 							"type": "string"
+						},
+						"agentExecutionSectionTitle": {
+							"type": "string"
+						},
+						"agentExecutionSectionSubtitle": {
+							"type": "string"
+						},
+						"agentExecution": {
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"repositoryTitle": {
+									"type": "string"
+								},
+								"repositoryHint": {
+									"type": "string"
+								},
+								"openRepository": {
+									"type": "string"
+								},
+								"repositoryNotConnected": {
+									"type": "string"
+								},
+								"githubRequiredTitle": {
+									"type": "string"
+								},
+								"githubRequiredDescription": {
+									"type": "string"
+								},
+								"repositoryMismatchTitle": {
+									"type": "string"
+								},
+								"repositoryMismatchDescription": {
+									"type": "string"
+								},
+								"contextTitle": {
+									"type": "string"
+								},
+								"contextDescription": {
+									"type": "string"
+								},
+								"baseBranchLabel": {
+									"type": "string"
+								},
+								"baseBranchHint": {
+									"type": "string"
+								},
+								"profileLabel": {
+									"type": "string"
+								},
+								"profilePlaceholder": {
+									"type": "string"
+								},
+								"profileHint": {
+									"type": "string"
+								},
+								"docsLabel": {
+									"type": "string"
+								},
+								"docsPlaceholder": {
+									"type": "string"
+								},
+								"docsHint": {
+									"type": "string"
+								},
+								"agentsTitle": {
+									"type": "string"
+								},
+								"agentsDescription": {
+									"type": "string"
+								},
+								"selectedCount": {
+									"type": "string"
+								},
+								"noAgentsTitle": {
+									"type": "string"
+								},
+								"noAgentsDescription": {
+									"type": "string"
+								},
+								"registerTitle": {
+									"type": "string"
+								},
+								"registerDescription": {
+									"type": "string"
+								},
+								"runtimeIdLabel": {
+									"type": "string"
+								},
+								"hostIdLabel": {
+									"type": "string"
+								},
+								"registerButton": {
+									"type": "string"
+								},
+								"notConfigured": {
+									"type": "string"
+								},
+								"savedVersion": {
+									"type": "string"
+								},
+								"saveButton": {
+									"type": "string"
+								},
+								"toast": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"saved": {
+											"type": "string"
+										},
+										"saveError": {
+											"type": "string"
+										},
+										"identityInvalid": {
+											"type": "string"
+										},
+										"identityRegistered": {
+											"type": "string"
+										},
+										"identityRegisterError": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"saved",
+										"saveError",
+										"identityInvalid",
+										"identityRegistered",
+										"identityRegisterError"
+									]
+								},
+								"validation": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"baseBranchRequired": {
+											"type": "string"
+										},
+										"baseBranchInvalid": {
+											"type": "string"
+										},
+										"docsTooMany": {
+											"type": "string"
+										},
+										"docsInvalid": {
+											"type": "string"
+										},
+										"profileInvalid": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"baseBranchRequired",
+										"baseBranchInvalid",
+										"docsTooMany",
+										"docsInvalid",
+										"profileInvalid"
+									]
+								}
+							},
+							"required": [
+								"repositoryTitle",
+								"repositoryHint",
+								"openRepository",
+								"repositoryNotConnected",
+								"githubRequiredTitle",
+								"githubRequiredDescription",
+								"repositoryMismatchTitle",
+								"repositoryMismatchDescription",
+								"contextTitle",
+								"contextDescription",
+								"baseBranchLabel",
+								"baseBranchHint",
+								"profileLabel",
+								"profilePlaceholder",
+								"profileHint",
+								"docsLabel",
+								"docsPlaceholder",
+								"docsHint",
+								"agentsTitle",
+								"agentsDescription",
+								"selectedCount",
+								"noAgentsTitle",
+								"noAgentsDescription",
+								"registerTitle",
+								"registerDescription",
+								"runtimeIdLabel",
+								"hostIdLabel",
+								"registerButton",
+								"notConfigured",
+								"savedVersion",
+								"saveButton",
+								"toast",
+								"validation"
+							]
 						}
 					},
 					"required": [
@@ -3283,7 +3479,10 @@
 						"slackSectionTitle",
 						"slackSectionSubtitle",
 						"telegramSectionTitle",
-						"telegramSectionSubtitle"
+						"telegramSectionSubtitle",
+						"agentExecutionSectionTitle",
+						"agentExecutionSectionSubtitle",
+						"agentExecution"
 					]
 				},
 				"projectVisibility": {
@@ -6337,6 +6536,268 @@
 						"addDescription": {
 							"type": "string"
 						},
+						"execution": {
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"title": {
+									"type": "string"
+								},
+								"subtitle": {
+									"type": "string"
+								},
+								"loading": {
+									"type": "string"
+								},
+								"error": {
+									"type": "string"
+								},
+								"noRun": {
+									"type": "string"
+								},
+								"role": {
+									"type": "string"
+								},
+								"worker": {
+									"type": "string"
+								},
+								"branch": {
+									"type": "string"
+								},
+								"commitBase": {
+									"type": "string"
+								},
+								"pullRequest": {
+									"type": "string"
+								},
+								"lastHeartbeat": {
+									"type": "string"
+								},
+								"leaseActive": {
+									"type": "string"
+								},
+								"updated": {
+									"type": "string"
+								},
+								"scope": {
+									"type": "string"
+								},
+								"blocker": {
+									"type": "string"
+								},
+								"nextAction": {
+									"type": "string"
+								},
+								"evidence": {
+									"type": "string"
+								},
+								"previousRuns": {
+									"type": "string"
+								},
+								"previousRuns_other": {
+									"type": "string"
+								},
+								"previousRunsAria": {
+									"type": "string"
+								},
+								"manifest": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"title": {
+											"type": "string"
+										},
+										"match": {
+											"type": "string"
+										},
+										"changed": {
+											"type": "string"
+										},
+										"baseBranch": {
+											"type": "string"
+										},
+										"profile": {
+											"type": "string"
+										},
+										"version": {
+											"type": "string"
+										},
+										"docs": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"title",
+										"match",
+										"changed",
+										"baseBranch",
+										"profile",
+										"version",
+										"docs"
+									]
+								},
+								"review": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"title": {
+											"type": "string"
+										},
+										"hint": {
+											"type": "string"
+										},
+										"reasonLabel": {
+											"type": "string"
+										},
+										"reasonPlaceholder": {
+											"type": "string"
+										},
+										"reasonRequired": {
+											"type": "string"
+										},
+										"approvalHint": {
+											"type": "string"
+										},
+										"verificationProfile": {
+											"type": "string"
+										},
+										"verificationProfilePlaceholder": {
+											"type": "string"
+										},
+										"commitEvidence": {
+											"type": "string"
+										},
+										"changedFiles": {
+											"type": "string"
+										},
+										"changedFilesPlaceholder": {
+											"type": "string"
+										},
+										"commands": {
+											"type": "string"
+										},
+										"commandsPlaceholder": {
+											"type": "string"
+										},
+										"diffWithinScope": {
+											"type": "string"
+										},
+										"branchValid": {
+											"type": "string"
+										},
+										"testsPassed": {
+											"type": "string"
+										},
+										"action": {
+											"type": "string"
+										},
+										"actionNone": {
+											"type": "string"
+										},
+										"actionCreatePr": {
+											"type": "string"
+										},
+										"actionMerge": {
+											"type": "string"
+										},
+										"prStatus": {
+											"type": "string"
+										},
+										"prNumber": {
+											"type": "string"
+										},
+										"prUrl": {
+											"type": "string"
+										},
+										"prState": {
+											"type": "string"
+										},
+										"prBlocker": {
+											"type": "string"
+										},
+										"verificationRequired": {
+											"type": "string"
+										},
+										"checksRequired": {
+											"type": "string"
+										},
+										"approve": {
+											"type": "string"
+										},
+										"reject": {
+											"type": "string"
+										},
+										"approved": {
+											"type": "string"
+										},
+										"rejected": {
+											"type": "string"
+										},
+										"error": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"title",
+										"hint",
+										"reasonLabel",
+										"reasonPlaceholder",
+										"reasonRequired",
+										"approvalHint",
+										"verificationProfile",
+										"verificationProfilePlaceholder",
+										"commitEvidence",
+										"changedFiles",
+										"changedFilesPlaceholder",
+										"commands",
+										"commandsPlaceholder",
+										"diffWithinScope",
+										"branchValid",
+										"testsPassed",
+										"action",
+										"actionNone",
+										"actionCreatePr",
+										"actionMerge",
+										"prStatus",
+										"prNumber",
+										"prUrl",
+										"prState",
+										"prBlocker",
+										"verificationRequired",
+										"checksRequired",
+										"approve",
+										"reject",
+										"approved",
+										"rejected",
+										"error"
+									]
+								}
+							},
+							"required": [
+								"title",
+								"subtitle",
+								"loading",
+								"error",
+								"noRun",
+								"role",
+								"worker",
+								"branch",
+								"commitBase",
+								"pullRequest",
+								"lastHeartbeat",
+								"leaseActive",
+								"updated",
+								"scope",
+								"blocker",
+								"nextAction",
+								"evidence",
+								"previousRuns",
+								"previousRuns_other",
+								"previousRunsAria",
+								"manifest",
+								"review"
+							]
+						},
 						"editor": {
 							"type": "object",
 							"additionalProperties": false,
@@ -6730,6 +7191,7 @@
 						"openInFullPage",
 						"titlePlaceholder",
 						"addDescription",
+						"execution",
 						"editor"
 					]
 				},

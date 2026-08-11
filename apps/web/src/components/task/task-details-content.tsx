@@ -80,7 +80,7 @@ export default function TaskDetailsContent({
         <TaskTitle taskId={taskId} />
         <TaskDescription taskId={taskId} />
       </div>
-      <TaskExecutionPanel taskId={taskId} />
+      <TaskExecutionPanel taskId={taskId} projectId={projectId} />
       {!isLoadingExternalLinks && externalLinks.length > 0 && (
         <div className="mt-4">
           <ExternalLinksAccordion

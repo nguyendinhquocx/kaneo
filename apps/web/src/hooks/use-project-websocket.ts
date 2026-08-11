@@ -62,9 +62,6 @@ export function useProjectWebSocket(projectId: string) {
             });
             if (message.runId) {
               queryClient.invalidateQueries({
-                queryKey: ["execution-run", message.taskId, message.runId],
-              });
-              queryClient.invalidateQueries({
                 queryKey: [
                   "execution-run-evidence",
                   message.taskId,
