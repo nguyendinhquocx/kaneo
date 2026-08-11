@@ -108,9 +108,10 @@ export default function TaskExecutionPanel({
   const { t } = useTranslation();
   const { canManageTasks } = useWorkspacePermission();
   const { data: runs = [], isLoading, isError } = useGetTaskRuns(taskId);
-  const { data: agents = [] } = useGetExecutionAgents();
+  const { data: agents = [], isError: isAgentsError } = useGetExecutionAgents();
   const { data: manifest } = useGetExecutionManifest(projectId);
-  const { data: evidence = [] } = useGetTaskRunEvidence(taskId, runs[0]?.id);
+  const { data: evidence = [], isError: isEvidenceError } =
+    useGetTaskRunEvidence(taskId, runs[0]?.id);
   const { mutateAsync: reviewTaskRun, isPending: isReviewing } =
     useReviewTaskRun();
   const [rejectionReason, setRejectionReason] = useState("");
@@ -313,6 +314,16 @@ export default function TaskExecutionPanel({
       {!isLoading && !isError && !currentRun && (
         <p className="mt-3 text-xs text-muted-foreground">
           {t("tasks:detail.execution.noRun")}
+        </p>
+      )}
+      {currentRun && isAgentsError && (
+        <p className="mt-3 text-xs text-destructive" role="alert">
+          {t("tasks:detail.execution.agentsError")}
+        </p>
+      )}
+      {currentRun && isEvidenceError && (
+        <p className="mt-1 text-xs text-destructive" role="alert">
+          {t("tasks:detail.execution.evidenceError")}
         </p>
       )}
 

@@ -172,4 +172,35 @@ describe("TaskExecutionPanel", () => {
       }),
     );
   });
+
+  it("surfaces worker and evidence query failures instead of hiding them", () => {
+    useGetTaskRuns.mockReturnValue({
+      data: [run],
+      isLoading: false,
+      isError: false,
+    });
+    useGetTaskRunEvidence.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: true,
+    });
+    useGetExecutionAgents.mockReturnValue({
+      data: [],
+      isError: true,
+    });
+    useGetExecutionManifest.mockReturnValue({ data: manifest });
+    useReviewTaskRun.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+
+    render(<TaskExecutionPanel taskId="task-1" projectId="project-1" />);
+
+    expect(
+      screen.getByText("tasks:detail.execution.agentsError"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("tasks:detail.execution.evidenceError"),
+    ).toBeVisible();
+  });
 });

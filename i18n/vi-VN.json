@@ -1591,6 +1591,8 @@
 				"subtitle": "Trạng thái worker bền vững và parent review",
 				"loading": "Đang tải trạng thái thực thi...",
 				"error": "Không thể tải trạng thái thực thi.",
+				"agentsError": "Không thể lấy identity của worker; đang hiển thị principal được ghi trong run.",
+				"evidenceError": "Không thể tải evidence mới nhất của run.",
 				"noRun": "Task này chưa có execution run nào được claim.",
 				"role": "Vai trò",
 				"worker": "Worker / host",

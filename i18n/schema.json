@@ -6552,6 +6552,12 @@
 								"error": {
 									"type": "string"
 								},
+								"agentsError": {
+									"type": "string"
+								},
+								"evidenceError": {
+									"type": "string"
+								},
 								"noRun": {
 									"type": "string"
 								},
@@ -6778,6 +6784,8 @@
 								"subtitle",
 								"loading",
 								"error",
+								"agentsError",
+								"evidenceError",
 								"noRun",
 								"role",
 								"worker",

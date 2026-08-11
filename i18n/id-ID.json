@@ -1743,7 +1743,9 @@
 				"subtitle": "Durable worker and parent review state",
 				"title": "Execution",
 				"updated": "Updated",
-				"worker": "Worker / host"
+				"worker": "Worker / host",
+				"agentsError": "Unable to resolve the worker identity; showing the run's recorded principal.",
+				"evidenceError": "Unable to load the latest run evidence."
 			}
 		},
 		"entity": {

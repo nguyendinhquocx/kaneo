@@ -28,6 +28,7 @@ function makeFakeWs() {
 describe("broadcastToProject", () => {
   beforeEach(async () => {
     // Ensure no REDIS_URL so InMemoryBroadcastAdapter is used
+    // biome-ignore lint/suspicious/noUndeclaredEnvVars: the test deliberately disables Redis
     delete process.env.REDIS_URL;
     await initializeWebSocketAdapter();
   });
@@ -128,6 +129,40 @@ describe("broadcastToProject", () => {
     expect(
       (ws as { send: ReturnType<typeof vi.fn> }).send,
     ).toHaveBeenCalledTimes(1);
+
+    removeConnection("proj-1", conn);
+  });
+
+  it("keeps task-run updates for different runs in the same batch", async () => {
+    const ws = makeFakeWs();
+    const conn = addConnection("proj-1", ws, "user-1", "init-1");
+
+    broadcastToProject("proj-1", {
+      type: "TASK_RUN_UPDATED",
+      projectId: "proj-1",
+      taskId: "t1",
+      runId: "run-1",
+    });
+    broadcastToProject("proj-1", {
+      type: "TASK_RUN_UPDATED",
+      projectId: "proj-1",
+      taskId: "t1",
+      runId: "run-2",
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(
+          (ws as { send: ReturnType<typeof vi.fn> }).send,
+        ).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 300 },
+    );
+
+    const runIds = (ws as { send: ReturnType<typeof vi.fn> }).send.mock.calls
+      .map(([payload]) => JSON.parse(payload).runId)
+      .sort();
+    expect(runIds).toEqual(["run-1", "run-2"]);
 
     removeConnection("proj-1", conn);
   });
