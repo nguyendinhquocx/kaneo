@@ -1,3 +1,20 @@
+# [2.18.0](https://github.com/usekaneo/kaneo/compare/v2.17.6...v2.18.0) (2026-08-12)
+
+
+### Bug Fixes
+
+* **web:** restore the backdrop behind settings modals ([71e429e](https://github.com/usekaneo/kaneo/commit/71e429e3482e4473508f170018057313b2d658a5))
+
+
+### Features
+
+* **account:** change avatar and delete account ([384eb00](https://github.com/usekaneo/kaneo/commit/384eb005c71fe6e9b99875556b370b033cd4d151))
+## [2.17.6](https://github.com/usekaneo/kaneo/compare/v2.17.5...v2.17.6) (2026-08-11)
+
+
+### Bug Fixes
+
+* **planka-import:** explain unmatched assignees, keep dependencies, attribute comments ([15f6868](https://github.com/usekaneo/kaneo/commit/15f68683620b5fcfbed7970b77210b7cc706f74b))
 ## [2.17.5](https://github.com/usekaneo/kaneo/compare/v2.17.4...v2.17.5) (2026-08-11)
 
 
