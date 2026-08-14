@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
+import { API_KEY_DEFAULT_PERMISSIONS_JSON } from "../../apps/api/src/utils/api-key-permissions";
+import { migrateApiKeyReferenceId } from "../../apps/api/src/utils/migrate-apikey-reference-id";
 import { resetTestDatabase } from "./helpers/database";
 import { createWorkspaceMember } from "./helpers/fixtures";
 
@@ -274,6 +276,284 @@ describe("API integration: device authorization (RFC 8628)", () => {
     expect(projectsRes.status).toBe(200);
     const projects = (await projectsRes.json()) as unknown[];
     expect(Array.isArray(projects)).toBe(true);
+  });
+
+  it("applies explicit compatibility scopes to a newly created API key", async () => {
+    const email = `api-key-${randomUUID()}@example.com`;
+    const password = "api-key-password-12345";
+    const { app } = createApp();
+    const cookieJar = await signUpAndGetCookie(app, email, password);
+
+    const sessionRes = await app.request("/api/auth/get-session", {
+      headers: { Cookie: cookieJar, Origin: origin },
+    });
+    const session = (await sessionRes.json()) as { user?: { id: string } };
+    const userId = session.user?.id;
+    if (!userId) throw new Error("expected created user id");
+
+    const workspaceId = `ws-${randomUUID()}`;
+    await db.insert(schema.workspaceTable).values({
+      id: workspaceId,
+      name: "API key compatibility workspace",
+      slug: `slug-${randomUUID()}`,
+      createdAt: new Date(),
+    });
+    await db.insert(schema.workspaceUserTable).values({
+      workspaceId,
+      userId,
+      role: "owner",
+      joinedAt: new Date(),
+    });
+
+    const createKeyRes = await app.request("/api/auth/api-key/create", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Cookie: cookieJar,
+        Origin: origin,
+      },
+      body: JSON.stringify({
+        name: "compatibility key",
+        expiresIn: 86400,
+      }),
+    });
+
+    expect(createKeyRes.status).toBe(200);
+    const created = (await createKeyRes.json()) as {
+      key?: string;
+      permissions?: Record<string, string[]> | null;
+    };
+    expect(created.key).toEqual(expect.any(String));
+    expect(created.permissions).toEqual(
+      JSON.parse(API_KEY_DEFAULT_PERMISSIONS_JSON),
+    );
+
+    const [stored] = await db
+      .select({ permissions: schema.apikeyTable.permissions })
+      .from(schema.apikeyTable)
+      .where(eq(schema.apikeyTable.referenceId, userId))
+      .limit(1);
+    expect(stored?.permissions).toBe(API_KEY_DEFAULT_PERMISSIONS_JSON);
+
+    const projectsRes = await app.request(
+      `/api/project?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { headers: { Authorization: `Bearer ${created.key}` } },
+    );
+    expect(projectsRes.status).toBe(200);
+
+    const projectRes = await app.request("/api/project", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${created.key}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Compatibility project",
+        workspaceId,
+        icon: "Folder",
+        slug: `compatibility-${randomUUID()}`,
+      }),
+    });
+    expect(projectRes.status).toBe(200);
+  });
+
+  it("backfills only NULL API-key scopes with the explicit compatibility envelope", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const rawKey = `kaneo_legacy_${randomUUID()}`;
+    const hashed = await hashApiKeyForTest(rawKey);
+    const now = new Date();
+
+    await db.insert(schema.apikeyTable).values({
+      referenceId: member.user.id,
+      userId: member.user.id,
+      key: hashed,
+      name: "legacy key",
+      start: rawKey.slice(0, 12),
+      prefix: "kaneo",
+      createdAt: now,
+      updatedAt: now,
+      permissions: null,
+    });
+
+    await migrateApiKeyReferenceId();
+
+    const [stored] = await db
+      .select({ permissions: schema.apikeyTable.permissions })
+      .from(schema.apikeyTable)
+      .where(eq(schema.apikeyTable.key, hashed))
+      .limit(1);
+    expect(stored?.permissions).toBe(API_KEY_DEFAULT_PERMISSIONS_JSON);
+  });
+
+  it("denies a permissionless API key on a protected workspace route", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const rawKey = `kaneo_scope_${randomUUID()}`;
+    const hashed = await hashApiKeyForTest(rawKey);
+    const now = new Date();
+
+    await db.insert(schema.apikeyTable).values({
+      referenceId: member.user.id,
+      userId: member.user.id,
+      key: hashed,
+      name: "permissionless key",
+      start: rawKey.slice(0, 12),
+      prefix: "kaneo",
+      createdAt: now,
+      updatedAt: now,
+      permissions: null,
+    });
+
+    const { app } = createApp();
+    const response = await app.request("/api/project", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${rawKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Permissionless project",
+        workspaceId: member.workspace.id,
+        icon: "Folder",
+        slug: `permissionless-${randomUUID()}`,
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.text()).resolves.toBe("Insufficient API key scope");
+  });
+
+  it("enforces the API key scope map independently from the workspace role", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const rawKey = `kaneo_scope_${randomUUID()}`;
+    const hashed = await hashApiKeyForTest(rawKey);
+    const now = new Date();
+
+    await db.insert(schema.apikeyTable).values({
+      referenceId: member.user.id,
+      userId: member.user.id,
+      key: hashed,
+      name: "read-only key",
+      start: rawKey.slice(0, 12),
+      prefix: "kaneo",
+      createdAt: now,
+      updatedAt: now,
+      permissions: JSON.stringify({ project: ["read"] }),
+    });
+
+    const { app } = createApp();
+    const readResponse = await app.request(
+      `/api/project?workspaceId=${encodeURIComponent(member.workspace.id)}`,
+      { headers: { Authorization: `Bearer ${rawKey}` } },
+    );
+    expect(readResponse.status).toBe(200);
+
+    const writeResponse = await app.request("/api/project", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${rawKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Read-only key project",
+        workspaceId: member.workspace.id,
+        icon: "Folder",
+        slug: `read-only-${randomUUID()}`,
+      }),
+    });
+    expect(writeResponse.status).toBe(403);
+  });
+
+  it("rejects malformed API key permissions instead of widening scope", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const rawKey = `kaneo_scope_${randomUUID()}`;
+    const hashed = await hashApiKeyForTest(rawKey);
+    const now = new Date();
+
+    await db.insert(schema.apikeyTable).values({
+      referenceId: member.user.id,
+      userId: member.user.id,
+      key: hashed,
+      name: "malformed key",
+      start: rawKey.slice(0, 12),
+      prefix: "kaneo",
+      createdAt: now,
+      updatedAt: now,
+      permissions: JSON.stringify({ project: "read" }),
+    });
+
+    await migrateApiKeyReferenceId();
+
+    const { app } = createApp();
+    const response = await app.request("/api/project", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${rawKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Malformed key project",
+        workspaceId: member.workspace.id,
+        icon: "Folder",
+        slug: `malformed-${randomUUID()}`,
+      }),
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("rejects an API key whose stored ownership fields disagree", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const other = await createWorkspaceMember({ role: "admin" });
+    const rawKey = `kaneo_binding_${randomUUID()}`;
+    const hashed = await hashApiKeyForTest(rawKey);
+    const now = new Date();
+
+    await db.insert(schema.apikeyTable).values({
+      referenceId: member.user.id,
+      userId: other.user.id,
+      key: hashed,
+      name: "mismatched owner key",
+      start: rawKey.slice(0, 12),
+      prefix: "kaneo",
+      createdAt: now,
+      updatedAt: now,
+      permissions: JSON.stringify({ project: ["read"] }),
+    });
+
+    const { app } = createApp();
+    const response = await app.request(
+      `/api/project?workspaceId=${encodeURIComponent(member.workspace.id)}`,
+      { headers: { Authorization: `Bearer ${rawKey}` } },
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects an expired API key even when its stored owner is a workspace admin", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const rawKey = `kaneo_expired_${randomUUID()}`;
+    const hashed = await hashApiKeyForTest(rawKey);
+
+    await db.insert(schema.apikeyTable).values({
+      referenceId: member.user.id,
+      userId: member.user.id,
+      key: hashed,
+      name: "expired key",
+      start: rawKey.slice(0, 12),
+      prefix: "kaneo",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      expiresAt: new Date(Date.now() - 1),
+      permissions: JSON.stringify({ project: ["read"] }),
+    });
+
+    const { app } = createApp();
+    const response = await app.request(
+      `/api/project?workspaceId=${encodeURIComponent(member.workspace.id)}`,
+      { headers: { Authorization: `Bearer ${rawKey}` } },
+    );
+
+    expect(response.status).toBe(401);
   });
 
   it("still authenticates with a valid API key Bearer", async () => {

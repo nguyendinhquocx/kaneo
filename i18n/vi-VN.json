@@ -665,6 +665,12 @@
 						"description": "Có thể giao công việc cho thành viên"
 					}
 				},
+				"execution": {
+					"review": {
+						"label": "Review execution",
+						"description": "Có thể approve hoặc reject evidence và execution run của worker"
+					}
+				},
 				"label": {
 					"create": {
 						"label": "Tạo",

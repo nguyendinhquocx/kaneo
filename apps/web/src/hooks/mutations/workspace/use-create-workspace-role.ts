@@ -15,15 +15,17 @@ function useCreateWorkspaceRole() {
       role,
       permission,
     }: CreateWorkspaceRoleRequest) => {
-      const { data, error } = await authClient.organization.createRole({
-        organizationId: workspaceId,
-        role,
-        permission,
-      });
-      if (error) {
-        throw new Error(error.message || "Failed to create role");
+      const result = await authClient.$fetch<Record<string, unknown>>(
+        "/organization/create-role",
+        {
+          method: "POST",
+          body: { organizationId: workspaceId, role, permission },
+        },
+      );
+      if (result.error) {
+        throw new Error(result.error.message || "Failed to create role");
       }
-      return data;
+      return result.data;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({

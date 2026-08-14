@@ -665,6 +665,12 @@
 						"description": "Can assign tasks to members"
 					}
 				},
+				"execution": {
+					"review": {
+						"label": "Review agent runs",
+						"description": "Can approve or reject worker evidence and execution runs"
+					}
+				},
 				"label": {
 					"create": {
 						"label": "Create",

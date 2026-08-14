@@ -12,8 +12,18 @@ import {
   taskRunEvidenceTable,
   taskRunTable,
   taskTable,
+  workspaceUserTable,
 } from "../database/schema";
 import { publishEvent } from "../events";
+import {
+  assertTaskClaimable,
+  getLatestTaskRunForGate,
+} from "./finalization-gate";
+import {
+  assertExecutionFlagEnabled,
+  EXECUTION_FLAGS,
+  recordExecutionMetric,
+} from "./gates";
 import {
   createLeaseToken,
   EXECUTION_PROTOCOL_VERSION,
@@ -63,7 +73,6 @@ export type ParentReviewInput = {
   verification?: unknown;
   prResult?: unknown;
   requestKey: string;
-  reviewerPrincipalId?: string;
 };
 
 type ParentReviewDecision = "approve" | "reject";
@@ -172,6 +181,19 @@ function validateParentReviewAction(value: unknown): ParentReviewAction {
     });
   }
   return value;
+}
+
+function getParentReviewExecutionFlag(
+  decision: ParentReviewDecision,
+  action: ParentReviewAction,
+) {
+  if (decision !== "approve") return undefined;
+  // An approval without a PR action represents a manually completed merge.
+  // It still crosses the merge gate; otherwise action:none would be a kill-
+  // switch bypass that can finalize the task directly.
+  return action === "create_pr"
+    ? EXECUTION_FLAGS.prCreation
+    : EXECUTION_FLAGS.merge;
 }
 
 function validateReviewPath(value: unknown, field: string): string {
@@ -716,8 +738,12 @@ async function publishTaskRunUpdated(
   });
 }
 
-async function getTaskContext(taskId: string, tx: ReadExecutor = db) {
-  const [task] = await tx
+async function getTaskContext(
+  taskId: string,
+  tx: ReadExecutor = db,
+  lockTask = false,
+) {
+  const taskQuery = tx
     .select({
       id: taskTable.id,
       title: taskTable.title,
@@ -729,6 +755,7 @@ async function getTaskContext(taskId: string, tx: ReadExecutor = db) {
     .innerJoin(projectTable, eq(taskTable.projectId, projectTable.id))
     .where(eq(taskTable.id, taskId))
     .limit(1);
+  const [task] = lockTask ? await taskQuery.for("update") : await taskQuery;
 
   if (!task) {
     throw new HTTPException(404, { message: "Task not found" });
@@ -792,7 +819,6 @@ export async function getExecutionManifest(projectId: string) {
 
 export async function upsertExecutionManifest(
   projectId: string,
-  userId: string,
   input: ExecutionManifestInput,
 ) {
   const baseBranch = validateBranchName(input.baseBranch);
@@ -805,7 +831,7 @@ export async function upsertExecutionManifest(
 
   return db.transaction(async (tx) => {
     const [project] = await tx
-      .select({ id: projectTable.id })
+      .select({ id: projectTable.id, workspaceId: projectTable.workspaceId })
       .from(projectTable)
       .where(eq(projectTable.id, projectId))
       .limit(1);
@@ -833,10 +859,16 @@ export async function upsertExecutionManifest(
       const principals = await tx
         .select({ id: agentPrincipalTable.id })
         .from(agentPrincipalTable)
+        .innerJoin(
+          workspaceUserTable,
+          and(
+            eq(workspaceUserTable.userId, agentPrincipalTable.userId),
+            eq(workspaceUserTable.workspaceId, project.workspaceId),
+          ),
+        )
         .where(
           and(
             inArray(agentPrincipalTable.id, allowedAgentIds),
-            eq(agentPrincipalTable.userId, userId),
             eq(agentPrincipalTable.isActive, true),
           ),
         );
@@ -893,6 +925,14 @@ export async function upsertExecutionManifest(
 
 export async function listAgentPrincipals(userId: string, projectId?: string) {
   if (projectId) {
+    const [project] = await db
+      .select({ workspaceId: projectTable.workspaceId })
+      .from(projectTable)
+      .where(eq(projectTable.id, projectId))
+      .limit(1);
+    if (!project)
+      throw new HTTPException(404, { message: "Project not found" });
+
     const [manifest] = await db
       .select({ allowedAgentIds: executionManifestTable.allowedAgentIds })
       .from(executionManifestTable)
@@ -901,12 +941,30 @@ export async function listAgentPrincipals(userId: string, projectId?: string) {
     const allowedAgentIds = manifest?.allowedAgentIds ?? [];
     if (allowedAgentIds.length === 0) return [];
 
+    // Project-scoped callers already passed workspaceAccess. Return every
+    // active allowed worker in that workspace so a parent account can inspect
+    // and review a run owned by another service account.
     return db
-      .select()
+      .select({
+        id: agentPrincipalTable.id,
+        userId: agentPrincipalTable.userId,
+        runtimeId: agentPrincipalTable.runtimeId,
+        hostId: agentPrincipalTable.hostId,
+        scopes: agentPrincipalTable.scopes,
+        isActive: agentPrincipalTable.isActive,
+        createdAt: agentPrincipalTable.createdAt,
+        updatedAt: agentPrincipalTable.updatedAt,
+      })
       .from(agentPrincipalTable)
+      .innerJoin(
+        workspaceUserTable,
+        and(
+          eq(workspaceUserTable.userId, agentPrincipalTable.userId),
+          eq(workspaceUserTable.workspaceId, project.workspaceId),
+        ),
+      )
       .where(
         and(
-          eq(agentPrincipalTable.userId, userId),
           eq(agentPrincipalTable.isActive, true),
           inArray(agentPrincipalTable.id, allowedAgentIds),
         ),
@@ -1030,6 +1088,10 @@ export async function claimTaskRun({
       .for("update");
 
     const { task, manifest, integration } = await getTaskContext(taskId, tx);
+    await assertTaskClaimable(tx, {
+      projectId: task.projectId,
+      status: task.status,
+    });
     const principal = await getOwnedPrincipal(userId, agentPrincipalId, tx);
     const allowedAgentIds = Array.isArray(manifest.allowedAgentIds)
       ? manifest.allowedAgentIds
@@ -1065,18 +1127,39 @@ export async function claimTaskRun({
       .limit(1);
     if (activeRun) {
       if (!isLeaseExpired(activeRun.leaseExpiresAt)) {
+        await recordExecutionMetric("lease_conflict", {
+          taskId,
+          activeRunId: activeRun.id,
+        });
         throw new HTTPException(409, {
           message: "Task already has an active worker lease",
         });
       }
-      await tx
+      const [orphanedRun] = await tx
         .update(taskRunTable)
         .set({
           leaseActive: false,
           state: "orphaned",
           updatedAt: new Date(),
         })
-        .where(eq(taskRunTable.id, activeRun.id));
+        .where(
+          and(
+            eq(taskRunTable.id, activeRun.id),
+            eq(taskRunTable.leaseEpoch, activeRun.leaseEpoch),
+            eq(taskRunTable.leaseActive, true),
+          ),
+        )
+        .returning({ id: taskRunTable.id });
+      if (!orphanedRun) {
+        await recordExecutionMetric("lease_conflict", {
+          taskId,
+          activeRunId: activeRun.id,
+          reason: "takeover_race",
+        });
+        throw new HTTPException(409, {
+          message: "Task run lease changed before takeover",
+        });
+      }
     }
 
     const runId = createId();
@@ -1153,12 +1236,22 @@ async function assertCurrentLease(
         .set({ leaseActive: false, state: "orphaned", updatedAt: new Date() })
         .where(eq(taskRunTable.id, run.id));
     }
+    await recordExecutionMetric("stale_fence_rejected", {
+      runId,
+      taskId: run.taskId,
+      reason: "expired_lease",
+    });
     throw new HTTPException(409, { message: "Task run lease has expired" });
   }
   if (
     run.leaseEpoch !== normalizedLeaseEpoch ||
     hashLeaseToken(leaseToken) !== run.leaseTokenHash
   ) {
+    await recordExecutionMetric("stale_fence_rejected", {
+      runId,
+      taskId: run.taskId,
+      reason: "epoch_or_token_mismatch",
+    });
     throw new HTTPException(409, {
       message: "Stale or invalid task run lease fence",
     });
@@ -1230,6 +1323,11 @@ export async function heartbeatTaskRun({
       )
       .returning();
     if (!updated) {
+      await recordExecutionMetric("stale_fence_rejected", {
+        runId,
+        taskId,
+        reason: "compare_and_swap_failed",
+      });
       throw new HTTPException(409, { message: "Stale task run lease fence" });
     }
     return saveIdempotencyResponse(tx, {
@@ -1312,6 +1410,14 @@ export async function reportTaskRun({
   });
 
   const result = await db.transaction(async (tx) => {
+    if (nextCommitSha !== undefined) {
+      await assertExecutionFlagEnabled(
+        EXECUTION_FLAGS.gitPush,
+        { taskId, runId },
+        tx,
+      );
+    }
+
     const replay = await getIdempotencyReplay(tx, {
       userId,
       operation: IDEMPOTENCY_OPERATIONS.report,
@@ -1332,7 +1438,6 @@ export async function reportTaskRun({
     if (run.taskId !== taskId) {
       throw new HTTPException(404, { message: "Task run not found" });
     }
-
     const now = new Date();
     const nextEvidence =
       evidence === undefined
@@ -1365,6 +1470,11 @@ export async function reportTaskRun({
       )
       .returning();
     if (!updated) {
+      await recordExecutionMetric("stale_fence_rejected", {
+        runId,
+        taskId,
+        reason: "compare_and_swap_failed",
+      });
       throw new HTTPException(409, { message: "Stale task run lease fence" });
     }
 
@@ -1471,6 +1581,11 @@ export async function releaseTaskRun({
       )
       .returning();
     if (!updated) {
+      await recordExecutionMetric("stale_fence_rejected", {
+        runId,
+        taskId,
+        reason: "compare_and_swap_failed",
+      });
       throw new HTTPException(409, { message: "Stale task run lease fence" });
     }
     return saveIdempotencyResponse(tx, {
@@ -1497,7 +1612,6 @@ export async function reviewTaskRun({
   verification,
   prResult,
   requestKey,
-  reviewerPrincipalId,
 }: {
   taskId: string;
   runId: string;
@@ -1538,6 +1652,18 @@ export async function reviewTaskRun({
   });
 
   const result = await db.transaction(async (tx) => {
+    const executionFlag = getParentReviewExecutionFlag(
+      normalizedDecision,
+      normalizedAction,
+    );
+    if (executionFlag) {
+      await assertExecutionFlagEnabled(
+        executionFlag,
+        { taskId, runId, reason: "parent_review" },
+        tx,
+      );
+    }
+
     const replay = await getIdempotencyReplay(tx, {
       userId,
       operation: IDEMPOTENCY_OPERATIONS.review,
@@ -1547,7 +1673,14 @@ export async function reviewTaskRun({
     });
     if (replay) return { response: replay, taskStatusChanged: null };
 
-    const { task, manifest, integration } = await getTaskContext(taskId, tx);
+    // Keep task -> run lock ordering identical to status/move/claim paths.
+    // Without the task lock, a direct status writer could race this review
+    // transaction between the run decision and task finalization.
+    const { task, manifest, integration } = await getTaskContext(
+      taskId,
+      tx,
+      true,
+    );
     const [run] = await tx
       .select()
       .from(taskRunTable)
@@ -1560,32 +1693,37 @@ export async function reviewTaskRun({
         message: "Task run has no worker principal to review",
       });
     }
-    if (reviewerPrincipalId) {
-      const [reviewer] = await tx
-        .select({
-          id: agentPrincipalTable.id,
-          userId: agentPrincipalTable.userId,
-        })
-        .from(agentPrincipalTable)
-        .where(
-          and(
-            eq(agentPrincipalTable.id, reviewerPrincipalId),
-            eq(agentPrincipalTable.userId, userId),
-            eq(agentPrincipalTable.isActive, true),
-          ),
-        )
-        .limit(1);
-      if (!reviewer) {
-        throw new HTTPException(403, {
-          message:
-            "Review principal is not active or is not owned by the current user",
-        });
-      }
-      if (reviewer.id === run.agentPrincipalId) {
-        throw new HTTPException(403, {
-          message: "A worker principal cannot finalize its own run",
-        });
-      }
+    const [workerPrincipal] = await tx
+      .select({
+        id: agentPrincipalTable.id,
+        userId: agentPrincipalTable.userId,
+        runtimeId: agentPrincipalTable.runtimeId,
+        isActive: agentPrincipalTable.isActive,
+      })
+      .from(agentPrincipalTable)
+      .where(eq(agentPrincipalTable.id, run.agentPrincipalId))
+      .limit(1);
+    if (!workerPrincipal) {
+      throw new HTTPException(409, {
+        message: "Task run worker principal is no longer available",
+      });
+    }
+    if (!workerPrincipal.isActive) {
+      throw new HTTPException(409, {
+        message: "Task run worker principal is inactive",
+      });
+    }
+
+    // Review authority comes from the authenticated session/API-key user. The
+    // optional X-Kaneo-Agent-Principal header is caller-controlled metadata and
+    // is deliberately ignored: a worker must not select another principal it
+    // owns to masquerade as a parent. A distinct authenticated principal owner
+    // is the fail-closed boundary for native parent/worker separation.
+    if (workerPrincipal.userId === userId) {
+      throw new HTTPException(403, {
+        message:
+          "The authenticated parent identity must be distinct from the worker principal",
+      });
     }
 
     if (run.state === "done" || run.state === "rejected") {
@@ -1594,18 +1732,14 @@ export async function reviewTaskRun({
       });
     }
 
-    const [principal] = await tx
-      .select({ runtimeId: agentPrincipalTable.runtimeId })
-      .from(agentPrincipalTable)
-      .where(eq(agentPrincipalTable.id, run.agentPrincipalId))
-      .limit(1);
-    if (!principal) {
+    const latestRun = await getLatestTaskRunForGate(tx, taskId, true);
+    if (!latestRun || latestRun.id !== run.id) {
       throw new HTTPException(409, {
-        message: "Task run worker principal is no longer available",
+        message: "Only the latest task run can be reviewed",
       });
     }
 
-    let nextState: TaskRunState;
+    let nextState: TaskRunState = "blocked";
     let blocker: string | null = null;
     let nextAction: string | null = null;
     let prFields: {
@@ -1628,7 +1762,7 @@ export async function reviewTaskRun({
         normalizedVerification as ParentReviewVerification;
       assertParentReviewableRun(
         run,
-        principal.runtimeId,
+        workerPrincipal.runtimeId,
         manifest,
         approvalVerification,
       );
@@ -1637,23 +1771,52 @@ export async function reviewTaskRun({
           normalizedAction === "create_pr" ? "allowPrCreate" : "allowMerge";
         const policyAllowsAction = manifest.policy[policyKey] === true;
         if (!policyAllowsAction) {
-          nextState = "blocked";
           blocker = "credential_blocked";
           nextAction = `Manifest policy ${policyKey} must be true and a reviewed host credential adapter is required`;
+          await recordExecutionMetric(
+            normalizedAction === "create_pr"
+              ? "pr_gate_blocked"
+              : "merge_gate_blocked",
+            { taskId, runId, reason: "manifest_policy" },
+          );
         } else if (normalizedPrResult?.status !== "PASS") {
-          nextState = "blocked";
+          await recordExecutionMetric(
+            normalizedAction === "create_pr"
+              ? "pr_gate_blocked"
+              : "merge_gate_blocked",
+            {
+              taskId,
+              runId,
+              reason: normalizedPrResult?.blocker ?? "adapter_blocked",
+            },
+          );
           blocker = normalizedPrResult?.blocker ?? "credential_blocked";
           nextAction =
             normalizedPrResult?.reason ??
             `A passing host credential adapter result is required for ${normalizedAction}`;
         } else {
-          assertPrResultMatchesIntegration(normalizedPrResult, integration);
+          try {
+            assertPrResultMatchesIntegration(normalizedPrResult, integration);
+          } catch (error) {
+            await recordExecutionMetric(
+              normalizedAction === "create_pr"
+                ? "pr_gate_blocked"
+                : "merge_gate_blocked",
+              { taskId, runId, reason: "repository_mismatch" },
+            );
+            throw error;
+          }
           if (
             normalizedAction === "merge" &&
             (!run.prNumber ||
               normalizedPrResult.prNumber !== run.prNumber ||
               (run.prUrl && normalizedPrResult.prUrl !== run.prUrl))
           ) {
+            await recordExecutionMetric("merge_gate_blocked", {
+              taskId,
+              runId,
+              reason: "pull_request_mismatch",
+            });
             throw new HTTPException(409, {
               message:
                 "Merge evidence must match the pull request recorded on the run",
@@ -1717,6 +1880,8 @@ export async function reviewTaskRun({
     const parentReview = {
       decision: normalizedDecision,
       action: normalizedAction,
+      reviewerUserId: userId,
+      workerPrincipalId: workerPrincipal.id,
       reason: normalizedReason ?? null,
       verification: normalizedVerification ?? null,
       prResult: normalizedPrResult ?? null,

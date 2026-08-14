@@ -15,13 +15,21 @@ function useUpdateWorkspaceRole() {
       roleName,
       permission,
     }: UpdateWorkspaceRoleRequest) => {
-      const { data, error } = await authClient.organization.updateRole({
-        organizationId: workspaceId,
-        roleName,
-        data: { permission },
-      });
-      if (error) throw new Error(error.message || "Failed to update role");
-      return data;
+      const result = await authClient.$fetch<Record<string, unknown>>(
+        "/organization/update-role",
+        {
+          method: "POST",
+          body: {
+            organizationId: workspaceId,
+            roleName,
+            data: { permission },
+          },
+        },
+      );
+      if (result.error) {
+        throw new Error(result.error.message || "Failed to update role");
+      }
+      return result.data;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({

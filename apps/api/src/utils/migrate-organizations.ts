@@ -28,6 +28,7 @@ async function migrateOrganizations() {
     // now we need to migrate the members
     for (const member of members) {
       await auth.api.addTeamMember({
+        headers: {},
         body: {
           teamId: data?.id || "",
           userId: member.userId,

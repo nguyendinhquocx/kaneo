@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, projectTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import {
   coercePriority,
   coerceStatus,
@@ -40,6 +41,16 @@ async function importTasks(
       ? (await claimTaskNumbers(projectId, tasksToImport.length)) - 1
       : 0;
   const validStatuses = await getValidTaskStatuses(projectId);
+  const requestedAssigneeIds = [
+    ...new Set(
+      tasksToImport
+        .map((task) => task.userId)
+        .filter((userId): userId is string => Boolean(userId)),
+    ),
+  ];
+  for (const assigneeId of requestedAssigneeIds) {
+    await assertTaskAssigneeInWorkspace(db, assigneeId, project.workspaceId);
+  }
 
   const results = [];
 

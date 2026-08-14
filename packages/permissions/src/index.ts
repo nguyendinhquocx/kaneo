@@ -10,6 +10,7 @@ export const statement = {
   ...defaultStatements,
   project: ["create", "read", "update", "delete", "share"],
   task: ["create", "read", "update", "delete", "assign"],
+  execution: ["review"],
   label: ["create", "read", "update", "delete"],
   workspace: ["read", "update", "delete", "manage_settings"],
 } as const;
@@ -36,6 +37,7 @@ export const admin = ac.newRole({
   ...adminAc.statements,
   project: ["create", "read", "update", "delete", "share"],
   task: ["create", "read", "update", "delete", "assign"],
+  execution: ["review"],
   label: ["create", "read", "update", "delete"],
   workspace: ["read", "update", "manage_settings"],
 });
@@ -44,6 +46,7 @@ export const owner = ac.newRole({
   ...ownerAc.statements,
   project: ["create", "read", "update", "delete", "share"],
   task: ["create", "read", "update", "delete", "assign"],
+  execution: ["review"],
   label: ["create", "read", "update", "delete"],
   workspace: ["read", "update", "delete", "manage_settings"],
 });

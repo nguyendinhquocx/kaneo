@@ -1,8 +1,9 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
-import { columnTable, taskRunTable, taskTable } from "../../database/schema";
+import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { assertFinalTaskStatusGate } from "../../execution/finalization-gate";
 import { assertValidTaskStatus } from "../validate-task-fields";
 
 async function updateTaskStatus({
@@ -14,51 +15,55 @@ async function updateTaskStatus({
   status: string;
   currentUserId: string;
 }) {
-  const existingTask = await db.query.taskTable.findFirst({
-    where: eq(taskTable.id, id),
-  });
+  const { existingTask, updatedTask } = await db.transaction(async (tx) => {
+    const [existingTask] = await tx
+      .select()
+      .from(taskTable)
+      .where(eq(taskTable.id, id))
+      .limit(1)
+      .for("update");
 
-  if (!existingTask) {
-    throw new HTTPException(404, {
-      message: "Task not found",
-    });
-  }
-
-  await assertValidTaskStatus(status, existingTask.projectId);
-
-  if (status === "done") {
-    const [latestRun] = await db
-      .select({ id: taskRunTable.id, state: taskRunTable.state })
-      .from(taskRunTable)
-      .where(eq(taskRunTable.taskId, id))
-      .orderBy(desc(taskRunTable.leaseEpoch), desc(taskRunTable.createdAt))
-      .limit(1);
-    if (latestRun && latestRun.state !== "done") {
-      throw new HTTPException(409, {
-        message: "Task completion is owned by the parent review/merge gate",
+    if (!existingTask) {
+      throw new HTTPException(404, {
+        message: "Task not found",
       });
     }
-  }
 
-  const column = await db.query.columnTable.findFirst({
-    where: and(
-      eq(columnTable.projectId, existingTask.projectId),
-      eq(columnTable.slug, status),
-    ),
-  });
+    // Keep status validation in the same transaction as the locked task read.
+    // The final-column flag can change concurrently with a status request.
+    const [column] = await tx
+      .select({ id: columnTable.id, isFinal: columnTable.isFinal })
+      .from(columnTable)
+      .where(
+        and(
+          eq(columnTable.projectId, existingTask.projectId),
+          eq(columnTable.slug, status),
+        ),
+      )
+      .limit(1);
 
-  const [updatedTask] = await db
-    .update(taskTable)
-    .set({ status, columnId: column?.id ?? null })
-    .where(eq(taskTable.id, id))
-    .returning();
+    await assertValidTaskStatus(status, existingTask.projectId);
 
-  if (!updatedTask) {
-    throw new HTTPException(500, {
-      message: "Failed to update task status",
+    await assertFinalTaskStatusGate(tx, {
+      taskId: id,
+      status,
+      isFinalColumn: column?.isFinal === true,
     });
-  }
 
+    const [updatedTask] = await tx
+      .update(taskTable)
+      .set({ status, columnId: column?.id ?? null })
+      .where(eq(taskTable.id, id))
+      .returning();
+
+    if (!updatedTask) {
+      throw new HTTPException(500, {
+        message: "Failed to update task status",
+      });
+    }
+
+    return { existingTask, updatedTask };
+  });
   await publishEvent("task.status_changed", {
     taskId: updatedTask.id,
     projectId: updatedTask.projectId,

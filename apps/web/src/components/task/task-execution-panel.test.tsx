@@ -25,7 +25,7 @@ vi.mock("@/hooks/mutations/execution/use-review-task-run", () => ({
   default: () => useReviewTaskRun(),
 }));
 vi.mock("@/hooks/use-workspace-permission", () => ({
-  useWorkspacePermission: () => ({ canManageTasks: () => true }),
+  useWorkspacePermission: () => ({ canReviewExecutions: () => true }),
 }));
 vi.mock("@/lib/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },

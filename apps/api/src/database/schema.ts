@@ -287,6 +287,15 @@ export const projectTable = pgTable(
   ],
 );
 
+export const executionFlagTable = pgTable("execution_flag", {
+  name: text("name").primaryKey(),
+  enabled: boolean("enabled").notNull().default(false),
+  updatedAt: timestamp("updated_at", { mode: "date" })
+    .defaultNow()
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+});
+
 export const executionManifestTable = pgTable(
   "execution_manifest",
   {

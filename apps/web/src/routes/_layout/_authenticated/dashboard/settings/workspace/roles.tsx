@@ -60,9 +60,9 @@ const BUILT_IN_RESOURCES = new Set([
   "invitation",
   "ac",
 ]);
-const CUSTOM_RESOURCES = (Object.keys(statement) as string[]).filter(
-  (key) => !BUILT_IN_RESOURCES.has(key),
-);
+const CUSTOM_RESOURCES = (
+  Object.keys(statement) as Array<keyof typeof statement>
+).filter((key) => !BUILT_IN_RESOURCES.has(key));
 
 const RESOURCE_LABELS: Record<string, string> = {
   project: "Projects",
@@ -114,6 +114,10 @@ const PERMISSION_LABELS: Record<
   "task:assign": {
     label: "Assign tasks",
     description: "Assign tasks to other workspace members.",
+  },
+  "execution:review": {
+    label: "Review agent runs",
+    description: "Approve or reject worker evidence and execution runs.",
   },
   "label:create": {
     label: "Create labels",
@@ -309,7 +313,7 @@ function RouteComponent() {
               </Empty>
             ) : (
               <Accordion
-                openMultiple
+                multiple
                 value={openCustom}
                 onValueChange={(value) =>
                   setOpenCustom(Array.isArray(value) ? value : [value])

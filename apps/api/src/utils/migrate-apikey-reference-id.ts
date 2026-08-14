@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import db from "../database";
+import { API_KEY_DEFAULT_PERMISSIONS_JSON } from "./api-key-permissions";
 
 /**
  * Ensures API key schema matches Better Auth expectations:
@@ -82,6 +83,16 @@ export async function migrateApiKeyReferenceId() {
       UPDATE "apikey"
       SET "config_id" = 'default'
       WHERE "config_id" IS NULL;
+    `);
+
+    // Keys created before scoped API-key enforcement have NULL permissions.
+    // Backfill only that unambiguous legacy shape with the bounded server
+    // compatibility envelope. Malformed non-NULL payloads stay untouched and
+    // are denied by verifyApiKey rather than silently widened.
+    await db.execute(sql`
+      UPDATE "apikey"
+      SET "permissions" = ${API_KEY_DEFAULT_PERMISSIONS_JSON}
+      WHERE "permissions" IS NULL;
     `);
 
     const hasConfigIndex = await db.execute(sql`

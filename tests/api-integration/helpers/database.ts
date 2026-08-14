@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
-import db from "../../../apps/api/src/database";
+import db, { schema } from "../../../apps/api/src/database";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = resolve(currentDir, "../../../apps/api/drizzle");
@@ -92,6 +92,7 @@ export async function resetTestDatabase() {
         "column",
         "comment",
         "external_link",
+        "execution_flag",
         "execution_idempotency",
         "task_run_evidence",
         "task_run",
@@ -117,4 +118,23 @@ export async function resetTestDatabase() {
       RESTART IDENTITY CASCADE
     `),
   );
+
+  await db
+    .insert(schema.executionFlagTable)
+    .values([
+      { name: "agent_inbox_dispatch_enabled", enabled: false },
+      { name: "agent_reply_enabled", enabled: false },
+      { name: "guest_mutation_enabled", enabled: false },
+      { name: "guest_agent_mentions_enabled", enabled: false },
+      { name: "git_push_enabled", enabled: true },
+      { name: "pr_creation_enabled", enabled: true },
+      { name: "merge_enabled", enabled: true },
+    ])
+    .onConflictDoUpdate({
+      target: schema.executionFlagTable.name,
+      set: {
+        enabled: sql`excluded.enabled`,
+        updatedAt: new Date(),
+      },
+    });
 }

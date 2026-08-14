@@ -12,6 +12,16 @@ import createTaskRelation from "./controllers/create-task-relation";
 import deleteTaskRelation from "./controllers/delete-task-relation";
 import getTaskRelations from "./controllers/get-task-relations";
 
+function hasTaskReadScope(
+  apiKey: { permissions: Record<string, string[]> | null } | undefined,
+): boolean {
+  return (
+    apiKey === undefined ||
+    (apiKey.permissions !== null &&
+      apiKey.permissions?.task?.includes("read") === true)
+  );
+}
+
 const taskRelationSchema = v.object({
   id: v.string(),
   sourceTaskId: v.string(),
@@ -24,6 +34,10 @@ const taskRelation = new Hono<{
   Variables: {
     userId: string;
     workspaceId: string;
+    apiKey?: {
+      id: string;
+      permissions: Record<string, string[]> | null;
+    };
   };
 }>()
   .get(
@@ -87,7 +101,16 @@ const taskRelation = new Hono<{
       if (!task) {
         throw new HTTPException(404, { message: "Source task not found" });
       }
-      await validateWorkspaceAccess(userId, task.workspaceId);
+      await validateWorkspaceAccess(
+        userId,
+        task.workspaceId,
+        c.get("apiKey")?.id,
+      );
+      if (!hasTaskReadScope(c.get("apiKey"))) {
+        throw new HTTPException(403, {
+          message: "Insufficient API key scope",
+        });
+      }
       c.set("workspaceId", task.workspaceId);
       return next();
     },
@@ -144,7 +167,16 @@ const taskRelation = new Hono<{
       if (!task) {
         throw new HTTPException(404, { message: "Task not found" });
       }
-      await validateWorkspaceAccess(userId, task.workspaceId);
+      await validateWorkspaceAccess(
+        userId,
+        task.workspaceId,
+        c.get("apiKey")?.id,
+      );
+      if (!hasTaskReadScope(c.get("apiKey"))) {
+        throw new HTTPException(403, {
+          message: "Insufficient API key scope",
+        });
+      }
       c.set("workspaceId", task.workspaceId);
       return next();
     },

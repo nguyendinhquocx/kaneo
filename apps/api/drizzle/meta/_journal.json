@@ -274,6 +274,13 @@
 			"when": 1786431126411,
 			"tag": "0038_backfill_github_compatibility",
 			"breakpoints": true
+		},
+		{
+			"idx": 39,
+			"version": "7",
+			"when": 1786614829797,
+			"tag": "0039_execution_flags",
+			"breakpoints": true
 		}
 	]
 }

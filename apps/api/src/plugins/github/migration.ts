@@ -36,7 +36,9 @@ export async function migrateGitHubIntegration() {
     const oldIntegrations = await db.query.githubIntegrationTable.findMany();
 
     if (oldIntegrations.length === 0) {
-      console.log("No old integrations to migrate; keeping compatibility table");
+      console.log(
+        "No old integrations to migrate; keeping compatibility table",
+      );
       return;
     }
 
@@ -75,7 +77,9 @@ export async function migrateGitHubIntegration() {
 
     await migrateTaskLinks();
 
-    console.log("✅ GitHub integration migration complete; compatibility table retained!");
+    console.log(
+      "✅ GitHub integration migration complete; compatibility table retained!",
+    );
   } catch (error) {
     console.error("Failed to migrate GitHub integration:", error);
     throw error;

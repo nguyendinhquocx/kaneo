@@ -11,9 +11,12 @@ import {
 } from "../../database/schema";
 import { publishEvent } from "../../events";
 import {
-  assertValidPriority,
-  assertValidTaskStatus,
-} from "../validate-task-fields";
+  assertFinalTaskStatusGate,
+  lockTasksForStatusMutation,
+} from "../../execution/finalization-gate";
+import { assertUserWorkspacePermission } from "../../utils/require-workspace-permission";
+import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
+import { assertValidPriority, VIRTUAL_STATUSES } from "../validate-task-fields";
 
 type BulkOperation =
   | "updateStatus"
@@ -71,7 +74,7 @@ async function bulkUpdateTasks({
   }
 
   const [membership] = await db
-    .select({ id: workspaceUserTable.id })
+    .select({ role: workspaceUserTable.role })
     .from(workspaceUserTable)
     .where(
       and(
@@ -87,6 +90,14 @@ async function bulkUpdateTasks({
     });
   }
 
+  const requiredPermission =
+    operation === "delete"
+      ? { task: ["delete"] }
+      : operation === "updateAssignee"
+        ? { task: ["assign"] }
+        : { task: ["update"] };
+  await assertUserWorkspacePermission(userId, workspaceId, requiredPermission);
+
   const foundIds = tasks.map((t) => t.id);
   let updatedCount = 0;
 
@@ -95,39 +106,79 @@ async function bulkUpdateTasks({
       if (!value) {
         throw new HTTPException(400, { message: "Status value is required" });
       }
-      const projectIds = [...new Set(tasks.map((t) => t.projectId))];
 
-      for (const projectId of projectIds) {
-        await assertValidTaskStatus(value, projectId);
-
-        const column = await db.query.columnTable.findFirst({
-          where: and(
-            eq(columnTable.projectId, projectId),
-            eq(columnTable.slug, value),
-          ),
-        });
-
-        const projectTaskIds = tasks
-          .filter((t) => t.projectId === projectId)
-          .map((t) => t.id);
-
-        const result = await db
-          .update(taskTable)
-          .set({ status: value, columnId: column?.id ?? null })
-          .where(inArray(taskTable.id, projectTaskIds));
-
-        updatedCount += result.rowCount ?? projectTaskIds.length;
-
-        for (const taskId of projectTaskIds) {
-          await publishEvent("task.status_changed", {
-            taskId,
-            projectId,
-            userId,
-            newStatus: value,
-            type: "status_changed",
-          });
+      const lockedTasks = await db.transaction(async (tx) => {
+        const rows = await lockTasksForStatusMutation(
+          tx,
+          tasks.map((task) => task.id),
+        );
+        if (rows.length !== tasks.length) {
+          throw new HTTPException(404, { message: "No tasks found" });
         }
 
+        const projectIds = [...new Set(rows.map((task) => task.projectId))];
+        const columns = await tx
+          .select({
+            id: columnTable.id,
+            projectId: columnTable.projectId,
+            slug: columnTable.slug,
+            isFinal: columnTable.isFinal,
+          })
+          .from(columnTable)
+          .where(inArray(columnTable.projectId, projectIds));
+
+        const updatedRows: typeof rows = [];
+        for (const task of rows) {
+          const column = columns.find(
+            (candidate) =>
+              candidate.projectId === task.projectId &&
+              candidate.slug === value,
+          );
+          if (!column && !VIRTUAL_STATUSES.includes(value as never)) {
+            throw new HTTPException(400, {
+              message: `Invalid status "${value}" for project ${task.projectId}`,
+            });
+          }
+
+          await assertFinalTaskStatusGate(tx, {
+            taskId: task.id,
+            status: value,
+            isFinalColumn: column?.isFinal === true,
+          });
+
+          const [updated] = await tx
+            .update(taskTable)
+            .set({ status: value, columnId: column?.id ?? null })
+            .where(eq(taskTable.id, task.id))
+            .returning();
+          if (!updated) {
+            throw new HTTPException(500, {
+              message: "Failed to update task status",
+            });
+          }
+          updatedRows.push({
+            id: updated.id,
+            projectId: updated.projectId,
+            status: updated.status,
+          });
+        }
+        return updatedRows;
+      });
+
+      updatedCount = lockedTasks.length;
+      for (const task of lockedTasks) {
+        await publishEvent("task.status_changed", {
+          taskId: task.id,
+          projectId: task.projectId,
+          userId,
+          newStatus: value,
+          type: "status_changed",
+        });
+      }
+
+      for (const projectId of [
+        ...new Set(lockedTasks.map((t) => t.projectId)),
+      ]) {
         await publishEvent("task-relation.refresh", {
           projectId,
           userId,
@@ -162,6 +213,7 @@ async function bulkUpdateTasks({
     }
 
     case "updateAssignee": {
+      await assertTaskAssigneeInWorkspace(db, value, workspaceId);
       const newAssigneeName = value
         ? (
             await db
@@ -219,7 +271,10 @@ async function bulkUpdateTasks({
       }
 
       const label = await db.query.labelTable.findFirst({
-        where: eq(labelTable.id, value),
+        where: and(
+          eq(labelTable.id, value),
+          eq(labelTable.workspaceId, workspaceId),
+        ),
       });
 
       if (!label) {

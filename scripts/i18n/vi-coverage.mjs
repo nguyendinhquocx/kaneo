@@ -2,7 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const referencePath = path.join(repoRoot, "i18n", "en-US.json");
 const scriptArgs = process.argv.slice(2);
 const localeName = scriptArgs.find((arg) => !arg.startsWith("--")) || "vi-VN";
@@ -18,7 +21,8 @@ function flatten(value, prefix = "", output = new Map()) {
     output.set(prefix, value);
     return output;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return output;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return output;
   for (const [key, child] of Object.entries(value)) {
     flatten(child, prefix ? `${prefix}.${key}` : key, output);
   }
@@ -32,7 +36,11 @@ let translated = 0;
 
 for (const [key, referenceValue] of referenceValues) {
   const value = localeValues.get(key);
-  if (typeof value !== "string" || value.trim() === "" || value === referenceValue) {
+  if (
+    typeof value !== "string" ||
+    value.trim() === "" ||
+    value === referenceValue
+  ) {
     untranslated.push(key);
   } else {
     translated += 1;

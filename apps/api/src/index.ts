@@ -29,6 +29,7 @@ import { waitForDatabase } from "./database/wait-for-database";
 import discordIntegration from "./discord-integration";
 import { eventContext } from "./events";
 import execution from "./execution";
+import { getExecutionMetrics, seedExecutionFlags } from "./execution/gates";
 import externalLink from "./external-link";
 import genericWebhookIntegration from "./generic-webhook-integration";
 import giteaIntegration, { handleGiteaWebhookRoute } from "./gitea-integration";
@@ -96,6 +97,19 @@ type ApiKey = {
   permissions: Record<string, string[]> | null;
 };
 
+function hasApiKeyPermission(
+  apiKey: ApiKey | undefined,
+  resource: string,
+  action: string,
+): boolean {
+  return (
+    apiKey === undefined ||
+    (apiKey.permissions !== null &&
+      apiKey.permissions !== undefined &&
+      apiKey.permissions[resource]?.includes(action) === true)
+  );
+}
+
 type AppVariables = {
   Variables: {
     user: User | null;
@@ -138,7 +152,7 @@ function buildContentDisposition(filename: string, inline: boolean) {
       .normalize("NFKD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[\\/]/g, "-")
-      .replace(/[^\x20-\u7E]+/g, "_")
+      .replace(/[^\x20-\x7E]+/g, "_")
       .replace(/\s+/g, " ")
       .trim() || "file";
   const encodedFilename = encodeURIComponent(safeFilename).replace(
@@ -197,7 +211,7 @@ export function createApp() {
   const api = new Hono<ApiVariables>();
 
   api.get("/health", (c) => {
-    return c.json({ status: "ok" });
+    return c.json({ status: "ok", executionMetrics: getExecutionMetrics() });
   });
 
   api.get(
@@ -508,7 +522,11 @@ export function createApp() {
       const headers = new Headers(c.req.raw.headers);
 
       // Better Auth API key plugin validates from x-api-key by default.
-      headers.set("x-api-key", bearerMatch[1]);
+      const apiKeyToken = bearerMatch[1];
+      if (!apiKeyToken) {
+        throw new HTTPException(401, { message: "Unauthorized" });
+      }
+      headers.set("x-api-key", apiKeyToken);
 
       return auth.handler(
         new Request(c.req.raw, {
@@ -671,7 +689,16 @@ export function createApp() {
           throw new HTTPException(401, { message: "Unauthorized" });
         }
 
-        await validateWorkspaceAccess(userId, project.workspaceId);
+        await validateWorkspaceAccess(
+          userId,
+          project.workspaceId,
+          c.get("apiKey")?.id,
+        );
+        if (!hasApiKeyPermission(c.get("apiKey"), "task", "read")) {
+          throw new HTTPException(403, {
+            message: "Insufficient API key scope",
+          });
+        }
       }
 
       const windowId = c.req.query("windowId");
@@ -777,6 +804,7 @@ export async function runStartupTasks() {
   await migrateApiKeyReferenceId();
 
   await migrateNotificationPreferencesSchema();
+  await seedExecutionFlags();
   await migrateGitHubIntegration();
   await migrateColumns();
   await seedDefaultWorkspaceRoles();
@@ -865,9 +893,10 @@ const {
   oauthApi,
 } = createdApp;
 
+const entrypoint = process.argv[1];
 const isMainModule =
-  Boolean(process.argv[1]) &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
+  entrypoint !== undefined &&
+  import.meta.url === pathToFileURL(entrypoint).href;
 
 if (isMainModule) {
   void startServer(injectWebSocket);

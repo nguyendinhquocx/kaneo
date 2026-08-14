@@ -8,7 +8,7 @@ function isDisallowedIpv4(ip: string): boolean {
     return true;
   }
 
-  const [a, b] = parts;
+  const [a = -1, b = -1] = parts;
 
   return (
     a === 0 ||

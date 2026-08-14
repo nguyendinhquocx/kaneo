@@ -36,6 +36,7 @@ import { config } from "dotenv-mono";
 import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "./database";
 import { publishEvent } from "./events";
+import { API_KEY_DEFAULT_PERMISSIONS } from "./utils/api-key-permissions";
 import { checkRegistrationAllowed } from "./utils/check-registration-allowed";
 import { checkWorkspaceName } from "./utils/check-workspace-name";
 import { mapCustomOAuthProfileToUser } from "./utils/custom-oauth-profile";
@@ -400,7 +401,6 @@ export const auth = betterAuth({
           {
             inviterEmail: data.inviter.user.email,
             inviterName: data.inviter.user.name,
-            locale,
             workspaceName: data.organization.name,
             invitationLink: inviteLink,
             to: data.email,
@@ -442,6 +442,13 @@ export const auth = betterAuth({
     apiKey({
       enableSessionForAPIKeys: true,
       apiKeyHeaders: "x-api-key",
+      // API keys are server-issued capabilities, not alternate unrestricted
+      // user sessions. This explicit compatibility envelope preserves the
+      // historical user-key behavior while workspace membership and role
+      // permissions remain an independent gate in the REST middleware.
+      permissions: {
+        defaultPermissions: API_KEY_DEFAULT_PERMISSIONS,
+      },
       rateLimit: {
         enabled: true,
         maxRequests: 100,
@@ -496,10 +503,10 @@ export const auth = betterAuth({
           // Otherwise a fresh instance with DISABLE_REGISTRATION=true
           // could never be set up because `checkRegistrationAllowed`
           // would reject the first user (qodo bot #3).
-          const [{ value: existingUserCount }] = await db
+          const [existingUserCountRow] = await db
             .select({ value: count() })
             .from(schema.userTable);
-          if (existingUserCount === 0) {
+          if ((existingUserCountRow?.value ?? 0) === 0) {
             return;
           }
 

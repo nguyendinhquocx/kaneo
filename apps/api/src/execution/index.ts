@@ -7,8 +7,10 @@ import {
   taskRunEvidenceSchema,
   taskRunSchema,
 } from "../schemas";
+import { isInstanceAdmin } from "../utils/is-instance-admin";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
+import { listExecutionFlags, setExecutionFlag } from "./gates";
 import {
   claimTaskRun,
   createAgentPrincipal,
@@ -31,6 +33,57 @@ const execution = new Hono<{
     workspaceId: string;
   };
 }>()
+  .get(
+    "/flags",
+    describeRoute({
+      operationId: "listExecutionFlags",
+      tags: ["Execution"],
+      description: "List server-side execution kill-switch flags",
+      responses: {
+        200: {
+          description: "Execution flags",
+          content: {
+            "application/json": {
+              schema: resolver(
+                v.array(
+                  v.object({
+                    name: v.string(),
+                    enabled: v.boolean(),
+                    updatedAt: v.nullable(v.date()),
+                  }),
+                ),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      return c.json(await listExecutionFlags());
+    },
+  )
+  .put(
+    "/flags/:name",
+    describeRoute({
+      operationId: "setExecutionFlag",
+      tags: ["Execution"],
+      description: "Change one server-side execution kill-switch flag",
+      responses: { 200: { description: "Execution flag updated" } },
+    }),
+    validator("param", v.object({ name: v.string() })),
+    validator("json", v.object({ enabled: v.boolean() })),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const { name } = c.req.valid("param");
+      const { enabled } = c.req.valid("json");
+      return c.json(await setExecutionFlag(name, enabled));
+    },
+  )
   .get(
     "/agents",
     describeRoute({
@@ -107,7 +160,6 @@ const execution = new Hono<{
       const { projectId } = c.req.valid("param");
       const manifest = await upsertExecutionManifest(
         projectId,
-        c.get("userId"),
         c.req.valid("json"),
       );
       return c.json(manifest);
@@ -403,7 +455,7 @@ const execution = new Hono<{
       }),
     ),
     workspaceAccess.fromTask("taskId"),
-    requireWorkspacePermission({ task: ["update"] }),
+    requireWorkspacePermission({ execution: ["review"] }),
     async (c) => {
       const { taskId, runId } = c.req.valid("param");
       const body = c.req.valid("json");
@@ -418,8 +470,6 @@ const execution = new Hono<{
         verification: body.verification,
         prResult: body.prResult,
         requestKey,
-        reviewerPrincipalId:
-          c.req.header("X-Kaneo-Agent-Principal")?.trim() || undefined,
       });
       return c.json(run);
     },

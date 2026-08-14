@@ -6,6 +6,7 @@ import {
   integrationTable,
   taskTable,
 } from "../../../database/schema";
+import { assertFinalTaskStatusGate } from "../../../execution/finalization-gate";
 
 export type TaskRow = InferSelectModel<typeof taskTable>;
 
@@ -34,46 +35,70 @@ export async function updateTaskStatus(
   taskId: string,
   newStatus: string,
 ): Promise<UpdateTaskStatusResult> {
-  const task = await db.query.taskTable.findFirst({
-    where: eq(taskTable.id, taskId),
+  return db.transaction(async (tx) => {
+    const [task] = await tx
+      .select()
+      .from(taskTable)
+      .where(eq(taskTable.id, taskId))
+      .limit(1)
+      .for("update");
+
+    if (!task) {
+      return { applied: false };
+    }
+
+    let columnId: string | null = null;
+
+    const [column] = await tx
+      .select()
+      .from(columnTable)
+      .where(
+        and(
+          eq(columnTable.projectId, task.projectId),
+          eq(columnTable.slug, newStatus),
+        ),
+      )
+      .limit(1);
+
+    if (column) {
+      columnId = column.id;
+    } else if (!NON_COLUMN_STATUSES.has(newStatus)) {
+      console.warn(
+        `[Integration] Skipping status update for task ${taskId}: column "${newStatus}" not found in project ${task.projectId}`,
+      );
+      return { applied: false };
+    }
+
+    // GitHub webhooks are external status writers. They must use the same
+    // parent-review gate as REST and bulk status mutation, while the task row
+    // lock serializes this check against review/claim transactions.
+    try {
+      await assertFinalTaskStatusGate(tx, {
+        taskId,
+        status: newStatus,
+        isFinalColumn: column?.isFinal === true,
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        console.warn(
+          `[Integration] Skipping final status update for task ${taskId}: ${error.message}`,
+        );
+      }
+      return { applied: false };
+    }
+
+    const [after] = await tx
+      .update(taskTable)
+      .set({ status: newStatus, columnId })
+      .where(eq(taskTable.id, taskId))
+      .returning();
+
+    if (!after) {
+      return { applied: false };
+    }
+
+    return { applied: true, before: task, after };
   });
-
-  if (!task) {
-    return { applied: false };
-  }
-
-  let columnId: string | null = null;
-
-  const column = await db.query.columnTable.findFirst({
-    where: and(
-      eq(columnTable.projectId, task.projectId),
-      eq(columnTable.slug, newStatus),
-    ),
-  });
-
-  if (column) {
-    columnId = column.id;
-  } else if (!NON_COLUMN_STATUSES.has(newStatus)) {
-    console.warn(
-      `[GitHub] Skipping status update for task ${taskId}: column "${newStatus}" not found in project ${task.projectId}`,
-    );
-    return { applied: false };
-  }
-
-  await db
-    .update(taskTable)
-    .set({ status: newStatus, columnId })
-    .where(eq(taskTable.id, taskId));
-
-  const after = await db.query.taskTable.findFirst({
-    where: eq(taskTable.id, taskId),
-  });
-
-  if (!after) {
-    return { applied: false };
-  }
-
-  return { applied: true, before: task, after };
 }
 
 export async function isTaskInFinalState(task: {

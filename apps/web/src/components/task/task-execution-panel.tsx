@@ -106,7 +106,7 @@ export default function TaskExecutionPanel({
   projectId,
 }: TaskExecutionPanelProps) {
   const { t } = useTranslation();
-  const { canManageTasks } = useWorkspacePermission();
+  const { canReviewExecutions } = useWorkspacePermission();
   const { data: runs = [], isLoading, isError } = useGetTaskRuns(taskId);
   const { data: agents = [], isError: isAgentsError } = useGetExecutionAgents();
   const { data: manifest } = useGetExecutionManifest(projectId);
@@ -509,7 +509,7 @@ export default function TaskExecutionPanel({
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("tasks:detail.execution.review.hint")}
               </p>
-              {canManageTasks() && (
+              {canReviewExecutions() && (
                 <form
                   className="mt-3 flex min-w-0 flex-col gap-3"
                   onSubmit={handleApprove}

@@ -34,18 +34,24 @@ function useWorkspaceRoles(workspaceId: string | undefined) {
     enabled: !!workspaceId,
     queryFn: async () => {
       if (!workspaceId) return [];
-      const result = await authClient.organization.listRoles({
+      // Better Auth 1.6 exposes the dynamic-role endpoints on the server
+      // plugin, but not as typed organization client actions. Keep the raw
+      // endpoint call in this hook rather than pretending those actions exist.
+      const result = await authClient.$fetch<
+        Array<{
+          id: string;
+          organizationId: string;
+          role: string;
+          permission: Record<string, string[]>;
+          createdAt: Date | string;
+          updatedAt?: Date | string | null;
+        }>
+      >("/organization/list-roles", {
+        method: "GET",
         query: { organizationId: workspaceId },
       });
       if (result.error) throw new Error(result.error.message);
-      const roles = (result.data ?? []) as Array<{
-        id: string;
-        organizationId: string;
-        role: string;
-        permission: string;
-        createdAt: Date | string;
-        updatedAt?: Date | string | null;
-      }>;
+      const roles = result.data ?? [];
 
       return roles.map((r) => ({
         id: r.id,

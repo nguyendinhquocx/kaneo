@@ -8,6 +8,10 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import {
+  assertFinalTaskStatusGate,
+  assertTaskMoveExecutionGate,
+} from "../../execution/finalization-gate";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -20,15 +24,17 @@ function isSameProjectMove(
 }
 
 async function resolveDestinationStatus(
+  dbOrTx: DbOrTx,
   destinationProjectId: string,
   currentStatus: string,
   requestedStatus?: string,
 ) {
-  const destinationColumns = await db
+  const destinationColumns = await dbOrTx
     .select({
       id: columnTable.id,
       slug: columnTable.slug,
       position: columnTable.position,
+      isFinal: columnTable.isFinal,
     })
     .from(columnTable)
     .where(eq(columnTable.projectId, destinationProjectId))
@@ -54,7 +60,14 @@ async function resolveDestinationStatus(
     (column) => column.slug === currentStatus,
   );
 
-  return requestedColumn ?? matchingCurrentColumn ?? destinationColumns[0];
+  const resolvedColumn =
+    requestedColumn ?? matchingCurrentColumn ?? destinationColumns[0];
+  if (!resolvedColumn) {
+    throw new HTTPException(400, {
+      message: "Destination project does not have a usable workflow column",
+    });
+  }
+  return resolvedColumn;
 }
 
 async function getNextTaskPosition(
@@ -88,85 +101,101 @@ async function moveTask({
   destinationStatus?: string;
   currentUserId: string;
 }) {
-  const existingTask = await db.query.taskTable.findFirst({
-    where: eq(taskTable.id, taskId),
-  });
+  const { movedTask, existingTask, sourceProject, destinationProject } =
+    await db.transaction(async (tx) => {
+      const [lockedTask] = await tx
+        .select()
+        .from(taskTable)
+        .where(eq(taskTable.id, taskId))
+        .limit(1)
+        .for("update");
 
-  if (!existingTask) {
-    throw new HTTPException(404, {
-      message: "Task not found",
-    });
-  }
+      if (!lockedTask) {
+        throw new HTTPException(404, { message: "Task not found" });
+      }
 
-  if (isSameProjectMove(existingTask.projectId, destinationProjectId)) {
-    throw new HTTPException(400, {
-      message: "Task is already in that project",
-    });
-  }
+      if (isSameProjectMove(lockedTask.projectId, destinationProjectId)) {
+        throw new HTTPException(400, {
+          message: "Task is already in that project",
+        });
+      }
 
-  const [sourceProject, destinationProject] = await Promise.all([
-    db.query.projectTable.findFirst({
-      where: eq(projectTable.id, existingTask.projectId),
-    }),
-    db.query.projectTable.findFirst({
-      where: eq(projectTable.id, destinationProjectId),
-    }),
-  ]);
+      const [sourceProject, destinationProject] = await Promise.all([
+        tx.query.projectTable.findFirst({
+          where: eq(projectTable.id, lockedTask.projectId),
+        }),
+        tx.query.projectTable.findFirst({
+          where: eq(projectTable.id, destinationProjectId),
+        }),
+      ]);
 
-  if (!sourceProject || !destinationProject) {
-    throw new HTTPException(404, {
-      message: "Project not found",
-    });
-  }
+      if (!sourceProject || !destinationProject) {
+        throw new HTTPException(404, {
+          message: "Project not found",
+        });
+      }
 
-  if (sourceProject.workspaceId !== destinationProject.workspaceId) {
-    throw new HTTPException(400, {
-      message: "Tasks can only be moved within the same workspace",
-    });
-  }
+      if (sourceProject.workspaceId !== destinationProject.workspaceId) {
+        throw new HTTPException(400, {
+          message: "Tasks can only be moved within the same workspace",
+        });
+      }
 
-  const resolvedColumn = await resolveDestinationStatus(
-    destinationProjectId,
-    existingTask.status,
-    destinationStatus,
-  );
+      await assertTaskMoveExecutionGate(tx, taskId);
 
-  const movedTask = await db.transaction(async (tx) => {
-    const [nextTaskNumber, nextPosition] = await Promise.all([
-      claimTaskNumber(destinationProjectId, tx),
-      getNextTaskPosition(
+      const resolvedColumn = await resolveDestinationStatus(
         tx,
         destinationProjectId,
-        resolvedColumn.slug,
-        resolvedColumn.id,
-      ),
-    ]);
+        lockedTask.status,
+        destinationStatus,
+      );
 
-    const [updatedTask] = await tx
-      .update(taskTable)
-      .set({
-        projectId: destinationProjectId,
+      await assertFinalTaskStatusGate(tx, {
+        taskId,
         status: resolvedColumn.slug,
-        columnId: resolvedColumn.id,
-        number: nextTaskNumber,
-        position: nextPosition,
-      })
-      .where(eq(taskTable.id, taskId))
-      .returning();
-
-    if (!updatedTask) {
-      throw new HTTPException(500, {
-        message: "Failed to move task",
+        isFinalColumn: resolvedColumn.isFinal === true,
       });
-    }
 
-    await tx
-      .update(assetTable)
-      .set({ projectId: destinationProjectId })
-      .where(eq(assetTable.taskId, taskId));
+      const [nextTaskNumber, nextPosition] = await Promise.all([
+        claimTaskNumber(destinationProjectId, tx),
+        getNextTaskPosition(
+          tx,
+          destinationProjectId,
+          resolvedColumn.slug,
+          resolvedColumn.id,
+        ),
+      ]);
 
-    return updatedTask;
-  });
+      const [updatedTask] = await tx
+        .update(taskTable)
+        .set({
+          projectId: destinationProjectId,
+          status: resolvedColumn.slug,
+          columnId: resolvedColumn.id,
+          number: nextTaskNumber,
+          position: nextPosition,
+        })
+        .where(eq(taskTable.id, taskId))
+        .returning();
+
+      if (!updatedTask) {
+        throw new HTTPException(500, {
+          message: "Failed to move task",
+        });
+      }
+
+      await tx
+        .update(assetTable)
+        .set({ projectId: destinationProjectId })
+        .where(eq(assetTable.taskId, taskId));
+
+      return {
+        movedTask: updatedTask,
+        existingTask: lockedTask,
+        sourceProject,
+        destinationProject,
+      };
+    });
 
   await publishEvent("task.moved", {
     taskId,
@@ -177,7 +206,7 @@ async function moveTask({
     toProjectId: destinationProject.id,
     toProjectName: destinationProject.name,
     oldStatus: existingTask.status,
-    newStatus: resolvedColumn.slug,
+    newStatus: movedTask.status,
   });
 
   return {

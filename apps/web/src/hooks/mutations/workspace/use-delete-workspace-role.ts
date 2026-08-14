@@ -13,14 +13,17 @@ function useDeleteWorkspaceRole() {
       workspaceId,
       roleName,
     }: DeleteWorkspaceRoleRequest) => {
-      const { data, error } = await authClient.organization.deleteRole({
-        organizationId: workspaceId,
-        roleName,
-      });
-      if (error) {
-        throw new Error(error.message || "Failed to delete role");
+      const result = await authClient.$fetch<{ success: boolean }>(
+        "/organization/delete-role",
+        {
+          method: "POST",
+          body: { organizationId: workspaceId, roleName },
+        },
+      );
+      if (result.error) {
+        throw new Error(result.error.message || "Failed to delete role");
       }
-      return data;
+      return result.data;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({

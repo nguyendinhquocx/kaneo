@@ -415,6 +415,33 @@ describe("API integration: workspace RBAC enforcement", () => {
       });
       expect(response.status).toBe(200);
     });
+
+    it("rejects an assignee who is not a member of the task workspace", async () => {
+      const admin = await createWorkspaceMember({ role: "admin" });
+      const foreignMember = await createWorkspaceMember({
+        userName: "Foreign Assignee",
+      });
+      const { project, columns } = await createProjectFixture({
+        workspaceId: admin.workspace.id,
+      });
+      const task = await seedTask(project.id, columns.todo.id);
+
+      mockAuthenticatedSession(admin.user);
+      const { app } = createApp();
+
+      const response = await app.request(`/api/task/assignee/${task.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userId: foreignMember.user.id }),
+      });
+      expect(response.status).toBe(400);
+
+      const [unchangedTask] = await db
+        .select({ userId: schema.taskTable.userId })
+        .from(schema.taskTable)
+        .where(eq(schema.taskTable.id, task.id));
+      expect(unchangedTask?.userId).toBeNull();
+    });
   });
 
   describe("resource coverage: project:create / update / delete", () => {

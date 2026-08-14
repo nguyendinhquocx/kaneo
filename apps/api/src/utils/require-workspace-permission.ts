@@ -3,9 +3,26 @@ import { and, eq } from "drizzle-orm";
 import type { Context, Next } from "hono";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
-import { isInstanceAdmin } from "./is-instance-admin";
+export type PermissionMap = Record<string, string[]>;
 
-type PermissionMap = Record<string, string[]>;
+type ApiKeyContext = {
+  permissions?: PermissionMap | null;
+};
+
+function hasApiKeyScope(
+  apiKey: ApiKeyContext | undefined,
+  permissions: PermissionMap,
+): boolean {
+  // An authenticated API key always has an explicit permission map. Missing
+  // or malformed data is represented as `{}` by verifyApiKey and therefore
+  // denies every protected capability instead of becoming unrestricted.
+  return (
+    apiKey === undefined ||
+    (apiKey.permissions !== null &&
+      apiKey.permissions !== undefined &&
+      satisfies(apiKey.permissions, permissions))
+  );
+}
 
 function builtInRoleStatements(
   role: string,
@@ -84,26 +101,20 @@ function satisfies(
   return true;
 }
 
-export async function hasWorkspacePermission(
-  c: Context,
+export async function hasUserWorkspacePermission(
+  userId: string,
+  workspaceId: string,
   permissions: PermissionMap,
-) {
-  const workspaceId = c.get("workspaceId");
-  if (!workspaceId) return false;
+): Promise<boolean> {
+  const [user] = await db
+    .select({ role: schema.userTable.role })
+    .from(schema.userTable)
+    .where(eq(schema.userTable.id, userId))
+    .limit(1);
 
-  const apiKey = c.get("apiKey") as
-    | { permissions?: Record<string, string[]> | null }
-    | undefined;
-  if (apiKey?.permissions && !satisfies(apiKey.permissions, permissions)) {
-    return false;
-  }
-
-  if (await isInstanceAdmin(c)) {
+  if (user?.role === "admin") {
     return true;
   }
-
-  const userId = c.get("userId");
-  if (!userId) return false;
 
   const [member] = await db
     .select({ role: schema.workspaceUserTable.role })
@@ -131,6 +142,34 @@ export async function hasWorkspacePermission(
   return Boolean(statements && satisfies(statements, permissions));
 }
 
+export async function assertUserWorkspacePermission(
+  userId: string,
+  workspaceId: string,
+  permissions: PermissionMap,
+): Promise<void> {
+  if (!(await hasUserWorkspacePermission(userId, workspaceId, permissions))) {
+    throw new HTTPException(403, { message: "Insufficient permissions" });
+  }
+}
+
+export async function hasWorkspacePermission(
+  c: Context,
+  permissions: PermissionMap,
+) {
+  const workspaceId = c.get("workspaceId");
+  if (!workspaceId) return false;
+
+  const apiKey = c.get("apiKey") as ApiKeyContext | undefined;
+  if (!hasApiKeyScope(apiKey, permissions)) {
+    return false;
+  }
+
+  const userId = c.get("userId");
+  if (!userId) return false;
+
+  return hasUserWorkspacePermission(userId, workspaceId, permissions);
+}
+
 export function requireWorkspacePermission(permissions: PermissionMap) {
   return async (c: Context, next: Next) => {
     if (!c.get("workspaceId")) {
@@ -139,10 +178,8 @@ export function requireWorkspacePermission(permissions: PermissionMap) {
       });
     }
 
-    const apiKey = c.get("apiKey") as
-      | { permissions?: Record<string, string[]> | null }
-      | undefined;
-    if (apiKey?.permissions && !satisfies(apiKey.permissions, permissions)) {
+    const apiKey = c.get("apiKey") as ApiKeyContext | undefined;
+    if (!hasApiKeyScope(apiKey, permissions)) {
       throw new HTTPException(403, { message: "Insufficient API key scope" });
     }
 

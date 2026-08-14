@@ -1,5 +1,6 @@
 import { client } from "@kaneo/libs";
 import type { InferRequestType } from "hono/client";
+import { normalizeTaskPriority } from "@/types/task";
 
 export type CreateTaskRequest = InferRequestType<
   (typeof client)["task"][":projectId"]["$post"]
@@ -28,7 +29,7 @@ async function createTask(
       status,
       startDate: startDate?.toISOString() || undefined,
       dueDate: dueDate?.toISOString() || undefined,
-      priority,
+      priority: normalizeTaskPriority(priority),
     },
     param: { projectId },
   });

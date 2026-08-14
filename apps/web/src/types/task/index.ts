@@ -1,3 +1,21 @@
+export const TASK_PRIORITIES = [
+  "no-priority",
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
+
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+export function normalizeTaskPriority(
+  priority: string | null | undefined,
+): TaskPriority {
+  return (TASK_PRIORITIES as readonly string[]).includes(priority ?? "")
+    ? (priority as TaskPriority)
+    : "no-priority";
+}
+
 type TaskLabel = {
   id: string;
   name: string;

@@ -1,5 +1,6 @@
 import { client } from "@kaneo/libs";
 import type Task from "@/types/task";
+import { normalizeTaskPriority } from "@/types/task";
 
 async function updateTask(taskId: string, task: Task) {
   const response = await client.task[":id"].$put({
@@ -9,7 +10,7 @@ async function updateTask(taskId: string, task: Task) {
       title: task.title,
       description: task.description || "",
       status: task.status,
-      priority: task.priority || "",
+      priority: normalizeTaskPriority(task.priority),
       startDate: task.startDate?.toString(),
       dueDate: task.dueDate?.toString(),
       position: task.position ?? 0,

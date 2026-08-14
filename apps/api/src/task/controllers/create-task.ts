@@ -3,11 +3,13 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import { assertValidTaskStatus } from "../validate-task-fields";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 async function createTask({
   projectId,
+  workspaceId,
   currentUserId,
   userId,
   title,
@@ -18,6 +20,7 @@ async function createTask({
   priority,
 }: {
   projectId: string;
+  workspaceId: string;
   currentUserId: string;
   userId?: string;
   title: string;
@@ -59,6 +62,7 @@ async function createTask({
   const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
 
   const createdTask = await db.transaction(async (tx) => {
+    await assertTaskAssigneeInWorkspace(tx, userId, workspaceId);
     const taskNumber = await claimTaskNumber(projectId, tx);
 
     const [task] = await tx

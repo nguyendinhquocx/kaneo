@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 
@@ -8,22 +8,31 @@ export async function validateWorkspaceAccess(
   apiKeyId?: string,
 ): Promise<void> {
   if (apiKeyId) {
-    const apiKey = await db
-      .select()
+    // `verifyApiKey()` already checked the hash, enabled flag, expiry and
+    // reference/user binding. Re-check the immutable owner here so a key
+    // cannot be swapped between authentication and a workspace lookup.
+    const [apiKey] = await db
+      .select({
+        referenceId: schema.apikeyTable.referenceId,
+        userId: schema.apikeyTable.userId,
+        enabled: schema.apikeyTable.enabled,
+        expiresAt: schema.apikeyTable.expiresAt,
+      })
       .from(schema.apikeyTable)
       .where(
         and(
           eq(schema.apikeyTable.id, apiKeyId),
-          or(
-            eq(schema.apikeyTable.referenceId, userId),
-            eq(schema.apikeyTable.userId, userId),
-          ),
+          eq(schema.apikeyTable.referenceId, userId),
           eq(schema.apikeyTable.enabled, true),
         ),
       )
       .limit(1);
 
-    if (apiKey.length === 0) {
+    if (
+      !apiKey ||
+      (apiKey.userId !== null && apiKey.userId !== userId) ||
+      (apiKey.expiresAt !== null && apiKey.expiresAt <= new Date())
+    ) {
       throw new HTTPException(403, {
         message: "Invalid API key for this workspace",
       });

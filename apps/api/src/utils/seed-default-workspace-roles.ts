@@ -1,5 +1,9 @@
-import { DEFAULT_ROLE_NAMES, defaultRolePayloads } from "@kaneo/permissions";
-import { and, inArray, sql } from "drizzle-orm";
+import {
+  DEFAULT_ROLE_NAMES,
+  type DefaultRoleName,
+  defaultRolePayloads,
+} from "@kaneo/permissions";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "../database";
 
 /**
@@ -16,6 +20,57 @@ import db, { schema } from "../database";
  *
  * Idempotent: only inserts rows that aren't already present.
  */
+function permissionMapsEqual(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
+  const normalize = (value: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(value)
+        .filter(([, actions]) => Array.isArray(actions))
+        .map(
+          ([resource, actions]) =>
+            [
+              resource,
+              [...(actions as unknown[])]
+                .filter(
+                  (action): action is string => typeof action === "string",
+                )
+                .sort(),
+            ] as [string, string[]],
+        )
+        .sort(([leftResource], [rightResource]) =>
+          (leftResource ?? "").localeCompare(rightResource ?? ""),
+        ),
+    );
+
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+}
+
+function isLegacyDefaultRolePayload(
+  role: string,
+  rawPermission: string,
+): boolean {
+  if (role !== "admin") return false;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawPermission);
+  } catch {
+    return false;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return false;
+  }
+
+  const permission = parsed as Record<string, unknown>;
+  if (Object.hasOwn(permission, "execution")) return false;
+
+  const { execution: _execution, ...currentWithoutExecution } =
+    defaultRolePayloads.admin;
+  return permissionMapsEqual(permission, currentWithoutExecution);
+}
+
 export async function seedDefaultWorkspaceRoles() {
   try {
     const tableExists = await db.execute(sql`
@@ -48,8 +103,10 @@ export async function seedDefaultWorkspaceRoles() {
 
     const existingRows = await db
       .select({
+        id: schema.workspaceRoleTable.id,
         workspaceId: schema.workspaceRoleTable.workspaceId,
         role: schema.workspaceRoleTable.role,
+        permission: schema.workspaceRoleTable.permission,
       })
       .from(schema.workspaceRoleTable)
       .where(
@@ -67,6 +124,30 @@ export async function seedDefaultWorkspaceRoles() {
     );
 
     const now = new Date();
+    let updatedLegacyRows = 0;
+    for (const row of existingRows) {
+      if (
+        isLegacyDefaultRolePayload(row.role, row.permission) &&
+        row.role in defaultRolePayloads
+      ) {
+        await db
+          .update(schema.workspaceRoleTable)
+          .set({
+            permission: JSON.stringify(
+              defaultRolePayloads[row.role as DefaultRoleName],
+            ),
+            updatedAt: now,
+          })
+          .where(eq(schema.workspaceRoleTable.id, row.id));
+        updatedLegacyRows += 1;
+      }
+    }
+
+    if (updatedLegacyRows > 0) {
+      console.log(
+        `✅ Backfilled execution:review for ${updatedLegacyRows} unchanged admin workspace role row(s).`,
+      );
+    }
     const rows: Array<typeof schema.workspaceRoleTable.$inferInsert> = [];
     for (const workspaceId of workspaceIds) {
       for (const name of DEFAULT_ROLE_NAMES) {

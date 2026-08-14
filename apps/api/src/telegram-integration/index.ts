@@ -119,7 +119,7 @@ telegramIntegration
         events: body.events,
       });
 
-      const validation = validateTelegramConfig(config);
+      const validation = await validateTelegramConfig(config);
       if (!validation.valid) {
         throw new HTTPException(400, {
           message: validation.errors?.join(", ") ?? "Invalid config",
@@ -225,7 +225,7 @@ telegramIntegration
         return c.json(toResponse(existing));
       }
 
-      const validation = validateTelegramConfig(nextConfig);
+      const validation = await validateTelegramConfig(nextConfig);
       if (!validation.valid) {
         throw new HTTPException(400, {
           message: validation.errors?.join(", ") ?? "Invalid config",

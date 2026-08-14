@@ -1230,6 +1230,12 @@
 						"label": "Update"
 					}
 				},
+				"execution": {
+					"review": {
+						"description": "Can approve or reject worker evidence and execution runs",
+						"label": "Review agent runs"
+					}
+				},
 				"workspace": {
 					"delete": {
 						"description": "Can delete workspace",

@@ -27,6 +27,7 @@ describe("@kaneo/permissions statement surface", () => {
       "delete",
       "assign",
     ]);
+    expect(statement.execution).toEqual(["review"]);
     expect(statement.label).toEqual(["create", "read", "update", "delete"]);
     expect(statement.workspace).toEqual([
       "read",
@@ -51,6 +52,7 @@ describe("built-in role privileges", () => {
   it("viewer can read but cannot create or modify", () => {
     expect(viewer.statements.project).toEqual(["read"]);
     expect(viewer.statements.task).toEqual(["read"]);
+    expect(viewer.statements.execution).toBeUndefined();
     expect(viewer.statements.label).toEqual(["read"]);
     expect(viewer.statements.workspace).toEqual(["read"]);
   });
@@ -58,6 +60,7 @@ describe("built-in role privileges", () => {
   it("member can create/read/update tasks but not delete or manage settings", () => {
     expect(member.statements.task).toContain("create");
     expect(member.statements.task).toContain("update");
+    expect(member.statements.execution).toBeUndefined();
     expect(member.statements.task).not.toContain("delete");
     expect(member.statements.project).toContain("create");
     expect(member.statements.project).not.toContain("delete");
@@ -67,6 +70,7 @@ describe("built-in role privileges", () => {
   it("admin can delete tasks and manage workspace settings but cannot delete the workspace", () => {
     expect(admin.statements.task).toContain("delete");
     expect(admin.statements.task).toContain("assign");
+    expect(admin.statements.execution).toEqual(["review"]);
     expect(admin.statements.project).toContain("delete");
     expect(admin.statements.project).toContain("share");
     expect(admin.statements.workspace).toContain("manage_settings");
@@ -77,6 +81,7 @@ describe("built-in role privileges", () => {
     expect(owner.statements.task).toEqual(
       expect.arrayContaining(["create", "read", "update", "delete", "assign"]),
     );
+    expect(owner.statements.execution).toEqual(["review"]);
     expect(owner.statements.project).toEqual(
       expect.arrayContaining(["create", "read", "update", "delete", "share"]),
     );

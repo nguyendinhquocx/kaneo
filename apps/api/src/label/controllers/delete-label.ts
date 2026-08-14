@@ -67,6 +67,16 @@ async function deleteLabel(id: string, userId: string) {
     return deletedLabel;
   }
 
+  // Workspace-level labels must carry a workspace owner. A null value here
+  // would make the cascade ambiguous, so fail closed instead of broadening the
+  // delete predicate.
+  if (!label.workspaceId) {
+    throw new HTTPException(409, {
+      message: "Workspace label is missing its workspace binding",
+    });
+  }
+  const workspaceId = label.workspaceId;
+
   // Workspace-level label: delete the label and cascade to all task-level copies
   const [deletedLabel] = await db
     .delete(labelTable)
@@ -93,7 +103,7 @@ async function deleteLabel(id: string, userId: string) {
     .innerJoin(projectTable, eq(taskTable.projectId, projectTable.id))
     .where(
       and(
-        eq(labelTable.workspaceId, label.workspaceId),
+        eq(labelTable.workspaceId, workspaceId),
         eq(labelTable.name, label.name),
         isNotNull(labelTable.taskId),
       ),
@@ -104,7 +114,7 @@ async function deleteLabel(id: string, userId: string) {
     .delete(labelTable)
     .where(
       and(
-        eq(labelTable.workspaceId, label.workspaceId),
+        eq(labelTable.workspaceId, workspaceId),
         eq(labelTable.name, label.name),
         isNotNull(labelTable.taskId),
       ),

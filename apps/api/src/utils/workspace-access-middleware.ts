@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Context, Next } from "hono";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
@@ -20,7 +20,8 @@ type WorkspaceIdSource =
         | "column"
         | "workflowRule";
       idKey: string;
-    };
+    }
+  | { type: "lookupTasks"; idsKey: string };
 
 type WorkspaceAccessMiddlewareConfig = {
   sources: WorkspaceIdSource[];
@@ -53,18 +54,28 @@ export function workspaceAccessMiddleware(
         workspaceId = c.req.query(source.key) || null;
       } else if (source.type === "body") {
         const body = await readJsonObjectBody(c);
-        workspaceId =
-          typeof body[source.key] === "string" ? body[source.key] : null;
+        const value = body[source.key];
+        workspaceId = typeof value === "string" ? value : null;
       } else if (source.type === "param") {
         workspaceId = c.req.param(source.key) || null;
       } else if (source.type === "lookup") {
         const body = await readJsonObjectBody(c);
-        const idFromBody =
-          typeof body[source.idKey] === "string" ? body[source.idKey] : null;
+        const bodyValue = body[source.idKey];
+        const idFromBody = typeof bodyValue === "string" ? bodyValue : null;
         const id =
           c.req.param(source.idKey) || c.req.query(source.idKey) || idFromBody;
-        if (id) {
+        if (typeof id === "string" && id) {
           workspaceId = await lookupWorkspaceId(source.resource, id);
+        }
+      } else if (source.type === "lookupTasks") {
+        const body = await readJsonObjectBody(c);
+        const taskIds = body[source.idsKey];
+        if (
+          Array.isArray(taskIds) &&
+          taskIds.length > 0 &&
+          taskIds.every((id): id is string => typeof id === "string" && !!id)
+        ) {
+          workspaceId = await lookupWorkspaceIdForTasks(taskIds);
         }
       }
 
@@ -88,6 +99,25 @@ export function workspaceAccessMiddleware(
 
     return next();
   };
+}
+
+async function lookupWorkspaceIdForTasks(
+  taskIds: string[],
+): Promise<string | null> {
+  const uniqueTaskIds = [...new Set(taskIds)];
+  const rows = await db
+    .select({ workspaceId: schema.projectTable.workspaceId })
+    .from(schema.taskTable)
+    .innerJoin(
+      schema.projectTable,
+      eq(schema.taskTable.projectId, schema.projectTable.id),
+    )
+    .where(inArray(schema.taskTable.id, uniqueTaskIds));
+
+  const workspaceIds = [...new Set(rows.map((row) => row.workspaceId))];
+  return rows.length === uniqueTaskIds.length && workspaceIds.length === 1
+    ? (workspaceIds[0] ?? null)
+    : null;
 }
 
 async function lookupWorkspaceId(
@@ -267,6 +297,11 @@ export const workspaceAccess = {
         { type: "lookup", resource: "task", idKey },
         { type: "query", key: "workspaceId" },
       ],
+    }),
+
+  fromTaskIds: (idsKey = "taskIds") =>
+    workspaceAccessMiddleware({
+      sources: [{ type: "lookupTasks", idsKey }],
     }),
 
   fromLabel: (idKey = "id") =>

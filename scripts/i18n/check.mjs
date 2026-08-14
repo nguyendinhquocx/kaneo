@@ -34,8 +34,7 @@ for (const locale of filteredLocales) {
   const extra = new Set(
     [...localeKeys].filter(
       (key) =>
-        !referenceKeys.has(key) &&
-        !isAllowedPluralVariant(key, referenceKeys),
+        !referenceKeys.has(key) && !isAllowedPluralVariant(key, referenceKeys),
     ),
   );
 
@@ -83,7 +82,6 @@ function isAllowedPluralVariant(key, referenceKeys) {
   const baseKey = match[1];
   return [...referenceKeys].some(
     (referenceKey) =>
-      referenceKey === baseKey ||
-      referenceKey.startsWith(`${baseKey}_`),
+      referenceKey === baseKey || referenceKey.startsWith(`${baseKey}_`),
   );
 }

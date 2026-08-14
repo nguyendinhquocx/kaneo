@@ -41,6 +41,7 @@ import { VALID_PRIORITIES } from "./validate-task-fields";
 const task = new Hono<{
   Variables: {
     userId: string;
+    workspaceId: string;
   };
 }>()
   .get(
@@ -132,6 +133,17 @@ const task = new Hono<{
         value: v.optional(v.nullable(v.string())),
       }),
     ),
+    workspaceAccess.fromTaskIds(),
+    async (c, next) => {
+      const { operation } = c.req.valid("json");
+      const requiredPermission =
+        operation === "delete"
+          ? { task: ["delete"] }
+          : operation === "updateAssignee"
+            ? { task: ["assign"] }
+            : { task: ["update"] };
+      return requireWorkspacePermission(requiredPermission)(c, next);
+    },
     async (c) => {
       const { taskIds, operation, value } = c.req.valid("json");
       const userId = c.get("userId");
@@ -203,6 +215,7 @@ const task = new Hono<{
 
       const task = await createTask({
         projectId,
+        workspaceId: c.get("workspaceId"),
         currentUserId: c.get("userId"),
         userId: userId,
         title,
@@ -320,7 +333,12 @@ const task = new Hono<{
       }),
     ),
     workspaceAccess.fromTask(),
-    requireWorkspacePermission({ task: ["update"] }),
+    async (c, next) => {
+      const body = c.req.valid("json");
+      const requiredPermission =
+        body.userId !== undefined ? { task: ["assign"] } : { task: ["update"] };
+      return requireWorkspacePermission(requiredPermission)(c, next);
+    },
     async (c) => {
       const { id } = c.req.valid("param");
       const {
@@ -344,6 +362,7 @@ const task = new Hono<{
         startDate ? new Date(startDate) : undefined,
         dueDate ? new Date(dueDate) : undefined,
         projectId,
+        c.get("workspaceId"),
         description,
         priority,
         position,
@@ -803,6 +822,12 @@ const task = new Hono<{
             .returning({
               id: assetTable.id,
             });
+
+      if (!asset) {
+        throw new HTTPException(500, {
+          message: "Failed to persist task asset",
+        });
+      }
 
       const apiBaseUrl = normalizeApiServerUrl(
         process.env.KANEO_PUBLIC_API_URL ||

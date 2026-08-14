@@ -1206,6 +1206,12 @@
 						"description": "Hapus label dari ruang kerja ini secara permanen."
 					}
 				},
+				"execution": {
+					"review": {
+						"description": "Can approve or reject worker evidence and execution runs",
+						"label": "Review agent runs"
+					}
+				},
 				"workspace": {
 					"read": {
 						"label": "Akses ruang kerja",

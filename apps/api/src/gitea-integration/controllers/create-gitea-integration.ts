@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import db from "../../database";
 import { integrationTable, projectTable } from "../../database/schema";
 import {
@@ -74,7 +75,10 @@ async function createGiteaIntegration({
     await client.getRepo(repositoryOwner, repositoryName);
   } catch (error) {
     if (error instanceof GiteaApiError) {
-      throw new HTTPException(error.status || 400, { message: error.message });
+      const status = (
+        error.status >= 400 && error.status <= 599 ? error.status : 400
+      ) as ContentfulStatusCode;
+      throw new HTTPException(status, { message: error.message });
     }
     throw error;
   }

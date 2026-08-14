@@ -2690,6 +2690,31 @@
 										"assign"
 									]
 								},
+								"execution": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"review": {
+											"type": "object",
+											"additionalProperties": false,
+											"properties": {
+												"label": {
+													"type": "string"
+												},
+												"description": {
+													"type": "string"
+												}
+											},
+											"required": [
+												"label",
+												"description"
+											]
+										}
+									},
+									"required": [
+										"review"
+									]
+								},
 								"label": {
 									"type": "object",
 									"additionalProperties": false,
@@ -2846,6 +2871,7 @@
 							"required": [
 								"project",
 								"task",
+								"execution",
 								"label",
 								"workspace"
 							]
