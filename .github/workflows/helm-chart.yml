@@ -5,18 +5,16 @@ on:
     paths:
       - "charts/kaneo/**"
       - ".github/workflows/helm-chart.yml"
-      - ".github/workflows/helm-validate.yml"
-  workflow_call:
-    inputs:
-      version:
-        description: "Chart version to publish (blank validates only)"
-        required: false
-        type: string
-        default: ""
+  push:
+    tags:
+      - "kaneo-*"
+    paths:
+      - "charts/kaneo/**"
+      - ".github/workflows/helm-chart.yml"
   workflow_dispatch:
     inputs:
       version:
-        description: "Chart version to publish (e.g. 1.0.0)"
+        description: "Version to tag the images (e.g., 1.0.0)"
         required: true
         type: string
 
@@ -26,6 +24,7 @@ env:
 
 jobs:
   validate:
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     strategy:
@@ -79,7 +78,7 @@ jobs:
         run: helm template kaneo "$CHART_PATH" ${{ matrix.args }}
 
   publish:
-    if: inputs.version != ''
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     needs: validate
     permissions:
@@ -94,23 +93,28 @@ jobs:
 
       - name: Set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
-
-      - name: Resolve chart version
+    
+      - name: Extract Version from Tag
         env:
-          INPUT_VERSION: ${{ inputs.version }}
-        run: echo "CHART_VERSION=$INPUT_VERSION" >> "$GITHUB_ENV"
-
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [[ $GITHUB_REF == refs/tags/kaneo-* ]]; then
+            echo "CHART_VERSION=${GITHUB_REF#refs/tags/kaneo-}" >> $GITHUB_ENV
+          else
+            echo "CHART_VERSION=$INPUT_VERSION" >> $GITHUB_ENV
+          fi
+    
       - name: Package chart
         run: |
           mkdir -p dist
           helm package "$CHART_PATH" --version "$CHART_VERSION" --app-version "$CHART_VERSION" --destination dist
-
+    
       - name: Log in to GHCR
         env:
           GH_ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GH_TOKEN" | helm registry login "$REGISTRY" --username "$GH_ACTOR" --password-stdin
-
+    
       - name: Publish chart
         run: |
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"

@@ -4,17 +4,32 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to tag the images (e.g., 1.0.0)"
+        description: 'Version to tag the images (e.g., 1.0.0)'
         required: true
         type: string
       latest:
-        description: "Also tag as latest"
+        description: 'Also tag as latest'
         required: false
         type: boolean
         default: false
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-  build:
+  build-and-push-image:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: ./Dockerfile.kaneo
+            image: ghcr.io/${{ github.repository_owner }}/kaneo
+          - dockerfile: ./apps/web/Dockerfile
+            image: ghcr.io/${{ github.repository_owner }}/web
+          - dockerfile: ./apps/api/Dockerfile
+            image: ghcr.io/${{ github.repository_owner }}/api
     permissions:
       contents: read
       packages: write
