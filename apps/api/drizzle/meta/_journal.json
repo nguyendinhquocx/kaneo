@@ -281,6 +281,13 @@
 			"when": 1786614829797,
 			"tag": "0039_execution_flags",
 			"breakpoints": true
+		},
+		{
+			"idx": 40,
+			"version": "7",
+			"when": 1787620000000,
+			"tag": "0040_repair_github_integration_runtime",
+			"breakpoints": true
 		}
 	]
 }
