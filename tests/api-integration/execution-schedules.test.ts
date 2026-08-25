@@ -571,6 +571,170 @@ describe("API integration: execution schedules (T6)", () => {
     expect(schedule?.enabled).toBe(false);
   });
 
+  it("reports provider quota as a released blocked run and resumes its branch", async () => {
+    const fixture = await createScheduleFixture();
+    const claim = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/claim`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "t7-quota-run",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          scope: ["apps/api/src/execution/service.ts"],
+        }),
+      },
+    );
+    const claimed = (await claim.json()) as {
+      id: string;
+      leaseEpoch: number;
+      leaseToken: string;
+      branchName: string;
+    };
+    const report = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${claimed.id}/report`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "t7-quota-report",
+          "X-Kaneo-Lease-Token": claimed.leaseToken,
+        },
+        body: JSON.stringify({
+          leaseEpoch: claimed.leaseEpoch,
+          state: "blocked_quota",
+          baseSha: "1111111111111111111111111111111111111111",
+          commitSha: "2222222222222222222222222222222222222222",
+          evidence: {
+            failureKind: "provider_quota",
+            modelFailed: "openai-codex/gpt-5.6-luna",
+            retryAfter: "2026-08-25T04:00:00.000Z",
+          },
+          blocker: "provider quota exhausted",
+          nextAction: "Parent chooses a model and resume time",
+        }),
+      },
+    );
+    expect(report.status).toBe(200);
+    expect(await report.json()).toMatchObject({
+      state: "blocked_quota",
+      leaseActive: false,
+      branchName: claimed.branchName,
+      commitSha: "2222222222222222222222222222222222222222",
+    });
+
+    const resume = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${claimed.id}/resume`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "t7-quota-resume",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          preferredModel: "zai/glm-5.3",
+        }),
+      },
+    );
+    expect(resume.status).toBe(201);
+    const resumed = (await resume.json()) as {
+      id: string;
+      branchName: string;
+      baseSha: string;
+      commitSha: string;
+      evidence: Record<string, unknown>;
+    };
+    expect(resumed.id).not.toBe(claimed.id);
+    expect(resumed.branchName).toBe(claimed.branchName);
+    expect(resumed.baseSha).toBe("1111111111111111111111111111111111111111");
+    expect(resumed.commitSha).toBe("2222222222222222222222222222222222222222");
+    expect(resumed.evidence).toMatchObject({
+      resume: { fromRunId: claimed.id, branchName: claimed.branchName },
+    });
+    const replay = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${claimed.id}/resume`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "t7-quota-resume",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          preferredModel: "zai/glm-5.3",
+        }),
+      },
+    );
+    expect(replay.status).toBe(200);
+    expect((await replay.json()).id).toBe(resumed.id);
+    expect(await db.select().from(schema.taskRunTable)).toHaveLength(2);
+  });
+
+  it("reclaims stale leases with durable watchdog evidence", async () => {
+    const fixture = await createScheduleFixture();
+    const created = await createSchedule(fixture.app, fixture.task.id);
+    const scheduleId = ((await created.json()) as { id: string }).id;
+    const dispatch = await fixture.app.request(
+      `/api/execution/schedules/${scheduleId}/dispatch`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: ["apps/api/src/execution/service.ts"],
+          agentPrincipalId: fixture.principal.id,
+        }),
+      },
+    );
+    const dispatchBody = (await dispatch.json()) as { runId?: string };
+    expect(dispatchBody.runId).toEqual(expect.any(String));
+    await db
+      .update(schema.taskRunTable)
+      .set({
+        lastHeartbeatAt: new Date(Date.now() - 3_600_000),
+        leaseExpiresAt: new Date(Date.now() - 3_599_000),
+      })
+      .where(eq(schema.taskRunTable.id, dispatchBody.runId ?? ""));
+
+    const watchdog = await fixture.app.request(
+      "/api/execution/watchdog/reclaim",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ staleAfterSeconds: 60 }),
+      },
+    );
+    expect(watchdog.status).toBe(200);
+    expect(await watchdog.json()).toHaveLength(1);
+    const [run] = await db
+      .select()
+      .from(schema.taskRunTable)
+      .where(eq(schema.taskRunTable.id, dispatchBody.runId ?? ""));
+    expect(run).toMatchObject({
+      state: "orphaned",
+      leaseActive: false,
+      blocker: "watchdog_stale_lease",
+    });
+    const evidence = await db
+      .select()
+      .from(schema.taskRunEvidenceTable)
+      .where(eq(schema.taskRunEvidenceTable.runId, dispatchBody.runId ?? ""));
+    expect(evidence.some((item) => item.kind === "watchdog_stale_lease")).toBe(
+      true,
+    );
+    const replay = await fixture.app.request(
+      "/api/execution/watchdog/reclaim",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ staleAfterSeconds: 60 }),
+      },
+    );
+    expect(await replay.json()).toEqual([]);
+  });
+
   it("does not let a manual dispatch bypass a future fire time", async () => {
     const fixture = await createScheduleFixture();
     const created = await createSchedule(fixture.app, fixture.task.id, {

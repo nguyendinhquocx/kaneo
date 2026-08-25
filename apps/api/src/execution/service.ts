@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, asc, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lte, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import {
@@ -1201,6 +1201,10 @@ type ClaimTaskRunInput = {
   scheduleId?: string;
   concurrencyKey?: string;
   modelPolicy?: ScheduleRunModelPolicy;
+  resumeFromRunId?: string;
+  resumeBranchName?: string;
+  resumeBaseSha?: string | null;
+  resumeCommitSha?: string | null;
 };
 
 export async function claimTaskRun(
@@ -1218,6 +1222,10 @@ export async function claimTaskRun(
     scheduleId,
     concurrencyKey,
     modelPolicy,
+    resumeFromRunId,
+    resumeBranchName,
+    resumeBaseSha,
+    resumeCommitSha,
   } = input;
   if (!requestKey || requestKey.length > 200) {
     throw new HTTPException(400, {
@@ -1233,6 +1241,10 @@ export async function claimTaskRun(
     scheduleId: scheduleId ?? null,
     modelPolicy: modelPolicy ?? null,
     expectedHostId: expectedHostId ?? null,
+    resumeFromRunId: resumeFromRunId ?? null,
+    resumeBranchName: resumeBranchName ?? null,
+    resumeBaseSha: resumeBaseSha ?? null,
+    resumeCommitSha: resumeCommitSha ?? null,
   });
 
   const execute = async (tx: ExecutionTransaction) => {
@@ -1500,7 +1512,9 @@ export async function claimTaskRun(
     }
 
     const runId = createId();
-    const branchName = `${principal.runtimeId}/${taskId}-${runId}-${taskSlug(task.title)}`;
+    const branchName = resumeBranchName
+      ? validateBranchName(resumeBranchName, "resumeBranchName")
+      : `${principal.runtimeId}/${taskId}-${runId}-${taskSlug(task.title)}`;
     const leaseToken = createLeaseToken();
     const [run] = await tx
       .insert(taskRunTable)
@@ -1520,23 +1534,37 @@ export async function claimTaskRun(
         hostId: principal.hostId,
         branchName,
         scope: normalizedScope,
+        baseSha: resumeBaseSha ?? null,
+        commitSha: resumeCommitSha ?? null,
         requestKey,
         requestHash,
         leaseEpoch: nextLeaseEpoch,
         leaseTokenHash: leaseToken.hash,
-        evidence: scheduleDispatch
-          ? {
-              schedule: {
-                scheduleId: scheduleId ?? null,
-                preferredModel: modelPolicy?.preferredModel ?? null,
-                fallbackMode: modelPolicy?.fallbackMode ?? "manual",
-                fallbackModels: modelPolicy?.fallbackModels ?? [],
-                maxRuntimeSeconds: modelPolicy?.maxRuntimeSeconds ?? null,
-                concurrencyKey: modelPolicy?.concurrencyKey ?? null,
-                retryPolicy: modelPolicy?.retryPolicy ?? {},
-              },
-            }
-          : {},
+        evidence: {
+          ...(resumeFromRunId
+            ? {
+                resume: {
+                  fromRunId: resumeFromRunId,
+                  branchName,
+                  baseSha: resumeBaseSha ?? null,
+                  commitSha: resumeCommitSha ?? null,
+                },
+              }
+            : {}),
+          ...(scheduleDispatch
+            ? {
+                schedule: {
+                  scheduleId: scheduleId ?? null,
+                  preferredModel: modelPolicy?.preferredModel ?? null,
+                  fallbackMode: modelPolicy?.fallbackMode ?? "manual",
+                  fallbackModels: modelPolicy?.fallbackModels ?? [],
+                  maxRuntimeSeconds: modelPolicy?.maxRuntimeSeconds ?? null,
+                  concurrencyKey: modelPolicy?.concurrencyKey ?? null,
+                  retryPolicy: modelPolicy?.retryPolicy ?? {},
+                },
+              }
+            : {}),
+        },
         leaseActive: true,
         leaseExpiresAt: getLeaseExpiry(),
         lastHeartbeatAt: new Date(),
@@ -1559,6 +1587,120 @@ export async function claimTaskRun(
       result.run.state,
     );
   }
+  return result;
+}
+
+export async function resumeTaskRun(input: {
+  taskId: string;
+  sourceRunId: string;
+  userId: string;
+  agentPrincipalId: string;
+  preferredModel?: string | null;
+  requestKey: string;
+}) {
+  const requestKey = requireIdempotencyKey(input.requestKey);
+  const [source] = await db
+    .select()
+    .from(taskRunTable)
+    .where(
+      and(
+        eq(taskRunTable.id, input.sourceRunId),
+        eq(taskRunTable.taskId, input.taskId),
+      ),
+    )
+    .limit(1);
+  if (!source) {
+    throw new HTTPException(404, { message: "Source task run not found" });
+  }
+  const resumableStates = new Set([
+    "blocked",
+    "blocked_quota",
+    "blocked_input",
+    "blocked_clarification",
+    "blocked_branch_drift",
+    "failed",
+    "orphaned",
+  ]);
+  if (!resumableStates.has(source.state)) {
+    throw new HTTPException(409, {
+      message: `Task run state ${source.state} is not resumable`,
+    });
+  }
+  if (source.leaseActive) {
+    throw new HTTPException(409, {
+      message: "Cannot resume a run while its lease is active",
+    });
+  }
+  if (
+    !source.agentPrincipalId ||
+    source.agentPrincipalId !== input.agentPrincipalId
+  ) {
+    throw new HTTPException(403, {
+      message: "Resume must keep the original worker principal and branch",
+    });
+  }
+  const branchName = validateBranchName(source.branchName, "resumeBranchName");
+  const preferredModel =
+    input.preferredModel === undefined || input.preferredModel === null
+      ? input.preferredModel === null
+        ? null
+        : (() => {
+            const scheduleEvidence = source.evidence?.schedule;
+            if (
+              scheduleEvidence &&
+              typeof scheduleEvidence === "object" &&
+              !Array.isArray(scheduleEvidence) &&
+              typeof (scheduleEvidence as Record<string, unknown>)
+                .preferredModel === "string"
+            ) {
+              return validateModelId(
+                (scheduleEvidence as Record<string, unknown>).preferredModel,
+                "preferredModel",
+              );
+            }
+            return null;
+          })()
+      : validateModelId(input.preferredModel, "preferredModel");
+  const scheduleEvidence = source.evidence?.schedule;
+  const maxRuntimeSeconds =
+    scheduleEvidence &&
+    typeof scheduleEvidence === "object" &&
+    !Array.isArray(scheduleEvidence) &&
+    Number.isInteger(
+      (scheduleEvidence as Record<string, unknown>).maxRuntimeSeconds,
+    )
+      ? ((scheduleEvidence as Record<string, unknown>)
+          .maxRuntimeSeconds as number)
+      : 3600;
+  const modelPolicy: ScheduleRunModelPolicy = {
+    preferredModel,
+    fallbackMode: "manual",
+    fallbackModels: [],
+    maxRuntimeSeconds,
+    concurrencyKey: `resume:${input.taskId}`,
+    retryPolicy: {},
+  };
+  const context = await getTaskContext(input.taskId);
+  assertManifestModelPolicy(context.manifest.policy ?? {}, modelPolicy);
+  const result = await claimTaskRun({
+    taskId: input.taskId,
+    userId: input.userId,
+    agentPrincipalId: input.agentPrincipalId,
+    scope: source.scope,
+    requestKey,
+    expectedHostId: source.hostId,
+    modelPolicy,
+    resumeFromRunId: source.id,
+    resumeBranchName: branchName,
+    resumeBaseSha: source.baseSha,
+    resumeCommitSha: source.commitSha,
+  });
+  await publishTaskRunUpdated(
+    input.taskId,
+    result.run.id,
+    input.userId,
+    result.run.state,
+  );
   return result;
 }
 
@@ -1816,7 +1958,7 @@ export async function reportTaskRun({
         evidence: nextEvidence,
         blocker: blocker ?? null,
         nextAction: nextAction ?? null,
-        leaseActive: nextState !== "in_review",
+        leaseActive: nextState === "in_progress",
         lastHeartbeatAt: now,
         leaseExpiresAt: getLeaseExpiry(now),
         updatedAt: now,
@@ -1961,6 +2103,102 @@ export async function releaseTaskRun({
   });
   await publishTaskRunUpdated(taskId, result.id, userId, result.state);
   return result;
+}
+
+export async function reclaimStaleTaskRuns(input?: {
+  now?: Date;
+  staleAfterSeconds?: number;
+}) {
+  const now = input?.now ?? new Date();
+  const staleAfterSeconds = input?.staleAfterSeconds ?? 1_800;
+  if (
+    !Number.isInteger(staleAfterSeconds) ||
+    staleAfterSeconds < 60 ||
+    staleAfterSeconds > 86_400
+  ) {
+    throw new HTTPException(400, {
+      message: "staleAfterSeconds must be an integer between 60 and 86400",
+    });
+  }
+  const cutoff = new Date(now.getTime() - staleAfterSeconds * 1_000);
+  const reclaimed = await db.transaction(async (tx) => {
+    const candidates = await tx
+      .select({
+        id: taskRunTable.id,
+        taskId: taskRunTable.taskId,
+        agentPrincipalId: taskRunTable.agentPrincipalId,
+        leaseEpoch: taskRunTable.leaseEpoch,
+        lastHeartbeatAt: taskRunTable.lastHeartbeatAt,
+      })
+      .from(taskRunTable)
+      .where(
+        and(
+          eq(taskRunTable.state, "in_progress"),
+          eq(taskRunTable.leaseActive, true),
+          lte(taskRunTable.lastHeartbeatAt, cutoff),
+          lte(taskRunTable.leaseExpiresAt, now),
+        ),
+      )
+      .limit(100)
+      .for("update");
+    const results: Array<{
+      id: string;
+      taskId: string;
+      leaseEpoch: number;
+      lastHeartbeatAt: Date;
+    }> = [];
+    for (const candidate of candidates) {
+      const [updated] = await tx
+        .update(taskRunTable)
+        .set({
+          state: "orphaned",
+          leaseActive: false,
+          leaseExpiresAt: now,
+          blocker: "watchdog_stale_lease",
+          nextAction:
+            "Parent must inspect checkpoint/branch before resuming this run",
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(taskRunTable.id, candidate.id),
+            eq(taskRunTable.leaseEpoch, candidate.leaseEpoch),
+            eq(taskRunTable.leaseActive, true),
+            eq(taskRunTable.state, "in_progress"),
+          ),
+        )
+        .returning({
+          id: taskRunTable.id,
+          taskId: taskRunTable.taskId,
+          leaseEpoch: taskRunTable.leaseEpoch,
+          lastHeartbeatAt: taskRunTable.lastHeartbeatAt,
+        });
+      if (!updated) continue;
+      await tx.insert(taskRunEvidenceTable).values({
+        runId: updated.id,
+        agentPrincipalId: candidate.agentPrincipalId,
+        kind: "watchdog_stale_lease",
+        payload: {
+          staleAfterSeconds,
+          lastHeartbeatAt: candidate.lastHeartbeatAt.toISOString(),
+          reclaimedAt: now.toISOString(),
+          leaseEpoch: candidate.leaseEpoch,
+          blocker: "watchdog_stale_lease",
+        },
+      });
+      results.push(updated);
+    }
+    return results;
+  });
+  for (const run of reclaimed) {
+    await publishTaskRunUpdated(run.taskId, run.id, "watchdog", "orphaned");
+    await publishEvent("execution.watchdog.reclaimed", {
+      taskId: run.taskId,
+      runId: run.id,
+      leaseEpoch: run.leaseEpoch,
+    });
+  }
+  return reclaimed;
 }
 
 export async function reviewTaskRun({

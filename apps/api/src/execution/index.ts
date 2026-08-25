@@ -28,8 +28,10 @@ import {
   listAgentPrincipals,
   listTaskRunEvidence,
   listTaskRuns,
+  reclaimStaleTaskRuns,
   releaseTaskRun,
   reportTaskRun,
+  resumeTaskRun,
   reviewTaskRun,
   toTaskRunResponse,
   upsertExecutionManifest,
@@ -111,6 +113,47 @@ const execution = new Hono<{
       },
     }),
     async (c) => c.json(await listAgentPrincipals(c.get("userId"))),
+  )
+  .post(
+    "/watchdog/reclaim",
+    describeRoute({
+      operationId: "reclaimStaleExecutionRuns",
+      tags: ["Execution"],
+      description:
+        "Revoke expired worker leases and record durable watchdog evidence",
+      responses: {
+        200: {
+          description: "Stale runs reclaimed",
+          content: {
+            "application/json": {
+              schema: resolver(
+                v.array(
+                  v.object({
+                    id: v.string(),
+                    taskId: v.string(),
+                    leaseEpoch: v.number(),
+                    lastHeartbeatAt: v.date(),
+                  }),
+                ),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    validator("json", v.object({ staleAfterSeconds: v.optional(v.number()) })),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (apiKey && !apiKey.permissions?.execution?.includes("review")) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      return c.json(await reclaimStaleTaskRuns(c.req.valid("json")));
+    },
   )
   .get(
     "/project/:projectId/manifest",
@@ -481,6 +524,50 @@ const execution = new Hono<{
         requestKey,
       });
       return c.json(run);
+    },
+  )
+  .post(
+    "/task/:taskId/runs/:runId/resume",
+    describeRoute({
+      operationId: "resumeTaskRun",
+      tags: ["Execution"],
+      description:
+        "Create a new fenced run on the original task branch after a blocked/stale run",
+      responses: {
+        201: {
+          description: "Task run resumed",
+          content: {
+            "application/json": { schema: resolver(taskRunSchema) },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string(), runId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        agentPrincipalId: v.string(),
+        preferredModel: v.optional(v.nullable(v.string())),
+      }),
+    ),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ task: ["update"], execution: ["review"] }),
+    async (c) => {
+      const { taskId, runId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const result = await resumeTaskRun({
+        taskId,
+        sourceRunId: runId,
+        userId: c.get("userId"),
+        agentPrincipalId: body.agentPrincipalId,
+        preferredModel: body.preferredModel,
+        requestKey,
+      });
+      return c.json(
+        toTaskRunResponse(result.run, result.leaseToken),
+        result.leaseToken ? 201 : 200,
+      );
     },
   )
   .post(
