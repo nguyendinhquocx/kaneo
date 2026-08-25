@@ -122,7 +122,7 @@ const execution = new Hono<{
       operationId: "listPreapprovedFallbackCandidates",
       tags: ["Execution"],
       description:
-        "List provider-blocked runs eligible for a declared fallback",
+        "List provider-blocked runs and unspawned declared fallback runs",
       responses: { 200: { description: "Fallback candidates" } },
     }),
     validator("query", v.object({ host: v.optional(v.string()) })),

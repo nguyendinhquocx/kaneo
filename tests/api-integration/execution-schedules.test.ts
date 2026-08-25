@@ -922,6 +922,16 @@ describe("API integration: execution schedules (T6)", () => {
         fallbackIndex: 0,
       },
     });
+    const reconcileCandidates = await fixture.app.request(
+      "/api/execution/fallback/due?host=prodesk-home",
+    );
+    expect(await reconcileCandidates.json()).toMatchObject([
+      {
+        action: "spawn",
+        runId: fallbackBody.run.id,
+        currentModel: "zai/glm-5.3",
+      },
+    ]);
 
     const replay = await fixture.app.request(
       `/api/execution/task/${fixture.task.id}/runs/${claimed.id}/fallback`,

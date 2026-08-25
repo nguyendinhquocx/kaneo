@@ -1766,6 +1766,7 @@ export async function listPreapprovedFallbackCandidates(host: string) {
       evidence: taskRunTable.evidence,
       state: taskRunTable.state,
       leaseActive: taskRunTable.leaseActive,
+      leaseEpoch: taskRunTable.leaseEpoch,
       preferredModel: executionScheduleTable.preferredModel,
       fallbackModels: executionScheduleTable.fallbackModels,
       maxRuntimeSeconds: executionScheduleTable.maxRuntimeSeconds,
@@ -1778,48 +1779,47 @@ export async function listPreapprovedFallbackCandidates(host: string) {
     )
     .where(
       and(
-        eq(taskRunTable.state, "blocked_quota"),
-        eq(taskRunTable.leaseActive, false),
         eq(executionScheduleTable.host, host),
         eq(executionScheduleTable.fallbackMode, "preapproved"),
       ),
     )
     .orderBy(desc(taskRunTable.leaseEpoch))
-    .limit(100);
+    .limit(200);
 
-  const activeTaskRows = rows.length
-    ? await db
-        .select({ taskId: taskRunTable.taskId })
-        .from(taskRunTable)
-        .where(
-          and(
-            inArray(
-              taskRunTable.taskId,
-              rows.map((row) => row.taskId),
-            ),
-            eq(taskRunTable.leaseActive, true),
-          ),
-        )
-    : [];
-  const activeTaskIds = new Set(activeTaskRows.map((row) => row.taskId));
   const latestByTask = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
-    if (!activeTaskIds.has(row.taskId) && !latestByTask.has(row.taskId)) {
-      latestByTask.set(row.taskId, row);
-    }
+    if (!latestByTask.has(row.taskId)) latestByTask.set(row.taskId, row);
   }
 
   return [...latestByTask.values()]
     .map((row) => {
       const evidence = asEvidenceRecord(row.evidence);
-      const failureKind = readWorkerFailureKind(evidence);
+      const fallbackEvidence = asEvidenceRecord(evidence.fallback);
+      const fallbackModel =
+        typeof fallbackEvidence.model === "string"
+          ? fallbackEvidence.model
+          : null;
+      const action =
+        row.state === "in_progress" && row.leaseActive && fallbackModel
+          ? "spawn"
+          : row.state === "blocked_quota" && !row.leaseActive
+            ? "advance"
+            : null;
+      const fallbackFailureKind =
+        typeof fallbackEvidence.failureKind === "string"
+          ? fallbackEvidence.failureKind
+          : null;
+      const failureKind =
+        readWorkerFailureKind(evidence) ?? fallbackFailureKind;
       const fallbackIndex = readFallbackIndex(evidence);
-      const currentModel = readCurrentFallbackModel(
-        evidence,
-        row.preferredModel,
-      );
-      const nextModel = row.fallbackModels[fallbackIndex + 1] ?? null;
+      const currentModel =
+        fallbackModel ?? readCurrentFallbackModel(evidence, row.preferredModel);
+      const nextModel =
+        action === "advance"
+          ? (row.fallbackModels[fallbackIndex + 1] ?? null)
+          : null;
       return {
+        action,
         runId: row.runId,
         taskId: row.taskId,
         scheduleId: row.scheduleId,
@@ -1828,6 +1828,7 @@ export async function listPreapprovedFallbackCandidates(host: string) {
         scope: row.scope,
         state: row.state,
         leaseActive: row.leaseActive,
+        leaseEpoch: row.leaseEpoch,
         failureKind,
         currentModel,
         fallbackIndex,
@@ -1838,6 +1839,7 @@ export async function listPreapprovedFallbackCandidates(host: string) {
     })
     .filter(
       (candidate) =>
+        candidate.action !== null &&
         candidate.agentPrincipalId !== null &&
         candidate.hostId === candidate.host &&
         PREAPPROVED_FALLBACK_FAILURE_KINDS.has(candidate.failureKind ?? ""),
