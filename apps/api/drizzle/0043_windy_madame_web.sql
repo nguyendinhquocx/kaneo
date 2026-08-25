@@ -1,0 +1,1 @@
+ALTER TABLE "execution_schedule_occurrence" ADD COLUMN "ack_token_hash" text;

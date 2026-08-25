@@ -9,6 +9,8 @@ import {
   commentTable,
   executionIdempotencyTable,
   executionManifestTable,
+  executionScheduleOccurrenceTable,
+  executionScheduleTable,
   externalLinkTable,
   githubIntegrationTable,
   integrationTable,
@@ -50,6 +52,7 @@ export const userTableRelations = relations(userTable, ({ many, one }) => ({
   notifications: many(notificationTable),
   agentPrincipals: many(agentPrincipalTable),
   executionIdempotencyRecords: many(executionIdempotencyTable),
+  createdSchedules: many(executionScheduleTable),
   notificationPreference: one(userNotificationPreferenceTable),
   notificationWorkspaceRules: many(userNotificationWorkspaceRuleTable),
   sentInvitations: many(invitationTable),
@@ -129,6 +132,7 @@ export const projectTableRelations = relations(
     integrations: many(integrationTable),
     notificationWorkspaceProjects: many(userNotificationWorkspaceProjectTable),
     executionManifest: one(executionManifestTable),
+    executionSchedules: many(executionScheduleTable),
   }),
 );
 
@@ -207,7 +211,42 @@ export const taskTableRelations = relations(taskTable, ({ one, many }) => ({
   targetRelations: many(taskRelationTable, { relationName: "targetTask" }),
   remindersSent: many(taskReminderSentTable),
   runs: many(taskRunTable),
+  schedules: many(executionScheduleTable),
 }));
+
+export const executionScheduleTableRelations = relations(
+  executionScheduleTable,
+  ({ one, many }) => ({
+    task: one(taskTable, {
+      fields: [executionScheduleTable.taskId],
+      references: [taskTable.id],
+    }),
+    project: one(projectTable, {
+      fields: [executionScheduleTable.projectId],
+      references: [projectTable.id],
+    }),
+    createdBy: one(userTable, {
+      fields: [executionScheduleTable.createdByUserId],
+      references: [userTable.id],
+    }),
+    occurrences: many(executionScheduleOccurrenceTable),
+    runs: many(taskRunTable),
+  }),
+);
+
+export const executionScheduleOccurrenceTableRelations = relations(
+  executionScheduleOccurrenceTable,
+  ({ one }) => ({
+    schedule: one(executionScheduleTable, {
+      fields: [executionScheduleOccurrenceTable.scheduleId],
+      references: [executionScheduleTable.id],
+    }),
+    run: one(taskRunTable, {
+      fields: [executionScheduleOccurrenceTable.runId],
+      references: [taskRunTable.id],
+    }),
+  }),
+);
 
 export const timeEntryTableRelations = relations(timeEntryTable, ({ one }) => ({
   task: one(taskTable, {
@@ -438,8 +477,13 @@ export const taskRunTableRelations = relations(
       fields: [taskRunTable.agentPrincipalId],
       references: [agentPrincipalTable.id],
     }),
+    schedule: one(executionScheduleTable, {
+      fields: [taskRunTable.scheduleId],
+      references: [executionScheduleTable.id],
+    }),
     evidence: many(taskRunEvidenceTable),
     idempotencyRecords: many(executionIdempotencyTable),
+    scheduleOccurrences: many(executionScheduleOccurrenceTable),
   }),
 );
 

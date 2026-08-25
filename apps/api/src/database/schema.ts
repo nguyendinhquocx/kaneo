@@ -333,6 +333,114 @@ export const executionManifestTable = pgTable(
   (table) => [index("execution_manifest_projectId_idx").on(table.projectId)],
 );
 
+export const executionScheduleTable = pgTable(
+  "execution_schedule",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => userTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    requestKey: text("request_key").notNull().unique(),
+    notBefore: timestamp("not_before", {
+      mode: "date",
+      withTimezone: true,
+    }).notNull(),
+    cronExpr: text("cron_expr"),
+    timezone: text("timezone").notNull().default("UTC"),
+    host: text("host").notNull().default("prodesk-home"),
+    preferredModel: text("preferred_model"),
+    fallbackModels: jsonb("fallback_models")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    fallbackMode: text("fallback_mode").notNull().default("manual"),
+    maxRuntimeSeconds: integer("max_runtime_seconds").notNull(),
+    retryPolicy: jsonb("retry_policy")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    concurrencyKey: text("concurrency_key").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    lastDispatchAt: timestamp("last_dispatch_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    nextDispatchAt: timestamp("next_dispatch_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("execution_schedule_taskId_idx").on(table.taskId),
+    index("execution_schedule_due_idx").on(
+      table.enabled,
+      table.host,
+      table.notBefore,
+    ),
+  ],
+);
+
+export const executionScheduleOccurrenceTable = pgTable(
+  "execution_schedule_occurrence",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    scheduleId: text("schedule_id")
+      .notNull()
+      .references(() => executionScheduleTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    occurrenceKey: text("occurrence_key").notNull().unique(),
+    scheduledFor: timestamp("scheduled_for", {
+      mode: "date",
+      withTimezone: true,
+    }).notNull(),
+    state: text("state").notNull().default("planned"),
+    claimedBy: text("claimed_by"),
+    claimedAt: timestamp("claimed_at", { mode: "date", withTimezone: true }),
+    claimGeneration: integer("claim_generation").notNull().default(0),
+    ackTokenHash: text("ack_token_hash"),
+    runId: text("run_id").references(() => taskRunTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    failureReason: text("failure_reason"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("execution_schedule_occurrence_scheduleId_idx").on(table.scheduleId),
+    index("execution_schedule_occurrence_runId_idx").on(table.runId),
+  ],
+);
+
 export const columnTable = pgTable(
   "column",
   {
@@ -447,6 +555,10 @@ export const taskRunTable = pgTable(
         onDelete: "cascade",
         onUpdate: "cascade",
       }),
+    scheduleId: text("schedule_id").references(
+      () => executionScheduleTable.id,
+      { onDelete: "set null", onUpdate: "cascade" },
+    ),
     manifestId: text("manifest_id").references(
       () => executionManifestTable.id,
       {
@@ -496,6 +608,7 @@ export const taskRunTable = pgTable(
   },
   (table) => [
     index("task_run_taskId_idx").on(table.taskId),
+    index("task_run_scheduleId_idx").on(table.scheduleId),
     index("task_run_agentPrincipalId_idx").on(table.agentPrincipalId),
     index("task_run_leaseExpiresAt_idx").on(table.leaseExpiresAt),
     unique("task_run_requestKey_unique").on(table.requestKey),

@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import {
@@ -7,8 +7,10 @@ import {
   columnTable,
   executionIdempotencyTable,
   executionManifestTable,
+  executionScheduleTable,
   githubIntegrationTable,
   projectTable,
+  taskRelationTable,
   taskRunEvidenceTable,
   taskRunTable,
   taskTable,
@@ -27,9 +29,11 @@ import {
 import {
   createLeaseToken,
   EXECUTION_PROTOCOL_VERSION,
+  extractWorkerContractScope,
   getLeaseExpiry,
   hashLeaseToken,
   isLeaseExpired,
+  ScheduleEligibilityError,
   stableHash,
   type TaskRunState,
   taskSlug,
@@ -38,6 +42,7 @@ import {
   validateGitSha,
   validateJsonObject,
   validateLeaseEpoch,
+  validateModelId,
   validatePrUrl,
   validateRunState,
   validateScope,
@@ -97,8 +102,20 @@ type ParentReviewVerification = {
   testsPassed: true;
 };
 
-type ReadExecutor = Pick<typeof db, "select">;
-type WriteExecutor = Pick<typeof db, "select" | "update" | "insert">;
+export type ExecutionTransaction = Parameters<
+  Parameters<typeof db.transaction>[0]
+>[0];
+type ReadExecutor = Pick<ExecutionTransaction, "select">;
+type WriteExecutor = Pick<ExecutionTransaction, "select" | "update" | "insert">;
+
+export type ScheduleRunModelPolicy = {
+  preferredModel: string | null;
+  fallbackMode: string;
+  fallbackModels: string[];
+  maxRuntimeSeconds: number;
+  concurrencyKey: string;
+  retryPolicy: Record<string, number>;
+};
 
 function validateIdentity(value: unknown, field: string): string {
   if (typeof value !== "string") {
@@ -552,6 +569,7 @@ function serializeRun(
   return {
     id: run.id,
     taskId: run.taskId,
+    scheduleId: run.scheduleId,
     manifestId: run.manifestId,
     manifestVersion: run.manifestVersion,
     protocolVersion: run.protocolVersion,
@@ -716,7 +734,7 @@ async function getOwnedPrincipal(
   return principal;
 }
 
-async function publishTaskRunUpdated(
+export async function publishTaskRunUpdated(
   taskId: string,
   runId: string,
   userId: string,
@@ -747,6 +765,7 @@ async function getTaskContext(
     .select({
       id: taskTable.id,
       title: taskTable.title,
+      description: taskTable.description,
       status: taskTable.status,
       projectId: taskTable.projectId,
       workspaceId: projectTable.workspaceId,
@@ -1034,19 +1053,172 @@ export async function listTaskRunEvidence(taskId: string, runId: string) {
     .orderBy(asc(taskRunEvidenceTable.createdAt));
 }
 
-export async function claimTaskRun({
-  taskId,
-  userId,
-  agentPrincipalId,
-  scope,
-  requestKey,
-}: {
+function assertManifestModelPolicy(
+  manifestPolicy: Record<string, unknown>,
+  modelPolicy: ScheduleRunModelPolicy,
+): void {
+  const configured = manifestPolicy.allowedModels;
+  if (configured === undefined) return;
+  if (
+    !Array.isArray(configured) ||
+    configured.length === 0 ||
+    configured.some((model) => typeof model !== "string")
+  ) {
+    throw new ScheduleEligibilityError(
+      "Project model policy is malformed or has no allowed models",
+    );
+  }
+
+  let allowedModels: Set<string>;
+  try {
+    allowedModels = new Set(
+      configured.map((model) =>
+        validateModelId(model, "manifest allowed model"),
+      ),
+    );
+  } catch (error) {
+    throw new ScheduleEligibilityError(
+      error instanceof Error
+        ? error.message
+        : "Project model policy is invalid",
+    );
+  }
+  const requestedModels = [
+    modelPolicy.preferredModel,
+    ...modelPolicy.fallbackModels,
+  ].filter((model): model is string => Boolean(model));
+  if (requestedModels.length === 0) {
+    throw new ScheduleEligibilityError(
+      "Schedule must select a model when the project manifest declares an allowlist",
+    );
+  }
+  const disallowed = requestedModels.filter(
+    (model) => !allowedModels.has(model),
+  );
+  if (disallowed.length > 0) {
+    throw new ScheduleEligibilityError(
+      `Schedule model is not allowed by the project policy: ${disallowed.join(", ")}`,
+    );
+  }
+}
+
+async function assertScheduledTaskEligible(
+  tx: WriteExecutor,
+  input: {
+    taskId: string;
+    status: string;
+    description: string | null;
+    scope: string[];
+    manifestPolicy: Record<string, unknown>;
+    modelPolicy?: ScheduleRunModelPolicy;
+  },
+) {
+  if (input.status !== "ready" && input.status !== "queued") {
+    throw new ScheduleEligibilityError(
+      `Scheduled task must be ready or queued, got ${input.status}`,
+    );
+  }
+
+  const contract = extractWorkerContractScope(input.description);
+  if (!contract || contract.laptopOnly || contract.files.length === 0) {
+    throw new ScheduleEligibilityError(
+      "Scheduled task has no dispatchable worker contract",
+    );
+  }
+  const requestedScope = [...new Set(input.scope)].sort();
+  const contractScope = [...new Set(contract.files)].sort();
+  if (JSON.stringify(requestedScope) !== JSON.stringify(contractScope)) {
+    throw new ScheduleEligibilityError(
+      "Dispatch scope does not exactly match the worker contract",
+    );
+  }
+  if (input.modelPolicy) {
+    if (input.modelPolicy.fallbackMode === "preapproved") {
+      throw new ScheduleEligibilityError(
+        "preapproved fallback execution is not enabled",
+      );
+    }
+    assertManifestModelPolicy(input.manifestPolicy, input.modelPolicy);
+  }
+
+  const blockingRelations = await tx
+    .select({ sourceTaskId: taskRelationTable.sourceTaskId })
+    .from(taskRelationTable)
+    .where(
+      and(
+        eq(taskRelationTable.targetTaskId, input.taskId),
+        eq(taskRelationTable.relationType, "blocks"),
+      ),
+    );
+  const sourceTaskIds = [
+    ...new Set(blockingRelations.map((row) => row.sourceTaskId)),
+  ];
+  if (sourceTaskIds.length === 0) return;
+
+  const sourceTasks = await tx
+    .select({
+      id: taskTable.id,
+      status: taskTable.status,
+      columnId: taskTable.columnId,
+    })
+    .from(taskTable)
+    .where(inArray(taskTable.id, sourceTaskIds));
+  const columnIds = sourceTasks
+    .map((task) => task.columnId)
+    .filter((columnId): columnId is string => Boolean(columnId));
+  const finalColumns = columnIds.length
+    ? await tx
+        .select({ id: columnTable.id, isFinal: columnTable.isFinal })
+        .from(columnTable)
+        .where(inArray(columnTable.id, columnIds))
+    : [];
+  const finalColumnIds = new Set(
+    finalColumns.filter((column) => column.isFinal).map((column) => column.id),
+  );
+  const unsatisfied = sourceTasks.filter(
+    (task) =>
+      task.status !== "done" &&
+      task.status !== "archived" &&
+      !finalColumnIds.has(task.columnId ?? ""),
+  );
+  if (unsatisfied.length > 0) {
+    throw new ScheduleEligibilityError(
+      `Scheduled task dependency gate is not satisfied: ${unsatisfied
+        .map((task) => task.id)
+        .join(", ")}`,
+    );
+  }
+}
+
+type ClaimTaskRunInput = {
   taskId: string;
   userId: string;
   agentPrincipalId: string;
   scope: unknown;
   requestKey: string;
-}) {
+  expectedHostId?: string;
+  scheduleDispatch?: boolean;
+  scheduleId?: string;
+  concurrencyKey?: string;
+  modelPolicy?: ScheduleRunModelPolicy;
+};
+
+export async function claimTaskRun(
+  input: ClaimTaskRunInput,
+  transaction?: ExecutionTransaction,
+) {
+  const {
+    taskId,
+    userId,
+    agentPrincipalId,
+    scope,
+    requestKey,
+    expectedHostId,
+    scheduleDispatch = false,
+    scheduleId,
+    concurrencyKey,
+    modelPolicy,
+  } = input;
   if (!requestKey || requestKey.length > 200) {
     throw new HTTPException(400, {
       message:
@@ -1058,9 +1230,26 @@ export async function claimTaskRun({
     taskId,
     agentPrincipalId,
     scope: normalizedScope,
+    scheduleId: scheduleId ?? null,
+    modelPolicy: modelPolicy ?? null,
+    expectedHostId: expectedHostId ?? null,
   });
 
-  const result = await db.transaction(async (tx) => {
+  const execute = async (tx: ExecutionTransaction) => {
+    if (concurrencyKey) {
+      if (!scheduleId) {
+        throw new HTTPException(400, {
+          message: "scheduleId is required with concurrencyKey",
+        });
+      }
+      // Serialize dispatches sharing a key. v1 intentionally uses a
+      // conservative single-flight limit; T7 can widen this with an explicit
+      // max-concurrency policy without changing the fencing contract.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${concurrencyKey}))`,
+      );
+    }
+
     const [existingRequest] = await tx
       .select()
       .from(taskRunTable)
@@ -1077,7 +1266,57 @@ export async function claimTaskRun({
           message: "Idempotency-Key was already used with a different request",
         });
       }
+      if (expectedHostId && existingRequest.hostId !== expectedHostId) {
+        throw new HTTPException(409, {
+          message: "Idempotency-Key belongs to a different host binding",
+        });
+      }
+      if (
+        scheduleDispatch &&
+        existingRequest.agentPrincipalId === agentPrincipalId &&
+        (existingRequest.state === "in_progress" ||
+          existingRequest.state === "orphaned") &&
+        (!existingRequest.leaseActive ||
+          isLeaseExpired(existingRequest.leaseExpiresAt))
+      ) {
+        await tx
+          .select({ id: taskTable.id })
+          .from(taskTable)
+          .where(eq(taskTable.id, existingRequest.taskId))
+          .for("update");
+        const recoveryToken = createLeaseToken();
+        const [recoveredRun] = await tx
+          .update(taskRunTable)
+          .set({
+            state: "in_progress",
+            leaseActive: true,
+            leaseEpoch: existingRequest.leaseEpoch + 1,
+            leaseTokenHash: recoveryToken.hash,
+            leaseExpiresAt: getLeaseExpiry(),
+            lastHeartbeatAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(taskRunTable.id, existingRequest.id),
+              eq(taskRunTable.leaseEpoch, existingRequest.leaseEpoch),
+            ),
+          )
+          .returning();
+        if (!recoveredRun) {
+          throw new HTTPException(409, {
+            message: "Scheduled run changed before lease recovery",
+          });
+        }
+        return { run: recoveredRun, leaseToken: recoveryToken.raw };
+      }
       return { run: existingRequest, leaseToken: null };
+    }
+
+    if (scheduleDispatch && !scheduleId) {
+      throw new HTTPException(400, {
+        message: "scheduleDispatch requires scheduleId",
+      });
     }
 
     // Serialize claims for one task before checking the partial active-lease index.
@@ -1087,24 +1326,80 @@ export async function claimTaskRun({
       .where(eq(taskTable.id, taskId))
       .for("update");
 
-    const { task, manifest, integration } = await getTaskContext(taskId, tx);
-    await assertTaskClaimable(tx, {
-      projectId: task.projectId,
-      status: task.status,
-    });
-    const principal = await getOwnedPrincipal(userId, agentPrincipalId, tx);
-    const allowedAgentIds = Array.isArray(manifest.allowedAgentIds)
-      ? manifest.allowedAgentIds
-      : [];
-    if (!allowedAgentIds.includes(principal.id)) {
-      throw new HTTPException(403, {
-        message: "Agent principal is not allowed by this project manifest",
+    let taskContext: Awaited<ReturnType<typeof getTaskContext>>;
+    try {
+      taskContext = await getTaskContext(taskId, tx);
+      await assertTaskClaimable(tx, {
+        projectId: taskContext.task.projectId,
+        status: taskContext.task.status,
       });
+      if (scheduleDispatch) {
+        await assertScheduledTaskEligible(tx, {
+          taskId: taskContext.task.id,
+          status: taskContext.task.status,
+          description: taskContext.task.description,
+          scope: normalizedScope,
+          manifestPolicy: taskContext.manifest.policy ?? {},
+          modelPolicy,
+        });
+      }
+    } catch (error) {
+      if (scheduleDispatch && error instanceof HTTPException) {
+        throw new ScheduleEligibilityError(error.message);
+      }
+      throw error;
     }
-    if (!principal.scopes.includes("run:claim")) {
-      throw new HTTPException(403, {
-        message: "Agent principal lacks run:claim scope",
-      });
+    const { task, manifest, integration } = taskContext;
+    let principal: Awaited<ReturnType<typeof getOwnedPrincipal>>;
+    try {
+      principal = await getOwnedPrincipal(userId, agentPrincipalId, tx);
+      if (expectedHostId && principal.hostId !== expectedHostId) {
+        throw new HTTPException(403, {
+          message: "Agent principal host does not match schedule host",
+        });
+      }
+      const allowedAgentIds = Array.isArray(manifest.allowedAgentIds)
+        ? manifest.allowedAgentIds
+        : [];
+      if (!allowedAgentIds.includes(principal.id)) {
+        throw new HTTPException(403, {
+          message: "Agent principal is not allowed by this project manifest",
+        });
+      }
+      if (!principal.scopes.includes("run:claim")) {
+        throw new HTTPException(403, {
+          message: "Agent principal lacks run:claim scope",
+        });
+      }
+    } catch (error) {
+      if (scheduleDispatch && error instanceof HTTPException) {
+        throw new ScheduleEligibilityError(error.message);
+      }
+      throw error;
+    }
+
+    if (concurrencyKey && scheduleId) {
+      const [activeConcurrency] = await tx
+        .select({ runId: taskRunTable.id })
+        .from(taskRunTable)
+        .innerJoin(
+          executionScheduleTable,
+          eq(taskRunTable.scheduleId, executionScheduleTable.id),
+        )
+        .where(
+          and(
+            eq(executionScheduleTable.concurrencyKey, concurrencyKey),
+            ne(executionScheduleTable.id, scheduleId),
+            eq(taskRunTable.leaseActive, true),
+            gt(taskRunTable.leaseExpiresAt, new Date()),
+          ),
+        )
+        .limit(1);
+      if (activeConcurrency) {
+        throw new HTTPException(409, {
+          message: `Concurrency key is already active: ${concurrencyKey}`,
+        });
+      }
     }
 
     const [latestRun] = await tx
@@ -1126,6 +1421,48 @@ export async function claimTaskRun({
       )
       .limit(1);
     if (activeRun) {
+      // Scheduled dispatch creates the durable run before the ProDesk Pi
+      // process starts. The worker then calls the normal claim endpoint with
+      // its own idempotency key. A normal claim may adopt only a run that was
+      // created by a schedule; a dispatcher retry must additionally match the
+      // exact schedule id. This prevents a second schedule or manual run from
+      // rotating another run's lease token.
+      const isScheduledHandoff =
+        activeRun.scheduleId !== null &&
+        (!scheduleDispatch || activeRun.scheduleId === scheduleId);
+      if (
+        isScheduledHandoff &&
+        activeRun.state === "in_progress" &&
+        activeRun.agentPrincipalId === principal.id &&
+        JSON.stringify([...activeRun.scope].sort()) ===
+          JSON.stringify([...normalizedScope].sort()) &&
+        !isLeaseExpired(activeRun.leaseExpiresAt)
+      ) {
+        const adoptionToken = createLeaseToken();
+        const [adoptedRun] = await tx
+          .update(taskRunTable)
+          .set({
+            leaseTokenHash: adoptionToken.hash,
+            leaseExpiresAt: getLeaseExpiry(),
+            lastHeartbeatAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(taskRunTable.id, activeRun.id),
+              eq(taskRunTable.leaseEpoch, activeRun.leaseEpoch),
+              eq(taskRunTable.leaseActive, true),
+            ),
+          )
+          .returning();
+        if (!adoptedRun) {
+          throw new HTTPException(409, {
+            message: "Task run changed before worker adoption",
+          });
+        }
+        return { run: adoptedRun, leaseToken: adoptionToken.raw };
+      }
+
       if (!isLeaseExpired(activeRun.leaseExpiresAt)) {
         await recordExecutionMetric("lease_conflict", {
           taskId,
@@ -1170,6 +1507,7 @@ export async function claimTaskRun({
       .values({
         id: runId,
         taskId,
+        scheduleId: scheduleDispatch ? (scheduleId ?? null) : null,
         manifestId: manifest.id,
         manifestVersion: manifest.manifestVersion,
         protocolVersion: manifest.protocolVersion,
@@ -1186,6 +1524,19 @@ export async function claimTaskRun({
         requestHash,
         leaseEpoch: nextLeaseEpoch,
         leaseTokenHash: leaseToken.hash,
+        evidence: scheduleDispatch
+          ? {
+              schedule: {
+                scheduleId: scheduleId ?? null,
+                preferredModel: modelPolicy?.preferredModel ?? null,
+                fallbackMode: modelPolicy?.fallbackMode ?? "manual",
+                fallbackModels: modelPolicy?.fallbackModels ?? [],
+                maxRuntimeSeconds: modelPolicy?.maxRuntimeSeconds ?? null,
+                concurrencyKey: modelPolicy?.concurrencyKey ?? null,
+                retryPolicy: modelPolicy?.retryPolicy ?? {},
+              },
+            }
+          : {},
         leaseActive: true,
         leaseExpiresAt: getLeaseExpiry(),
         lastHeartbeatAt: new Date(),
@@ -1196,8 +1547,18 @@ export async function claimTaskRun({
     }
 
     return { run, leaseToken: leaseToken.raw };
-  });
-  await publishTaskRunUpdated(taskId, result.run.id, userId, result.run.state);
+  };
+  const result = transaction
+    ? await execute(transaction)
+    : await db.transaction(execute);
+  if (!transaction) {
+    await publishTaskRunUpdated(
+      taskId,
+      result.run.id,
+      userId,
+      result.run.state,
+    );
+  }
   return result;
 }
 

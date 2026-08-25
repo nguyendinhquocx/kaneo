@@ -12,6 +12,14 @@ import { requireWorkspacePermission } from "../utils/require-workspace-permissio
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import { listExecutionFlags, setExecutionFlag } from "./gates";
 import {
+  acknowledgeScheduleDispatch,
+  createExecutionSchedule,
+  dispatchScheduleOnce,
+  getScheduleById,
+  getTaskProjectId,
+  listDueSchedules,
+} from "./schedules";
+import {
   claimTaskRun,
   createAgentPrincipal,
   getExecutionManifest,
@@ -31,6 +39,7 @@ const execution = new Hono<{
   Variables: {
     userId: string;
     workspaceId: string;
+    apiKey?: { permissions?: Record<string, string[]> | null };
   };
 }>()
   .get(
@@ -512,6 +521,245 @@ const execution = new Hono<{
         requestKey,
       });
       return c.json(run);
+    },
+  )
+  .post(
+    "/task/:taskId/schedules",
+    describeRoute({
+      operationId: "createExecutionSchedule",
+      tags: ["Execution"],
+      description:
+        "Create a durable one-shot dispatch schedule for a task (SPEC-KANEO-MULTI-PI-4CMD T6)",
+      responses: {
+        201: {
+          description: "Schedule created",
+          content: {
+            "application/json": {
+              schema: resolver(v.object({ id: v.string() })),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        notBefore: v.pipe(
+          v.string(),
+          v.transform((value) => new Date(value)),
+        ),
+        host: v.optional(v.string()),
+        preferredModel: v.optional(v.nullable(v.string())),
+        fallbackMode: v.optional(v.string()),
+        fallbackModels: v.optional(v.array(v.string())),
+        maxRuntimeSeconds: v.number(),
+        concurrencyKey: v.optional(v.string()),
+        retryPolicy: v.optional(v.record(v.string(), v.unknown())),
+      }),
+    ),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ task: ["update"], execution: ["review"] }),
+    async (c) => {
+      const { taskId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const task = await getTaskProjectId(taskId);
+      const schedule = await createExecutionSchedule({
+        taskId,
+        projectId: task.projectId,
+        userId: c.get("userId"),
+        requestKey,
+        notBefore: body.notBefore,
+        host: body.host,
+        preferredModel: body.preferredModel ?? null,
+        fallbackMode: body.fallbackMode,
+        fallbackModels: body.fallbackModels,
+        maxRuntimeSeconds: body.maxRuntimeSeconds,
+        concurrencyKey: body.concurrencyKey,
+        retryPolicy: body.retryPolicy,
+      });
+      return c.json({ id: schedule.id }, 201);
+    },
+  )
+  .get(
+    "/schedules/due",
+    describeRoute({
+      operationId: "listDueExecutionSchedules",
+      tags: ["Execution"],
+      description:
+        "List due enabled schedules for a host (dispatcher poll; instance admin only)",
+      responses: {
+        200: {
+          description: "Due schedules",
+          content: {
+            "application/json": {
+              schema: resolver(
+                v.array(
+                  v.object({
+                    id: v.string(),
+                    taskId: v.string(),
+                    projectId: v.string(),
+                    notBefore: v.string(),
+                    timezone: v.string(),
+                    host: v.string(),
+                    preferredModel: v.nullable(v.string()),
+                    fallbackModels: v.array(v.string()),
+                    fallbackMode: v.string(),
+                    maxRuntimeSeconds: v.number(),
+                    retryPolicy: v.record(v.string(), v.number()),
+                    concurrencyKey: v.string(),
+                    enabled: v.boolean(),
+                    lastDispatchAt: v.nullable(v.string()),
+                    nextDispatchAt: v.nullable(v.string()),
+                  }),
+                ),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    validator("query", v.object({ host: v.string() })),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (apiKey && !apiKey.permissions?.execution?.includes("review")) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const schedules = await listDueSchedules({
+        host: c.req.valid("query").host,
+      });
+      return c.json(schedules);
+    },
+  )
+  .post(
+    "/schedules/:scheduleId/dispatch",
+    describeRoute({
+      operationId: "dispatchExecutionSchedule",
+      tags: ["Execution"],
+      description:
+        "Claim the occurrence and create the run exactly once (dispatcher or parent manual trigger; instance admin only)",
+      responses: {
+        200: {
+          description: "Dispatch outcome",
+          content: {
+            "application/json": {
+              schema: resolver(
+                v.object({
+                  scheduleId: v.string(),
+                  occurrenceId: v.string(),
+                  runId: v.nullable(v.string()),
+                  outcome: v.string(),
+                  reason: v.optional(v.string()),
+                  ackToken: v.optional(v.string()),
+                }),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ scheduleId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        scope: v.array(v.string()),
+        agentPrincipalId: v.string(),
+        noOpReason: v.optional(v.string()),
+      }),
+    ),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (apiKey && !apiKey.permissions?.execution?.includes("review")) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const { scheduleId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const schedule = await getScheduleById(scheduleId);
+      const outcome = await dispatchScheduleOnce({
+        schedule: {
+          id: schedule.id,
+          taskId: schedule.taskId,
+          host: schedule.host,
+          enabled: schedule.enabled,
+          notBefore: schedule.notBefore,
+          nextDispatchAt: schedule.nextDispatchAt,
+          preferredModel: schedule.preferredModel,
+          fallbackMode: schedule.fallbackMode,
+          fallbackModels: schedule.fallbackModels,
+          maxRuntimeSeconds: schedule.maxRuntimeSeconds,
+          concurrencyKey: schedule.concurrencyKey,
+          retryPolicy: schedule.retryPolicy as Record<string, number>,
+        },
+        dispatcherIdentity: {
+          userId: c.get("userId"),
+          agentPrincipalId: body.agentPrincipalId,
+        },
+        scope: body.scope,
+        noOpReason: body.noOpReason,
+      });
+      return c.json(outcome);
+    },
+  )
+  .post(
+    "/schedules/:scheduleId/ack",
+    describeRoute({
+      operationId: "acknowledgeExecutionScheduleDispatch",
+      tags: ["Execution"],
+      description:
+        "Acknowledge that the fixed host runner started; closes a one-shot schedule",
+      responses: {
+        200: {
+          description: "Schedule acknowledged",
+          content: {
+            "application/json": {
+              schema: resolver(v.object({ id: v.string() })),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ scheduleId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        occurrenceId: v.string(),
+        runId: v.string(),
+        agentPrincipalId: v.string(),
+        ackToken: v.string(),
+      }),
+    ),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (apiKey && !apiKey.permissions?.execution?.includes("review")) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const { scheduleId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const schedule = await acknowledgeScheduleDispatch({
+        scheduleId,
+        occurrenceId: body.occurrenceId,
+        runId: body.runId,
+        userId: c.get("userId"),
+        agentPrincipalId: body.agentPrincipalId,
+        ackToken: body.ackToken,
+      });
+      return c.json({ id: schedule.id });
     },
   );
 

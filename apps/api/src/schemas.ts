@@ -300,6 +300,7 @@ export const taskRunEvidenceSchema = v.object({
 export const taskRunSchema = v.object({
   id: v.string(),
   taskId: v.string(),
+  scheduleId: v.nullable(v.string()),
   manifestId: v.nullable(v.string()),
   manifestVersion: v.number(),
   protocolVersion: v.number(),

@@ -236,3 +236,296 @@ export function taskSlug(title: string): string {
     .slice(0, 48);
   return slug || "task";
 }
+
+export function validateModelId(value: unknown, field = "model"): string {
+  if (
+    typeof value !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(value.trim())
+  ) {
+    throw new HTTPException(400, {
+      message: `${field} must be a bounded registry model id`,
+    });
+  }
+  return value.trim();
+}
+
+export interface WorkerContractScope {
+  files: string[];
+  laptopOnly: boolean;
+}
+
+function parseEmbeddedJsonObject(
+  source: string,
+  start: number,
+): unknown | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+    if (character === "{") depth += 1;
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(source.slice(start, index + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+export function extractWorkerContractScope(
+  description: unknown,
+): WorkerContractScope | null {
+  if (typeof description !== "string" || description.length > 128 * 1024) {
+    return null;
+  }
+  for (let start = 0; start < description.length; start += 1) {
+    if (description[start] !== "{") continue;
+    const candidate = parseEmbeddedJsonObject(description, start);
+    if (
+      !candidate ||
+      typeof candidate !== "object" ||
+      Array.isArray(candidate)
+    ) {
+      continue;
+    }
+    const files = (candidate as Record<string, unknown>).files;
+    if (!Array.isArray(files) || files.length === 0) continue;
+    const normalized: string[] = [];
+    let hasLaptopOnlyMarker = false;
+    for (const value of files) {
+      if (typeof value !== "string" || !value.trim()) return null;
+      const path = value.trim();
+      if (path === "laptop-only") {
+        hasLaptopOnlyMarker = true;
+        continue;
+      }
+      if (
+        path.length > 500 ||
+        path.startsWith("/") ||
+        path.startsWith("\\") ||
+        path.includes("\\") ||
+        path.includes("\0") ||
+        path.split("/").some((segment) => segment === "..")
+      ) {
+        return null;
+      }
+      normalized.push(path);
+    }
+    const laptopOnly =
+      (candidate as Record<string, unknown>).laptop_only === true ||
+      (hasLaptopOnlyMarker && normalized.length === 0);
+    if (hasLaptopOnlyMarker && normalized.length > 0) return null;
+    return { files: [...new Set(normalized)], laptopOnly };
+  }
+  return null;
+}
+
+export class ScheduleEligibilityError extends Error {
+  readonly code = "schedule_eligibility";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ScheduleEligibilityError";
+  }
+}
+
+export const SCHEDULE_FALLBACK_MODES = ["manual", "preapproved"] as const;
+export const SCHEDULE_OCCURRENCE_STATES = [
+  "planned",
+  "claimed",
+  "dispatched",
+  "superseded",
+  "failed",
+] as const;
+export const SCHEDULE_MAX_RUNTIME_BOUNDS = { min: 60, max: 86_400 } as const;
+
+/**
+ * Canonical occurrence key: scheduleId + scheduled_for in UTC ISO with
+ * millisecond precision. The unique constraint on this string is the
+ * exactly-once dispatch fence required by the agent-control contract.
+ */
+export function occurrenceKey(scheduleId: string, scheduledFor: Date): string {
+  return `${scheduleId}:${scheduledFor.toISOString()}`;
+}
+
+/**
+ * v1 supports one-shot schedules only (notBefore). Cron expressions are
+ * rejected fail-closed until occurrence idempotency has proven itself.
+ */
+export function assertScheduleShape(input: {
+  notBefore: unknown;
+  cronExpr?: unknown;
+}): void {
+  if (input.cronExpr !== undefined && input.cronExpr !== null) {
+    throw new HTTPException(400, {
+      message: "cron schedules are not supported in v1; use notBefore",
+    });
+  }
+  if (
+    !(input.notBefore instanceof Date) ||
+    Number.isNaN(input.notBefore.getTime())
+  ) {
+    throw new HTTPException(400, {
+      message: "notBefore must be a valid date",
+    });
+  }
+}
+
+export function validateSchedulePolicy(input: {
+  host?: unknown;
+  maxRuntimeSeconds: unknown;
+  fallbackMode?: unknown;
+  fallbackModels?: unknown;
+  concurrencyKey?: unknown;
+}): {
+  host: string;
+  maxRuntimeSeconds: number;
+  fallbackMode: (typeof SCHEDULE_FALLBACK_MODES)[number];
+  fallbackModels: string[];
+  concurrencyKey: string;
+} {
+  const host =
+    typeof input.host === "string" && input.host.trim().length > 0
+      ? input.host.trim()
+      : "prodesk-home";
+  if (!/^[a-z0-9][a-z0-9-_.]{1,63}$/i.test(host)) {
+    throw new HTTPException(400, { message: "invalid host binding" });
+  }
+  const maxRuntimeSeconds = Number(input.maxRuntimeSeconds);
+  if (
+    !Number.isInteger(maxRuntimeSeconds) ||
+    maxRuntimeSeconds < SCHEDULE_MAX_RUNTIME_BOUNDS.min ||
+    maxRuntimeSeconds > SCHEDULE_MAX_RUNTIME_BOUNDS.max
+  ) {
+    throw new HTTPException(400, {
+      message: `maxRuntimeSeconds must be an integer between ${SCHEDULE_MAX_RUNTIME_BOUNDS.min} and ${SCHEDULE_MAX_RUNTIME_BOUNDS.max}`,
+    });
+  }
+  const fallbackMode =
+    input.fallbackMode === undefined || input.fallbackMode === null
+      ? "manual"
+      : input.fallbackMode;
+  if (
+    !(SCHEDULE_FALLBACK_MODES as readonly string[]).includes(
+      fallbackMode as string,
+    )
+  ) {
+    throw new HTTPException(400, {
+      message: `fallbackMode must be one of ${SCHEDULE_FALLBACK_MODES.join(", ")}`,
+    });
+  }
+  const fallbackModels =
+    input.fallbackModels === undefined || input.fallbackModels === null
+      ? []
+      : input.fallbackModels;
+  if (
+    !Array.isArray(fallbackModels) ||
+    fallbackModels.some((model) => {
+      if (typeof model !== "string" || model.length > 120) return true;
+      try {
+        validateModelId(model, "fallback model");
+        return false;
+      } catch {
+        return true;
+      }
+    })
+  ) {
+    throw new HTTPException(400, {
+      message: "fallbackModels must be an array of registry model ids",
+    });
+  }
+  if (fallbackMode === "preapproved" && fallbackModels.length === 0) {
+    throw new HTTPException(400, {
+      message: "preapproved fallbackMode requires at least one fallback model",
+    });
+  }
+  const normalizedFallbackModels = (fallbackModels as unknown[]).map((model) =>
+    validateModelId(model, "fallback model"),
+  );
+  const concurrencyKey =
+    typeof input.concurrencyKey === "string" &&
+    input.concurrencyKey.trim().length > 0
+      ? input.concurrencyKey.trim()
+      : host;
+  if (concurrencyKey.length > 120) {
+    throw new HTTPException(400, { message: "concurrencyKey too long" });
+  }
+  return {
+    host,
+    maxRuntimeSeconds,
+    fallbackMode: fallbackMode as (typeof SCHEDULE_FALLBACK_MODES)[number],
+    fallbackModels: normalizedFallbackModels,
+    concurrencyKey,
+  };
+}
+
+export function validateRetryPolicy(value?: unknown): Record<string, number> {
+  if (value === undefined || value === null) return {};
+  const policy = validateJsonObject(value, "retryPolicy", 8 * 1024);
+  const allowedKeys = new Set(["maxAttempts", "backoffSeconds"]);
+  for (const key of Object.keys(policy)) {
+    if (!allowedKeys.has(key)) {
+      throw new HTTPException(400, {
+        message: `retryPolicy contains unsupported field: ${key}`,
+      });
+    }
+  }
+  const maxAttempts = policy.maxAttempts;
+  if (
+    maxAttempts !== undefined &&
+    (typeof maxAttempts !== "number" ||
+      !Number.isInteger(maxAttempts) ||
+      maxAttempts < 1 ||
+      maxAttempts > 10)
+  ) {
+    throw new HTTPException(400, {
+      message: "retryPolicy.maxAttempts must be an integer between 1 and 10",
+    });
+  }
+  const backoffSeconds = policy.backoffSeconds;
+  if (
+    backoffSeconds !== undefined &&
+    (typeof backoffSeconds !== "number" ||
+      !Number.isInteger(backoffSeconds) ||
+      backoffSeconds < 15 ||
+      backoffSeconds > 86_400)
+  ) {
+    throw new HTTPException(400, {
+      message:
+        "retryPolicy.backoffSeconds must be an integer between 15 and 86400",
+    });
+  }
+  return Object.fromEntries(
+    Object.entries(policy).map(([key, number]) => [key, number as number]),
+  );
+}
+
+export function isScheduleDue(
+  input: { enabled: boolean; notBefore: Date; host: string },
+  now = new Date(),
+  hostFilter?: string,
+): boolean {
+  if (!input.enabled) {
+    return false;
+  }
+  if (hostFilter && input.host !== hostFilter) {
+    return false;
+  }
+  return input.notBefore.getTime() <= now.getTime();
+}

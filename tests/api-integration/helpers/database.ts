@@ -95,6 +95,8 @@ export async function resetTestDatabase() {
         "execution_flag",
         "execution_idempotency",
         "task_run_evidence",
+        "execution_schedule_occurrence",
+        "execution_schedule",
         "task_run",
         "execution_manifest",
         "agent_principal",

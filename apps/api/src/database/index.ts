@@ -11,6 +11,8 @@ import {
   commentTableRelations,
   executionIdempotencyTableRelations,
   executionManifestTableRelations,
+  executionScheduleOccurrenceTableRelations,
+  executionScheduleTableRelations,
   externalLinkTableRelations,
   githubIntegrationTableRelations,
   integrationTableRelations,
@@ -49,6 +51,8 @@ import {
   executionFlagTable,
   executionIdempotencyTable,
   executionManifestTable,
+  executionScheduleOccurrenceTable,
+  executionScheduleTable,
   externalLinkTable,
   githubIntegrationTable,
   integrationTable,
@@ -78,6 +82,8 @@ import {
 config();
 
 export const schema = {
+  executionScheduleOccurrenceTable,
+  executionScheduleTable,
   accountTable,
   assetTable,
   activityTable,
@@ -113,6 +119,8 @@ export const schema = {
   workspaceRoleTable,
   workspaceTable,
   workspaceUserTable,
+  executionScheduleOccurrenceTableRelations,
+  executionScheduleTableRelations,
   accountTableRelations,
   assetTableRelations,
   activityTableRelations,
