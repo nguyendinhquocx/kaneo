@@ -309,6 +309,13 @@
 			"when": 1787645499024,
 			"tag": "0043_windy_madame_web",
 			"breakpoints": true
+		},
+		{
+			"idx": 44,
+			"version": "7",
+			"when": 1787660005108,
+			"tag": "0044_repair_github_integration_runtime",
+			"breakpoints": true
 		}
 	]
 }
