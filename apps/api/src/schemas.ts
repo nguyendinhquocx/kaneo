@@ -240,7 +240,10 @@ export const telegramIntegrationSchema = v.object({
   chatLabel: v.nullable(v.string()),
   botTokenConfigured: v.boolean(),
   maskedBotToken: v.string(),
-  events: integrationEventsSchema,
+  events: v.object({
+    ...integrationEventsSchema.entries,
+    executionRunUpdated: v.boolean(),
+  }),
   isActive: v.nullable(v.boolean()),
   createdAt: v.date(),
   updatedAt: v.date(),

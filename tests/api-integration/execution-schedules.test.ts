@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
+import { handleExecutionRunUpdated } from "../../apps/api/src/plugins/telegram/events";
 import { mockAuthenticatedSession } from "./helpers/auth";
 import { resetTestDatabase } from "./helpers/database";
 import {
@@ -814,15 +815,227 @@ describe("API integration: execution schedules (T6)", () => {
     expect(await db.select().from(schema.taskRunTable)).toHaveLength(0);
   });
 
-  it("rejects preapproved fallback until the quota worker can execute it", async () => {
-    const fixture = await createScheduleFixture();
-    const created = await createSchedule(fixture.app, fixture.task.id, {
-      preferredModel: "zai/glm-5.3",
-      fallbackMode: "preapproved",
-      fallbackModels: ["openai-codex/gpt-5.6-luna"],
+  it("advances declared preapproved fallbacks without duplicating the task", async () => {
+    const fixture = await createScheduleFixture({
+      allowedModels: ["openai-codex/gpt-5.6-luna", "zai/glm-5.3"],
     });
-    expect(created.status).toBe(400);
-    expect(await created.text()).toMatch(/preapproved fallback/);
+    const created = await createSchedule(fixture.app, fixture.task.id, {
+      preferredModel: "openai-codex/gpt-5.6-luna",
+      fallbackMode: "preapproved",
+      fallbackModels: ["zai/glm-5.3"],
+    });
+    expect(created.status).toBe(201);
+    const scheduleId = ((await created.json()) as { id: string }).id;
+    const dispatch = await fixture.app.request(
+      `/api/execution/schedules/${scheduleId}/dispatch`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: ["apps/api/src/execution/service.ts"],
+          agentPrincipalId: fixture.principal.id,
+        }),
+      },
+    );
+    expect(dispatch.status).toBe(200);
+    const dispatched = (await dispatch.json()) as { runId: string };
+    const claim = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/claim`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "preapproved-initial-claim",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          scope: ["apps/api/src/execution/service.ts"],
+        }),
+      },
+    );
+    const claimed = (await claim.json()) as {
+      id: string;
+      leaseEpoch: number;
+      leaseToken: string;
+    };
+    expect(claimed.id).toBe(dispatched.runId);
+    const report = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${claimed.id}/report`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "preapproved-quota-report",
+          "X-Kaneo-Lease-Token": claimed.leaseToken,
+        },
+        body: JSON.stringify({
+          leaseEpoch: claimed.leaseEpoch,
+          state: "blocked_quota",
+          evidence: {
+            failureKind: "provider_quota",
+            model: "openai-codex/gpt-5.6-luna",
+          },
+          blocker: "provider quota exhausted",
+        }),
+      },
+    );
+    expect(report.status).toBe(200);
+
+    const candidates = await fixture.app.request(
+      "/api/execution/fallback/due?host=prodesk-home",
+    );
+    expect(candidates.status).toBe(200);
+    expect(await candidates.json()).toMatchObject([
+      {
+        runId: claimed.id,
+        nextModel: "zai/glm-5.3",
+        failureKind: "provider_quota",
+      },
+    ]);
+
+    const fallback = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${claimed.id}/fallback`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "preapproved-fallback-1",
+        },
+        body: JSON.stringify({ agentPrincipalId: fixture.principal.id }),
+      },
+    );
+    expect(fallback.status).toBe(201);
+    const fallbackBody = (await fallback.json()) as {
+      outcome: string;
+      run: {
+        id: string;
+        scheduleId: string;
+        evidence: Record<string, unknown>;
+      };
+    };
+    expect(fallbackBody.outcome).toBe("created");
+    expect(fallbackBody.run.scheduleId).toBe(scheduleId);
+    expect(fallbackBody.run.evidence).toMatchObject({
+      fallback: {
+        fromRunId: claimed.id,
+        model: "zai/glm-5.3",
+        fallbackIndex: 0,
+      },
+    });
+
+    const replay = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${claimed.id}/fallback`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "preapproved-fallback-1",
+        },
+        body: JSON.stringify({ agentPrincipalId: fixture.principal.id }),
+      },
+    );
+    expect(replay.status).toBe(200);
+    expect((await replay.json()).run.id).toBe(fallbackBody.run.id);
+
+    const fallbackClaim = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/claim`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "preapproved-fallback-claim",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          scope: ["apps/api/src/execution/service.ts"],
+        }),
+      },
+    );
+    const fallbackLease = (await fallbackClaim.json()) as {
+      id: string;
+      leaseEpoch: number;
+      leaseToken: string;
+    };
+    expect(fallbackLease.id).toBe(fallbackBody.run.id);
+    const fallbackReport = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${fallbackLease.id}/report`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "preapproved-fallback-quota-report",
+          "X-Kaneo-Lease-Token": fallbackLease.leaseToken,
+        },
+        body: JSON.stringify({
+          leaseEpoch: fallbackLease.leaseEpoch,
+          state: "blocked_quota",
+          evidence: {
+            failureKind: "provider_quota",
+            model: "zai/glm-5.3",
+          },
+        }),
+      },
+    );
+    expect(fallbackReport.status).toBe(200);
+    const exhausted = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${fallbackLease.id}/fallback`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "preapproved-fallback-2",
+        },
+        body: JSON.stringify({ agentPrincipalId: fixture.principal.id }),
+      },
+    );
+    expect(exhausted.status).toBe(200);
+    expect(await exhausted.json()).toMatchObject({
+      outcome: "exhausted",
+      run: { id: fallbackBody.run.id, state: "failed" },
+    });
+    expect(await db.select().from(schema.taskRunTable)).toHaveLength(2);
+  });
+
+  it("sends execution blockers through the active Telegram alert handler", async () => {
+    const fixture = await createScheduleFixture();
+    const token = `123456789:${"A".repeat(35)}`;
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handleExecutionRunUpdated(
+      {
+        taskId: fixture.task.id,
+        projectId: fixture.project.id,
+        runId: "run-provider-quota",
+        userId: fixture.member.user.id,
+        state: "blocked_quota",
+      },
+      {
+        integrationId: "telegram-fixture",
+        projectId: fixture.project.id,
+        config: {
+          botToken: token,
+          chatId: "-1001234567890",
+          events: { executionRunUpdated: true },
+        },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("https://api.telegram.org/bot");
+    const payload = JSON.parse(String(init.body)) as {
+      chat_id: string;
+      text: string;
+    };
+    expect(payload.chat_id).toBe("-1001234567890");
+    expect(payload.text).toContain("provider quota");
+    expect(payload.text).not.toContain(token);
   });
 
   it("enforces the host binding and manifest model allowlist before run creation", async () => {

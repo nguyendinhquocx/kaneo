@@ -443,6 +443,7 @@ export function validateSchedulePolicy(input: {
       : input.fallbackModels;
   if (
     !Array.isArray(fallbackModels) ||
+    fallbackModels.length > 10 ||
     fallbackModels.some((model) => {
       if (typeof model !== "string" || model.length > 120) return true;
       try {
@@ -454,7 +455,8 @@ export function validateSchedulePolicy(input: {
     })
   ) {
     throw new HTTPException(400, {
-      message: "fallbackModels must be an array of registry model ids",
+      message:
+        "fallbackModels must be an array of at most 10 registry model ids",
     });
   }
   if (fallbackMode === "preapproved" && fallbackModels.length === 0) {
@@ -465,6 +467,13 @@ export function validateSchedulePolicy(input: {
   const normalizedFallbackModels = (fallbackModels as unknown[]).map((model) =>
     validateModelId(model, "fallback model"),
   );
+  if (
+    new Set(normalizedFallbackModels).size !== normalizedFallbackModels.length
+  ) {
+    throw new HTTPException(400, {
+      message: "fallbackModels must not contain duplicate models",
+    });
+  }
   const concurrencyKey =
     typeof input.concurrencyKey === "string" &&
     input.concurrencyKey.trim().length > 0

@@ -8,6 +8,7 @@ import {
   workspaceTable,
 } from "../../database/schema";
 import type {
+  ExecutionRunUpdatedEvent,
   PluginContext,
   TaskCommentCreatedEvent,
   TaskCreatedEvent,
@@ -148,6 +149,11 @@ async function getTelegramEventData(
   };
 }
 
+function safeErrorMessage(error: unknown, botToken: string): string {
+  const message = error instanceof Error ? error.message : "unknown error";
+  return truncate(message.replaceAll(botToken, "[REDACTED]"), 500);
+}
+
 async function sendTelegramMessage(
   config: TelegramConfig,
   title: string,
@@ -183,7 +189,7 @@ async function sendTelegramMessage(
     });
   } catch (error) {
     console.error("sendTelegramMessage postToTelegram failed", {
-      error,
+      error: safeErrorMessage(error, config.botToken),
       botToken: redactBotToken(config.botToken),
       telegramTarget: getSafeTelegramTargetIdentifier(config),
       taskUrl: data.taskUrl,
@@ -210,7 +216,7 @@ async function runTelegramHandler(
   if (!validation.valid) {
     console.error("Invalid Telegram plugin config; skipping event dispatch", {
       errors: validation.errors,
-      config: context.config,
+      integrationId: context.integrationId,
       featureKey,
       projectId: event.projectId,
       taskId: event.taskId,
@@ -230,6 +236,22 @@ async function runTelegramHandler(
 
   const { title, body } = buildMessage();
   await sendTelegramMessage(config, title, body, data);
+}
+
+export async function handleExecutionRunUpdated(
+  event: ExecutionRunUpdatedEvent,
+  context: PluginContext,
+): Promise<void> {
+  const title =
+    event.state === "blocked_quota"
+      ? "Worker blocked: provider quota"
+      : event.state === "orphaned"
+        ? "Worker became stale"
+        : "Worker execution blocked";
+  await runTelegramHandler(context, event, "executionRunUpdated", () => ({
+    title,
+    body: `Execution run ${event.runId.slice(0, 12)} entered ${toSentenceCase(event.state)}. Parent action is required.`,
+  }));
 }
 
 export async function handleTaskCreated(

@@ -3,6 +3,7 @@ import db from "../database";
 import { integrationTable } from "../database/schema";
 import { subscribeToEvent } from "../events";
 import type {
+  ExecutionRunUpdatedEvent,
   IntegrationPlugin,
   PluginContext,
   TaskAssigneeChangedEvent,
@@ -227,6 +228,13 @@ export function initializeEventSubscriptions(): void {
     });
   });
 
+  subscribeToEvent<ExecutionRunUpdatedEvent>(
+    "task_run.updated",
+    async (data) => {
+      await broadcastExecutionRunUpdated(data);
+    },
+  );
+
   eventSubscriptionsInitialized = true;
   console.log("✓ Plugin event subscriptions initialized");
 }
@@ -261,6 +269,35 @@ function createContext(integration: {
     projectId: integration.projectId,
     config: JSON.parse(integration.config) as Record<string, unknown>,
   };
+}
+
+const EXECUTION_ALERT_STATES = new Set([
+  "blocked",
+  "blocked_quota",
+  "blocked_input",
+  "blocked_clarification",
+  "blocked_branch_drift",
+  "failed",
+  "orphaned",
+]);
+
+export async function broadcastExecutionRunUpdated(
+  event: ExecutionRunUpdatedEvent,
+): Promise<void> {
+  if (!EXECUTION_ALERT_STATES.has(event.state)) return;
+
+  const integrations = await getActiveIntegrations(event.projectId);
+  for (const integration of integrations) {
+    const plugin = getPlugin(integration.type);
+    if (!plugin?.onExecutionRunUpdated) continue;
+
+    const context = createContext(integration);
+    try {
+      await plugin.onExecutionRunUpdated(event, context);
+    } catch (error) {
+      console.error(`Plugin ${plugin.type} error on task_run.updated:`, error);
+    }
+  }
 }
 
 export async function broadcastTaskCreated(

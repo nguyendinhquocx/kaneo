@@ -549,6 +549,7 @@ const IDEMPOTENCY_OPERATIONS = {
   report: "task_run.report",
   release: "task_run.release",
   review: "task_run.review",
+  preapprovedFallback: "task_run.preapproved_fallback",
 } as const;
 
 function requireIdempotencyKey(value: string): string {
@@ -1133,11 +1134,6 @@ async function assertScheduledTaskEligible(
     );
   }
   if (input.modelPolicy) {
-    if (input.modelPolicy.fallbackMode === "preapproved") {
-      throw new ScheduleEligibilityError(
-        "preapproved fallback execution is not enabled",
-      );
-    }
     assertManifestModelPolicy(input.manifestPolicy, input.modelPolicy);
   }
 
@@ -1190,6 +1186,15 @@ async function assertScheduledTaskEligible(
   }
 }
 
+type ResumeFallbackEvidence = {
+  scheduleId: string;
+  fromRunId: string;
+  model: string;
+  failedModel: string;
+  failureKind: string;
+  fallbackIndex: number;
+};
+
 type ClaimTaskRunInput = {
   taskId: string;
   userId: string;
@@ -1205,6 +1210,7 @@ type ClaimTaskRunInput = {
   resumeBranchName?: string;
   resumeBaseSha?: string | null;
   resumeCommitSha?: string | null;
+  resumeFallback?: ResumeFallbackEvidence;
 };
 
 export async function claimTaskRun(
@@ -1226,6 +1232,7 @@ export async function claimTaskRun(
     resumeBranchName,
     resumeBaseSha,
     resumeCommitSha,
+    resumeFallback,
   } = input;
   if (!requestKey || requestKey.length > 200) {
     throw new HTTPException(400, {
@@ -1245,6 +1252,7 @@ export async function claimTaskRun(
     resumeBranchName: resumeBranchName ?? null,
     resumeBaseSha: resumeBaseSha ?? null,
     resumeCommitSha: resumeCommitSha ?? null,
+    resumeFallback: resumeFallback ?? null,
   });
 
   const execute = async (tx: ExecutionTransaction) => {
@@ -1521,7 +1529,7 @@ export async function claimTaskRun(
       .values({
         id: runId,
         taskId,
-        scheduleId: scheduleDispatch ? (scheduleId ?? null) : null,
+        scheduleId: scheduleId ?? null,
         manifestId: manifest.id,
         manifestVersion: manifest.manifestVersion,
         protocolVersion: manifest.protocolVersion,
@@ -1548,9 +1556,13 @@ export async function claimTaskRun(
                   branchName,
                   baseSha: resumeBaseSha ?? null,
                   commitSha: resumeCommitSha ?? null,
+                  preferredModel: modelPolicy?.preferredModel ?? null,
+                  fallbackMode: modelPolicy?.fallbackMode ?? "manual",
+                  fallbackModels: modelPolicy?.fallbackModels ?? [],
                 },
               }
             : {}),
+          ...(resumeFallback ? { fallback: resumeFallback } : {}),
           ...(scheduleDispatch
             ? {
                 schedule: {
@@ -1701,6 +1713,387 @@ export async function resumeTaskRun(input: {
     input.userId,
     result.run.state,
   );
+  return result;
+}
+
+const PREAPPROVED_FALLBACK_FAILURE_KINDS = new Set([
+  "provider_quota",
+  "provider_timeout",
+  "provider_5xx",
+]);
+
+function asEvidenceRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readWorkerFailureKind(
+  evidence: Record<string, unknown>,
+): string | null {
+  const worker = asEvidenceRecord(evidence.worker);
+  const candidate = worker.failureKind ?? evidence.failureKind;
+  return typeof candidate === "string" ? candidate : null;
+}
+
+function readFallbackIndex(evidence: Record<string, unknown>): number {
+  const fallback = asEvidenceRecord(evidence.fallback);
+  const value = fallback.fallbackIndex;
+  return Number.isInteger(value) && (value as number) >= 0
+    ? (value as number)
+    : -1;
+}
+
+function readCurrentFallbackModel(
+  evidence: Record<string, unknown>,
+  preferredModel: string | null,
+): string | null {
+  const fallback = asEvidenceRecord(evidence.fallback);
+  const model = fallback.model;
+  if (typeof model === "string" && model.length > 0) return model;
+  return preferredModel;
+}
+
+export async function listPreapprovedFallbackCandidates(host: string) {
+  const rows = await db
+    .select({
+      runId: taskRunTable.id,
+      taskId: taskRunTable.taskId,
+      scheduleId: executionScheduleTable.id,
+      agentPrincipalId: taskRunTable.agentPrincipalId,
+      hostId: taskRunTable.hostId,
+      scope: taskRunTable.scope,
+      evidence: taskRunTable.evidence,
+      state: taskRunTable.state,
+      leaseActive: taskRunTable.leaseActive,
+      preferredModel: executionScheduleTable.preferredModel,
+      fallbackModels: executionScheduleTable.fallbackModels,
+      maxRuntimeSeconds: executionScheduleTable.maxRuntimeSeconds,
+      scheduleHost: executionScheduleTable.host,
+    })
+    .from(taskRunTable)
+    .innerJoin(
+      executionScheduleTable,
+      eq(taskRunTable.scheduleId, executionScheduleTable.id),
+    )
+    .where(
+      and(
+        eq(taskRunTable.state, "blocked_quota"),
+        eq(taskRunTable.leaseActive, false),
+        eq(executionScheduleTable.host, host),
+        eq(executionScheduleTable.fallbackMode, "preapproved"),
+      ),
+    )
+    .orderBy(desc(taskRunTable.leaseEpoch))
+    .limit(100);
+
+  const activeTaskRows = rows.length
+    ? await db
+        .select({ taskId: taskRunTable.taskId })
+        .from(taskRunTable)
+        .where(
+          and(
+            inArray(
+              taskRunTable.taskId,
+              rows.map((row) => row.taskId),
+            ),
+            eq(taskRunTable.leaseActive, true),
+          ),
+        )
+    : [];
+  const activeTaskIds = new Set(activeTaskRows.map((row) => row.taskId));
+  const latestByTask = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (!activeTaskIds.has(row.taskId) && !latestByTask.has(row.taskId)) {
+      latestByTask.set(row.taskId, row);
+    }
+  }
+
+  return [...latestByTask.values()]
+    .map((row) => {
+      const evidence = asEvidenceRecord(row.evidence);
+      const failureKind = readWorkerFailureKind(evidence);
+      const fallbackIndex = readFallbackIndex(evidence);
+      const currentModel = readCurrentFallbackModel(
+        evidence,
+        row.preferredModel,
+      );
+      const nextModel = row.fallbackModels[fallbackIndex + 1] ?? null;
+      return {
+        runId: row.runId,
+        taskId: row.taskId,
+        scheduleId: row.scheduleId,
+        agentPrincipalId: row.agentPrincipalId,
+        hostId: row.hostId,
+        scope: row.scope,
+        state: row.state,
+        leaseActive: row.leaseActive,
+        failureKind,
+        currentModel,
+        fallbackIndex,
+        nextModel,
+        maxRuntimeSeconds: row.maxRuntimeSeconds,
+        host: row.scheduleHost,
+      };
+    })
+    .filter(
+      (candidate) =>
+        candidate.agentPrincipalId !== null &&
+        candidate.hostId === candidate.host &&
+        PREAPPROVED_FALLBACK_FAILURE_KINDS.has(candidate.failureKind ?? ""),
+    );
+}
+
+export async function advancePreapprovedFallback(input: {
+  taskId: string;
+  sourceRunId: string;
+  userId: string;
+  agentPrincipalId: string;
+  requestKey: string;
+}) {
+  const requestKey = requireIdempotencyKey(input.requestKey);
+  const requestHash = stableHash({
+    taskId: input.taskId,
+    sourceRunId: input.sourceRunId,
+    agentPrincipalId: input.agentPrincipalId,
+  });
+  const result = await db.transaction(async (tx) => {
+    await tx
+      .select({ id: taskTable.id })
+      .from(taskTable)
+      .where(eq(taskTable.id, input.taskId))
+      .for("update");
+    const [source] = await tx
+      .select()
+      .from(taskRunTable)
+      .where(
+        and(
+          eq(taskRunTable.id, input.sourceRunId),
+          eq(taskRunTable.taskId, input.taskId),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    if (!source) {
+      throw new HTTPException(404, { message: "Source task run not found" });
+    }
+    if (
+      !source.agentPrincipalId ||
+      source.agentPrincipalId !== input.agentPrincipalId
+    ) {
+      throw new HTTPException(403, {
+        message: "Fallback must keep the original worker principal",
+      });
+    }
+    const principal = await getOwnedPrincipal(
+      input.userId,
+      source.agentPrincipalId,
+      tx,
+    );
+    if (!principal.scopes.includes("run:claim")) {
+      throw new HTTPException(403, {
+        message: "Agent principal lacks run:claim scope",
+      });
+    }
+
+    const replay = await getIdempotencyReplay(tx, {
+      userId: input.userId,
+      operation: IDEMPOTENCY_OPERATIONS.preapprovedFallback,
+      requestKey,
+      requestHash,
+      runId: source.id,
+    });
+    if (replay) {
+      return { outcome: "replayed" as const, run: replay };
+    }
+
+    if (source.state !== "blocked_quota" || source.leaseActive) {
+      throw new HTTPException(409, {
+        message: "Preapproved fallback requires a released blocked_quota run",
+      });
+    }
+    if (!source.scheduleId) {
+      throw new HTTPException(409, {
+        message: "Preapproved fallback requires a scheduled run",
+      });
+    }
+    const [schedule] = await tx
+      .select()
+      .from(executionScheduleTable)
+      .where(eq(executionScheduleTable.id, source.scheduleId))
+      .limit(1);
+    if (schedule?.fallbackMode !== "preapproved") {
+      throw new HTTPException(409, {
+        message: "The source schedule does not allow preapproved fallback",
+      });
+    }
+    if (schedule.host !== source.hostId) {
+      throw new HTTPException(409, {
+        message: "Source run host does not match its schedule host",
+      });
+    }
+
+    const evidence = asEvidenceRecord(source.evidence);
+    const failureKind = readWorkerFailureKind(evidence);
+    if (!PREAPPROVED_FALLBACK_FAILURE_KINDS.has(failureKind ?? "")) {
+      throw new HTTPException(409, {
+        message: "The worker failure is not eligible for preapproved fallback",
+      });
+    }
+    const normalizedFailureKind = failureKind as string;
+    const fallbackIndex = readFallbackIndex(evidence);
+    const currentModel = readCurrentFallbackModel(
+      evidence,
+      schedule.preferredModel,
+    );
+    if (!currentModel) {
+      throw new HTTPException(409, {
+        message: "Preapproved fallback requires a preferred model",
+      });
+    }
+    const failedModel = currentModel as string;
+    const nextIndex = fallbackIndex + 1;
+    const nextModel = schedule.fallbackModels[nextIndex];
+    if (!nextModel) {
+      const [exhausted] = await tx
+        .update(taskRunTable)
+        .set({
+          state: "failed",
+          blocker: "preapproved_fallback_exhausted",
+          nextAction: "Parent must choose a model and resume manually",
+          evidence: {
+            ...evidence,
+            fallback: {
+              scheduleId: schedule.id,
+              fromRunId: source.id,
+              model: currentModel,
+              failedModel: currentModel,
+              failureKind: normalizedFailureKind,
+              fallbackIndex,
+              exhausted: true,
+            },
+          },
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(taskRunTable.id, source.id),
+            eq(taskRunTable.state, "blocked_quota"),
+            eq(taskRunTable.leaseActive, false),
+          ),
+        )
+        .returning();
+      if (!exhausted) {
+        throw new HTTPException(409, {
+          message: "Source run changed before fallback exhaustion was recorded",
+        });
+      }
+      await tx.insert(taskRunEvidenceTable).values({
+        runId: source.id,
+        agentPrincipalId: principal.id,
+        kind: "preapproved_fallback_exhausted",
+        payload: {
+          failureKind: normalizedFailureKind,
+          fallbackIndex,
+          model: currentModel,
+        },
+      });
+      const response = serializeRun(exhausted);
+      await saveIdempotencyResponse(tx, {
+        userId: input.userId,
+        agentPrincipalId: principal.id,
+        runId: source.id,
+        operation: IDEMPOTENCY_OPERATIONS.preapprovedFallback,
+        requestKey,
+        requestHash,
+        response,
+      });
+      return { outcome: "exhausted" as const, run: response };
+    }
+    validateModelId(nextModel, "fallback model");
+    if (nextModel === currentModel) {
+      throw new HTTPException(409, {
+        message: "Fallback model list repeats the failed model",
+      });
+    }
+    const taskContext = await getTaskContext(input.taskId, tx);
+    const modelPolicy: ScheduleRunModelPolicy = {
+      preferredModel: nextModel,
+      fallbackMode: "preapproved",
+      fallbackModels: schedule.fallbackModels.slice(nextIndex + 1),
+      maxRuntimeSeconds: schedule.maxRuntimeSeconds,
+      concurrencyKey: schedule.concurrencyKey,
+      retryPolicy: (schedule.retryPolicy ?? {}) as Record<string, number>,
+    };
+    assertManifestModelPolicy(taskContext.manifest.policy ?? {}, modelPolicy);
+    const fallbackRequestKey = `preapproved-fallback:${source.id}:${nextIndex}`;
+    const claimed = await claimTaskRun(
+      {
+        taskId: input.taskId,
+        userId: input.userId,
+        agentPrincipalId: input.agentPrincipalId,
+        scope: source.scope,
+        requestKey: fallbackRequestKey,
+        expectedHostId: schedule.host,
+        scheduleId: schedule.id,
+        concurrencyKey: schedule.concurrencyKey,
+        modelPolicy,
+        resumeFromRunId: source.id,
+        resumeBranchName: source.branchName,
+        resumeBaseSha: source.baseSha,
+        resumeCommitSha: source.commitSha,
+        resumeFallback: {
+          scheduleId: schedule.id,
+          fromRunId: source.id,
+          model: nextModel,
+          failedModel,
+          failureKind: normalizedFailureKind,
+          fallbackIndex: nextIndex,
+        },
+      },
+      tx,
+    );
+    await tx.insert(taskRunEvidenceTable).values({
+      runId: source.id,
+      agentPrincipalId: principal.id,
+      kind: "preapproved_fallback_dispatched",
+      payload: {
+        fromRunId: source.id,
+        toRunId: claimed.run.id,
+        model: nextModel,
+        failedModel,
+        failureKind: normalizedFailureKind,
+        fallbackIndex: nextIndex,
+      },
+    });
+    const response = serializeRun(claimed.run);
+    await saveIdempotencyResponse(tx, {
+      userId: input.userId,
+      agentPrincipalId: principal.id,
+      runId: source.id,
+      operation: IDEMPOTENCY_OPERATIONS.preapprovedFallback,
+      requestKey,
+      requestHash,
+      response,
+    });
+    return { outcome: "created" as const, run: response };
+  });
+
+  if (result.outcome === "created") {
+    await publishTaskRunUpdated(
+      input.taskId,
+      result.run.id,
+      input.userId,
+      result.run.state,
+    );
+  } else if (result.outcome === "exhausted") {
+    await publishTaskRunUpdated(
+      input.taskId,
+      input.sourceRunId,
+      input.userId,
+      result.run.state,
+    );
+  }
   return result;
 }
 
@@ -1945,7 +2338,10 @@ export async function reportTaskRun({
     const nextEvidence =
       evidence === undefined
         ? run.evidence
-        : validateJsonObject(evidence, "evidence");
+        : {
+            ...run.evidence,
+            worker: validateJsonObject(evidence, "evidence"),
+          };
     const [updated] = await tx
       .update(taskRunTable)
       .set({

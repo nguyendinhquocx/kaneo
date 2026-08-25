@@ -20,12 +20,14 @@ import {
   listDueSchedules,
 } from "./schedules";
 import {
+  advancePreapprovedFallback,
   claimTaskRun,
   createAgentPrincipal,
   getExecutionManifest,
   getTaskRun,
   heartbeatTaskRun,
   listAgentPrincipals,
+  listPreapprovedFallbackCandidates,
   listTaskRunEvidence,
   listTaskRuns,
   reclaimStaleTaskRuns,
@@ -113,6 +115,31 @@ const execution = new Hono<{
       },
     }),
     async (c) => c.json(await listAgentPrincipals(c.get("userId"))),
+  )
+  .get(
+    "/fallback/due",
+    describeRoute({
+      operationId: "listPreapprovedFallbackCandidates",
+      tags: ["Execution"],
+      description:
+        "List provider-blocked runs eligible for a declared fallback",
+      responses: { 200: { description: "Fallback candidates" } },
+    }),
+    validator("query", v.object({ host: v.optional(v.string()) })),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey");
+      if (apiKey && !apiKey.permissions?.execution?.includes("review")) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const host = c.req.valid("query").host?.trim() || "prodesk-home";
+      if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{1,63}$/.test(host)) {
+        return c.json({ error: "Invalid host binding" }, 400);
+      }
+      return c.json(await listPreapprovedFallbackCandidates(host));
+    },
   )
   .post(
     "/watchdog/reclaim",
@@ -567,6 +594,55 @@ const execution = new Hono<{
       return c.json(
         toTaskRunResponse(result.run, result.leaseToken),
         result.leaseToken ? 201 : 200,
+      );
+    },
+  )
+  .post(
+    "/task/:taskId/runs/:runId/fallback",
+    describeRoute({
+      operationId: "advancePreapprovedFallback",
+      tags: ["Execution"],
+      description:
+        "Create the next declared fallback run after a provider-blocked run",
+      responses: {
+        201: {
+          description: "Fallback run created",
+          content: {
+            "application/json": {
+              schema: resolver(
+                v.object({
+                  outcome: v.string(),
+                  run: taskRunSchema,
+                }),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string(), runId: v.string() })),
+    validator("json", v.object({ agentPrincipalId: v.string() })),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey");
+      if (apiKey && !apiKey.permissions?.execution?.includes("review")) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const { taskId, runId } = c.req.valid("param");
+      const { agentPrincipalId } = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const result = await advancePreapprovedFallback({
+        taskId,
+        sourceRunId: runId,
+        userId: c.get("userId"),
+        agentPrincipalId,
+        requestKey,
+      });
+      return c.json(
+        { outcome: result.outcome, run: result.run },
+        result.outcome === "created" ? 201 : 200,
       );
     },
   )

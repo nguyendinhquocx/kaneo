@@ -101,6 +101,14 @@ export type TaskUnassignedEvent = {
   title: string;
 };
 
+export type ExecutionRunUpdatedEvent = {
+  taskId: string;
+  projectId: string;
+  runId: string;
+  userId: string;
+  state: string;
+};
+
 export type TaskEvent =
   | TaskCreatedEvent
   | TaskStatusChangedEvent
@@ -126,6 +134,11 @@ export type ExternalMetadata = {
 
 export type TaskEventHandler<T extends TaskEvent = TaskEvent> = (
   event: T,
+  context: PluginContext,
+) => Promise<void>;
+
+export type ExecutionRunEventHandler = (
+  event: ExecutionRunUpdatedEvent,
   context: PluginContext,
 ) => Promise<void>;
 
@@ -158,6 +171,7 @@ export type IntegrationPlugin = {
   onTaskDueDateChanged?: TaskEventHandler<TaskDueDateChangedEvent>;
   onTaskAssigneeChanged?: TaskEventHandler<TaskAssigneeChangedEvent>;
   onTaskUnassigned?: TaskEventHandler<TaskUnassignedEvent>;
+  onExecutionRunUpdated?: ExecutionRunEventHandler;
 
   handleWebhook?: WebhookHandler;
   getTaskMetadata?: MetadataProvider;

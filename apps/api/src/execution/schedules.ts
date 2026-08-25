@@ -128,10 +128,9 @@ export async function createExecutionSchedule(input: CreateScheduleInput) {
     input.preferredModel === undefined || input.preferredModel === null
       ? null
       : validateModelId(input.preferredModel, "preferredModel");
-  if (policy.fallbackMode === "preapproved") {
+  if (policy.fallbackMode === "preapproved" && preferredModel === null) {
     throw new HTTPException(400, {
-      message:
-        "preapproved fallback is not executable until the quota/resume worker is enabled",
+      message: "preapproved fallback requires a preferredModel",
     });
   }
 

@@ -1,6 +1,7 @@
 import type { IntegrationPlugin } from "../types";
 import { validateTelegramConfig } from "./config";
 import {
+  handleExecutionRunUpdated,
   handleTaskCommentCreated,
   handleTaskCreated,
   handleTaskDescriptionChanged,
@@ -18,5 +19,6 @@ export const telegramPlugin: IntegrationPlugin = {
   onTaskTitleChanged: handleTaskTitleChanged,
   onTaskDescriptionChanged: handleTaskDescriptionChanged,
   onTaskCommentCreated: handleTaskCommentCreated,
+  onExecutionRunUpdated: handleExecutionRunUpdated,
   validateConfig: validateTelegramConfig,
 };
