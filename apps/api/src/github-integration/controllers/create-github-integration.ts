@@ -1,7 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
-import { integrationTable, projectTable } from "../../database/schema";
+import {
+  githubIntegrationTable,
+  integrationTable,
+  projectTable,
+} from "../../database/schema";
 import { defaultGitHubConfig } from "../../plugins/github/config";
 import { getGithubApp } from "../../plugins/github/utils/github-app";
 
@@ -68,13 +72,6 @@ async function createGithubIntegration({
     console.warn("Could not get installation ID for repository:", error);
   }
 
-  const existingIntegration = await db.query.integrationTable.findFirst({
-    where: and(
-      eq(integrationTable.projectId, projectId),
-      eq(integrationTable.type, "github"),
-    ),
-  });
-
   const config = {
     repositoryOwner,
     repositoryName,
@@ -82,54 +79,65 @@ async function createGithubIntegration({
     ...defaultGitHubConfig,
   };
 
-  if (existingIntegration) {
-    const [updatedIntegration] = await db
-      .update(integrationTable)
-      .set({
+  return db.transaction(async (tx) => {
+    const now = new Date();
+    const [savedIntegration] = await tx
+      .insert(integrationTable)
+      .values({
+        projectId,
+        type: "github",
         config: JSON.stringify(config),
         isActive: true,
-        updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(integrationTable.projectId, projectId),
-          eq(integrationTable.type, "github"),
-        ),
-      )
+      .onConflictDoUpdate({
+        target: [integrationTable.projectId, integrationTable.type],
+        set: {
+          config: JSON.stringify(config),
+          isActive: true,
+          updatedAt: now,
+        },
+      })
       .returning();
 
+    if (!savedIntegration) {
+      throw new HTTPException(500, {
+        message: "Failed to save GitHub integration",
+      });
+    }
+
+    await tx
+      .insert(githubIntegrationTable)
+      .values({
+        projectId,
+        repositoryOwner,
+        repositoryName,
+        installationId,
+        isActive: true,
+        createdAt: savedIntegration.createdAt,
+        updatedAt: savedIntegration.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: githubIntegrationTable.projectId,
+        set: {
+          repositoryOwner,
+          repositoryName,
+          installationId,
+          isActive: true,
+          updatedAt: savedIntegration.updatedAt,
+        },
+      });
+
     return {
-      id: updatedIntegration?.id,
-      projectId: updatedIntegration?.projectId,
+      id: savedIntegration.id,
+      projectId: savedIntegration.projectId,
       repositoryOwner,
       repositoryName,
       installationId,
-      isActive: updatedIntegration?.isActive,
-      createdAt: updatedIntegration?.createdAt,
-      updatedAt: updatedIntegration?.updatedAt,
+      isActive: savedIntegration.isActive,
+      createdAt: savedIntegration.createdAt,
+      updatedAt: savedIntegration.updatedAt,
     };
-  }
-
-  const [newIntegration] = await db
-    .insert(integrationTable)
-    .values({
-      projectId,
-      type: "github",
-      config: JSON.stringify(config),
-      isActive: true,
-    })
-    .returning();
-
-  return {
-    id: newIntegration?.id,
-    projectId: newIntegration?.projectId,
-    repositoryOwner,
-    repositoryName,
-    installationId,
-    isActive: newIntegration?.isActive,
-    createdAt: newIntegration?.createdAt,
-    updatedAt: newIntegration?.updatedAt,
-  };
+  });
 }
 
 export default createGithubIntegration;
