@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createLeaseToken,
   extractWorkerContractScope,
+  extractWorkerContractState,
   getLeaseExpiry,
   hashLeaseToken,
   isLeaseExpired,
@@ -76,6 +77,20 @@ describe("execution lease and scope validation", () => {
     expect(
       extractWorkerContractScope('{"files":["src/a.ts","laptop-only"]}'),
     ).toBeNull();
+  });
+
+  it("reads execution lifecycle state from the control-plane envelope", () => {
+    expect(
+      extractWorkerContractState(
+        '{"schema":1,"agent":"pi-prodesk","state":"ready","scope":["src/app.mjs"]}',
+      ),
+    ).toBe("ready");
+    expect(
+      extractWorkerContractState(
+        'prefix {"schema":1,"state":"published"} task body',
+      ),
+    ).toBe("published");
+    expect(extractWorkerContractState('{"state":"open"}')).toBeNull();
   });
 
   it("rejects shell-bearing model ids", () => {

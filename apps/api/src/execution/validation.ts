@@ -343,6 +343,39 @@ export function extractWorkerContractScope(
   return null;
 }
 
+/**
+ * Read the control-plane task state from the machine-readable envelope.
+ * Normal Kaneo columns intentionally remain user-facing workflow columns, so
+ * scheduled execution must not confuse a column slug such as `to-do` with the
+ * internal published/ready/queued lifecycle.
+ */
+export function extractWorkerContractState(
+  description: unknown,
+): string | null {
+  if (typeof description !== "string" || description.length > 128 * 1024) {
+    return null;
+  }
+  for (let start = 0; start < description.length; start += 1) {
+    if (description[start] !== "{") continue;
+    const candidate = parseEmbeddedJsonObject(description, start);
+    if (
+      !candidate ||
+      typeof candidate !== "object" ||
+      Array.isArray(candidate)
+    ) {
+      continue;
+    }
+    const record = candidate as Record<string, unknown>;
+    if (
+      (record.schema === 1 || typeof record.agent === "string") &&
+      typeof record.state === "string"
+    ) {
+      return record.state.trim();
+    }
+  }
+  return null;
+}
+
 export class ScheduleEligibilityError extends Error {
   readonly code = "schedule_eligibility";
 

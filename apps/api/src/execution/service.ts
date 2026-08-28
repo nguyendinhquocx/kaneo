@@ -30,6 +30,7 @@ import {
   createLeaseToken,
   EXECUTION_PROTOCOL_VERSION,
   extractWorkerContractScope,
+  extractWorkerContractState,
   getLeaseExpiry,
   hashLeaseToken,
   isLeaseExpired,
@@ -1114,9 +1115,11 @@ async function assertScheduledTaskEligible(
     modelPolicy?: ScheduleRunModelPolicy;
   },
 ) {
-  if (input.status !== "ready" && input.status !== "queued") {
+  const executionState =
+    extractWorkerContractState(input.description) ?? input.status;
+  if (executionState !== "ready" && executionState !== "queued") {
     throw new ScheduleEligibilityError(
-      `Scheduled task must be ready or queued, got ${input.status}`,
+      `Scheduled task must be ready or queued, got ${executionState}`,
     );
   }
 
