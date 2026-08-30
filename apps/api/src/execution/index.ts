@@ -1,4 +1,6 @@
+import type { Context, Next } from "hono";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import {
@@ -8,7 +10,10 @@ import {
   taskRunSchema,
 } from "../schemas";
 import { isInstanceAdmin } from "../utils/is-instance-admin";
-import { requireWorkspacePermission } from "../utils/require-workspace-permission";
+import {
+  hasWorkspacePermission,
+  requireWorkspacePermission,
+} from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import { listExecutionFlags, setExecutionFlag } from "./gates";
 import {
@@ -49,6 +54,58 @@ import {
   toTaskRunResponse,
   upsertExecutionManifest,
 } from "./service";
+
+type ExecutionApiKeyContext = {
+  permissions?: Record<string, string[]> | null;
+};
+
+function hasExecutionScope(c: Context, scopes: readonly string[]): boolean {
+  const apiKey = c.get("apiKey") as ExecutionApiKeyContext | undefined;
+  const granted = apiKey?.permissions?.execution;
+  return (
+    Array.isArray(granted) && granted.some((scope) => scopes.includes(scope))
+  );
+}
+
+async function isInstanceAdminOrExecutionScope(
+  c: Context,
+  scopes: readonly string[],
+): Promise<boolean> {
+  return hasExecutionScope(c, scopes) || (await isInstanceAdmin(c));
+}
+
+function isTelegramControlKey(c: Context): boolean {
+  return (
+    hasExecutionScope(c, ["telegram_control"]) &&
+    !hasExecutionScope(c, ["review"])
+  );
+}
+
+/**
+ * Parent review remains the only path to review/merge. A Telegram control key
+ * may create only restricted control requests, after task-read workspace access
+ * has already been established by workspaceAccess.fromTask().
+ */
+async function requireControlRequestPermission(c: Context, next: Next) {
+  if (!isTelegramControlKey(c)) {
+    return requireWorkspacePermission({ execution: ["review"] })(c, next);
+  }
+  if (!(await hasWorkspacePermission(c, { task: ["read"] }))) {
+    throw new HTTPException(403, { message: "Insufficient permissions" });
+  }
+  return next();
+}
+
+const executionQueryLimit = v.optional(
+  v.pipe(
+    v.string(),
+    v.transform((value) => Number(value)),
+    v.number(),
+    v.integer(),
+    v.minValue(1),
+    v.maxValue(200),
+  ),
+);
 
 const execution = new Hono<{
   Variables: {
@@ -1109,7 +1166,7 @@ const execution = new Hono<{
       }),
     ),
     workspaceAccess.fromTask("taskId"),
-    requireWorkspacePermission({ execution: ["review"] }),
+    requireControlRequestPermission,
     async (c) => {
       const body = c.req.valid("json");
       const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
@@ -1172,22 +1229,11 @@ const execution = new Hono<{
     }),
     validator(
       "query",
-      v.object({ host: v.string(), limit: v.optional(v.number()) }),
+      v.object({ host: v.string(), limit: executionQueryLimit }),
     ),
     async (c) => {
-      if (!(await isInstanceAdmin(c))) {
+      if (!(await isInstanceAdminOrExecutionScope(c, ["dispatch", "review"]))) {
         return c.json({ error: "Insufficient permissions" }, 403);
-      }
-      const apiKey = c.get("apiKey") as
-        | { permissions?: Record<string, string[]> | null }
-        | undefined;
-      if (
-        apiKey &&
-        !apiKey.permissions?.execution?.some((scope) =>
-          ["dispatch", "review"].includes(scope),
-        )
-      ) {
-        return c.json({ error: "Insufficient API key scope" }, 403);
       }
       const query = c.req.valid("query");
       const requests = await listDueControlRequests({
@@ -1223,19 +1269,8 @@ const execution = new Hono<{
       }),
     ),
     async (c) => {
-      if (!(await isInstanceAdmin(c))) {
+      if (!(await isInstanceAdminOrExecutionScope(c, ["dispatch", "review"]))) {
         return c.json({ error: "Insufficient permissions" }, 403);
-      }
-      const apiKey = c.get("apiKey") as
-        | { permissions?: Record<string, string[]> | null }
-        | undefined;
-      if (
-        apiKey &&
-        !apiKey.permissions?.execution?.some((scope) =>
-          ["dispatch", "review"].includes(scope),
-        )
-      ) {
-        return c.json({ error: "Insufficient API key scope" }, 403);
       }
       const { id } = c.req.valid("param");
       const body = c.req.valid("json");
@@ -1274,19 +1309,8 @@ const execution = new Hono<{
       }),
     ),
     async (c) => {
-      if (!(await isInstanceAdmin(c))) {
+      if (!(await isInstanceAdminOrExecutionScope(c, ["dispatch", "review"]))) {
         return c.json({ error: "Insufficient permissions" }, 403);
-      }
-      const apiKey = c.get("apiKey") as
-        | { permissions?: Record<string, string[]> | null }
-        | undefined;
-      if (
-        apiKey &&
-        !apiKey.permissions?.execution?.some((scope) =>
-          ["dispatch", "review"].includes(scope),
-        )
-      ) {
-        return c.json({ error: "Insufficient API key scope" }, 403);
       }
       const { id } = c.req.valid("param");
       const body = c.req.valid("json");
@@ -1321,23 +1345,17 @@ const execution = new Hono<{
       "query",
       v.object({
         route: v.optional(v.string()),
-        limit: v.optional(v.number()),
+        limit: executionQueryLimit,
       }),
     ),
     async (c) => {
-      if (!(await isInstanceAdmin(c))) {
-        return c.json({ error: "Insufficient permissions" }, 403);
-      }
-      const apiKey = c.get("apiKey") as
-        | { permissions?: Record<string, string[]> | null }
-        | undefined;
       if (
-        apiKey &&
-        !apiKey.permissions?.execution?.some((scope) =>
-          ["telegram_read", "telegram_control"].includes(scope),
-        )
+        !(await isInstanceAdminOrExecutionScope(c, [
+          "telegram_read",
+          "telegram_control",
+        ]))
       ) {
-        return c.json({ error: "Insufficient API key scope" }, 403);
+        return c.json({ error: "Insufficient permissions" }, 403);
       }
       const query = c.req.valid("query");
       const events = await listDueNotificationEvents({
@@ -1382,17 +1400,8 @@ const execution = new Hono<{
       }),
     ),
     async (c) => {
-      if (!(await isInstanceAdmin(c))) {
+      if (!(await isInstanceAdminOrExecutionScope(c, ["telegram_control"]))) {
         return c.json({ error: "Insufficient permissions" }, 403);
-      }
-      const apiKey = c.get("apiKey") as
-        | { permissions?: Record<string, string[]> | null }
-        | undefined;
-      if (
-        apiKey &&
-        !apiKey.permissions?.execution?.includes("telegram_control")
-      ) {
-        return c.json({ error: "Insufficient API key scope" }, 403);
       }
       const { id } = c.req.valid("param");
       const body = c.req.valid("json");
