@@ -668,7 +668,12 @@ const execution = new Hono<{
       }),
     ),
     workspaceAccess.fromTask("taskId"),
-    requireWorkspacePermission({ task: ["update"] }),
+    async (c, next) => {
+      if (!(await isInstanceAdminOrExecutionScope(c, ["dispatch", "review"]))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      return next();
+    },
     async (c) => {
       const { taskId, runId } = c.req.valid("param");
       const body = c.req.valid("json");
