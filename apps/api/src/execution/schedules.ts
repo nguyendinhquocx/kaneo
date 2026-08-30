@@ -9,17 +9,19 @@
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lte, or } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import {
   agentPrincipalTable,
   executionScheduleOccurrenceTable,
   executionScheduleTable,
+  taskRelationTable,
   taskRunTable,
   taskTable,
 } from "../database/schema";
 import { publishEvent } from "../events";
+import { enqueueNotificationEvent } from "./outbox";
 import {
   claimTaskRun,
   type ExecutionTransaction,
@@ -39,6 +41,12 @@ import {
 
 type OccurrenceState = (typeof SCHEDULE_OCCURRENCE_STATES)[number];
 
+const SCHEDULE_NOTIFICATION_ROUTES = ["prodesk-telegram"] as const;
+const SCHEDULE_QUOTA_RESUME_MODES = [
+  "disabled",
+  "allowed_same_model_after_reset",
+] as const;
+
 function scheduleRequestHash(input: {
   taskId: string;
   projectId: string;
@@ -51,6 +59,10 @@ function scheduleRequestHash(input: {
   maxRuntimeSeconds: number;
   concurrencyKey: string;
   retryPolicy: Record<string, number>;
+  dependencyPolicy: string;
+  notificationRoute: string | null;
+  telegramQuotaResume: string;
+  planHash: string | null;
 }) {
   return stableHash({
     taskId: input.taskId,
@@ -64,6 +76,10 @@ function scheduleRequestHash(input: {
     maxRuntimeSeconds: input.maxRuntimeSeconds,
     concurrencyKey: input.concurrencyKey,
     retryPolicy: input.retryPolicy,
+    dependencyPolicy: input.dependencyPolicy,
+    notificationRoute: input.notificationRoute,
+    telegramQuotaResume: input.telegramQuotaResume,
+    planHash: input.planHash,
   });
 }
 
@@ -104,6 +120,10 @@ export interface CreateScheduleInput {
   maxRuntimeSeconds: unknown;
   concurrencyKey?: unknown;
   retryPolicy?: unknown;
+  dependencyPolicy?: unknown;
+  notificationRoute?: unknown;
+  telegramQuotaResume?: unknown;
+  planHash?: unknown;
 }
 
 export async function createExecutionSchedule(input: CreateScheduleInput) {
@@ -133,6 +153,63 @@ export async function createExecutionSchedule(input: CreateScheduleInput) {
       message: "preapproved fallback requires a preferredModel",
     });
   }
+  // SPEC-kaneo-native-telegram-control-v0-1 policy fields: v0.1 freezes
+  // dependencyPolicy=reject, a logical notification route allowlist and an
+  // explicit Telegram quota-resume mode.
+  if (
+    input.dependencyPolicy !== undefined &&
+    input.dependencyPolicy !== "reject"
+  ) {
+    throw new HTTPException(400, {
+      message: 'dependencyPolicy must be "reject" in v0.1',
+    });
+  }
+  const dependencyPolicy = "reject";
+  let notificationRoute: string | null = null;
+  if (
+    input.notificationRoute !== undefined &&
+    input.notificationRoute !== null
+  ) {
+    if (
+      typeof input.notificationRoute !== "string" ||
+      !(SCHEDULE_NOTIFICATION_ROUTES as readonly string[]).includes(
+        input.notificationRoute,
+      )
+    ) {
+      throw new HTTPException(400, {
+        message: `notificationRoute must be one of: ${SCHEDULE_NOTIFICATION_ROUTES.join(", ")}`,
+      });
+    }
+    notificationRoute = input.notificationRoute;
+  }
+  const telegramQuotaResume =
+    input.telegramQuotaResume === undefined ||
+    input.telegramQuotaResume === null
+      ? "disabled"
+      : typeof input.telegramQuotaResume === "string" &&
+          (SCHEDULE_QUOTA_RESUME_MODES as readonly string[]).includes(
+            input.telegramQuotaResume,
+          )
+        ? input.telegramQuotaResume
+        : null;
+  if (telegramQuotaResume === null) {
+    throw new HTTPException(400, {
+      message: `telegramQuotaResume must be one of: ${SCHEDULE_QUOTA_RESUME_MODES.join(", ")}`,
+    });
+  }
+  let planHash: string | null = null;
+  if (input.planHash !== undefined && input.planHash !== null) {
+    if (
+      typeof input.planHash !== "string" ||
+      input.planHash.length < 8 ||
+      input.planHash.length > 128
+    ) {
+      throw new HTTPException(400, {
+        message: "planHash must be a bounded string (8-128 chars)",
+      });
+    }
+    planHash = input.planHash;
+  }
 
   const [existingByRequest] = await db
     .select()
@@ -152,6 +229,10 @@ export async function createExecutionSchedule(input: CreateScheduleInput) {
       maxRuntimeSeconds: existingByRequest.maxRuntimeSeconds,
       concurrencyKey: existingByRequest.concurrencyKey,
       retryPolicy: existingByRequest.retryPolicy as Record<string, number>,
+      dependencyPolicy: existingByRequest.dependencyPolicy,
+      notificationRoute: existingByRequest.notificationRoute,
+      telegramQuotaResume: existingByRequest.telegramQuotaResume,
+      planHash: existingByRequest.planHash,
     });
     const requestedHash = scheduleRequestHash({
       taskId: input.taskId,
@@ -165,6 +246,10 @@ export async function createExecutionSchedule(input: CreateScheduleInput) {
       maxRuntimeSeconds: policy.maxRuntimeSeconds,
       concurrencyKey: policy.concurrencyKey,
       retryPolicy,
+      dependencyPolicy,
+      notificationRoute,
+      telegramQuotaResume,
+      planHash,
     });
     if (existingHash !== requestedHash) {
       throw new HTTPException(409, {
@@ -204,6 +289,10 @@ export async function createExecutionSchedule(input: CreateScheduleInput) {
       maxRuntimeSeconds: policy.maxRuntimeSeconds,
       retryPolicy,
       concurrencyKey: policy.concurrencyKey,
+      dependencyPolicy,
+      notificationRoute,
+      telegramQuotaResume,
+      planHash,
       nextDispatchAt: input.notBefore,
     })
     .onConflictDoNothing({ target: executionScheduleTable.requestKey })
@@ -227,6 +316,10 @@ export async function createExecutionSchedule(input: CreateScheduleInput) {
         maxRuntimeSeconds: racedSchedule.maxRuntimeSeconds,
         concurrencyKey: racedSchedule.concurrencyKey,
         retryPolicy: racedSchedule.retryPolicy as Record<string, number>,
+        dependencyPolicy: racedSchedule.dependencyPolicy,
+        notificationRoute: racedSchedule.notificationRoute,
+        telegramQuotaResume: racedSchedule.telegramQuotaResume,
+        planHash: racedSchedule.planHash,
       });
       const requestedHash = scheduleRequestHash({
         taskId: input.taskId,
@@ -240,6 +333,10 @@ export async function createExecutionSchedule(input: CreateScheduleInput) {
         maxRuntimeSeconds: policy.maxRuntimeSeconds,
         concurrencyKey: policy.concurrencyKey,
         retryPolicy,
+        dependencyPolicy,
+        notificationRoute,
+        telegramQuotaResume,
+        planHash,
       });
       if (racedHash === requestedHash) return racedSchedule;
     }
@@ -273,6 +370,11 @@ export async function listDueSchedules(input: { host: string; now?: Date }) {
       retryPolicy: executionScheduleTable.retryPolicy,
       concurrencyKey: executionScheduleTable.concurrencyKey,
       enabled: executionScheduleTable.enabled,
+      scheduleRevision: executionScheduleTable.scheduleRevision,
+      planHash: executionScheduleTable.planHash,
+      dependencyPolicy: executionScheduleTable.dependencyPolicy,
+      telegramQuotaResume: executionScheduleTable.telegramQuotaResume,
+      notificationRoute: executionScheduleTable.notificationRoute,
       lastDispatchAt: executionScheduleTable.lastDispatchAt,
       nextDispatchAt: executionScheduleTable.nextDispatchAt,
     })
@@ -443,6 +545,10 @@ export async function markOccurrenceDispatched(
     runId: string;
     claimGeneration: number;
     claimedBy: string;
+    scheduleRevision?: number;
+    planHash?: string | null;
+    taskRevision?: number | undefined;
+    supervisorFenceHash?: string;
   },
   transaction?: ExecutionTransaction,
   ackToken?: string,
@@ -454,6 +560,9 @@ export async function markOccurrenceDispatched(
     failureReason: null;
     updatedAt: Date;
     ackTokenHash?: string;
+    scheduleRevision?: number;
+    planHash?: string | null;
+    supervisorFenceHash?: string;
   } = {
     state: "dispatched",
     runId: input.runId,
@@ -461,6 +570,13 @@ export async function markOccurrenceDispatched(
     updatedAt: new Date(),
   };
   if (ackToken) values.ackTokenHash = stableHash(ackToken);
+  if (input.scheduleRevision !== undefined) {
+    values.scheduleRevision = input.scheduleRevision;
+  }
+  if (input.planHash !== undefined) values.planHash = input.planHash;
+  if (input.supervisorFenceHash) {
+    values.supervisorFenceHash = input.supervisorFenceHash;
+  }
   const [updated] = await executor
     .update(executionScheduleOccurrenceTable)
     .set(values)
@@ -682,17 +798,87 @@ export interface DispatchOutcome {
     | "no_op";
   reason?: string;
   ackToken?: string;
+  /** One-time supervisor fence: delivered to the fixed runner only through
+   * the local 0600 handoff file, never through logs or the LLM context. */
+  runnerSupervisorFence?: string;
 }
 
 const TERMINAL_SCHEDULE_RUN_STATES = new Set([
   "in_review",
-  "blocked",
-  "done",
+  "finalized",
   "rejected",
+  "blocked_quota",
+  "blocked_input",
+  "blocked_clarification",
+  "blocked_branch_drift",
   "failed",
+  "orphaned",
   "cancelled",
   "superseded",
 ]);
+
+/** Dependency gates that v0.1 can enforce from durable data at due time.
+ * `requires_artifact` and `requires_parent_confirmation` stay declared-only
+ * until dedicated artifact/confirmation tables land (spec T1 note). */
+class DependencyGateError extends Error {}
+
+async function assertDependencyGatesForDispatch(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  taskId: string,
+) {
+  const blocking = await tx
+    .select({ sourceTaskId: taskRelationTable.sourceTaskId })
+    .from(taskRelationTable)
+    .where(
+      and(
+        eq(taskRelationTable.targetTaskId, taskId),
+        eq(taskRelationTable.relationType, "blocks"),
+      ),
+    );
+  const sourceIds = [...new Set(blocking.map((row) => row.sourceTaskId))];
+  for (const sourceId of sourceIds) {
+    const [source] = await tx
+      .select({ executionState: taskTable.executionState })
+      .from(taskTable)
+      .where(eq(taskTable.id, sourceId))
+      .limit(1);
+    if (!source || source.executionState !== "done") {
+      throw new DependencyGateError(
+        `requires_task_done: blocking task ${sourceId} is not done`,
+      );
+    }
+    const [sourceRun] = await tx
+      .select({
+        state: taskRunTable.state,
+        finalizationReceipt: taskRunTable.finalizationReceipt,
+      })
+      .from(taskRunTable)
+      .where(eq(taskRunTable.taskId, sourceId))
+      .orderBy(desc(taskRunTable.createdAt))
+      .limit(1);
+    if (
+      sourceRun &&
+      sourceRun.state === "finalized" &&
+      !(sourceRun.finalizationReceipt ?? {}).receiptHash
+    ) {
+      throw new DependencyGateError(
+        `requires_merge_receipt: finalized run of ${sourceId} has no verified merge receipt`,
+      );
+    }
+  }
+  const [activeRun] = await tx
+    .select({ id: taskRunTable.id })
+    .from(taskRunTable)
+    .where(
+      and(eq(taskRunTable.taskId, taskId), eq(taskRunTable.leaseActive, true)),
+    )
+    .limit(1);
+  if (activeRun) {
+    throw new DependencyGateError(
+      `requires_no_active_run: run ${activeRun.id} still holds an active lease`,
+    );
+  }
+}
 
 async function getOccurrenceRun(runId: string) {
   const [run] = await db
@@ -852,7 +1038,40 @@ type DispatchScheduleContext = {
   };
   scope: string[];
   noOpReason?: string;
+  /** Snapshot revision the dispatcher polled; CAS guard against mid-flight
+   * schedule edits (host/model/policy changed after poll). */
+  expectedScheduleRevision?: number | null;
 };
+
+function emptyClaim(): ClaimOccurrenceResult {
+  return {
+    occurrenceId: "",
+    occurrenceKey: "",
+    state: "planned",
+    runId: null,
+    claimGeneration: 0,
+    claimedBy: null,
+    newlyClaimed: false,
+  };
+}
+
+async function disableScheduleWithReason(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  scheduleId: string,
+  reason: string,
+  now: Date,
+) {
+  await tx
+    .update(executionScheduleTable)
+    .set({
+      enabled: false,
+      nextDispatchAt: null,
+      disableReason: reason.slice(0, 500),
+      lastFailureAt: now,
+      updatedAt: now,
+    })
+    .where(eq(executionScheduleTable.id, scheduleId));
+}
 
 async function dispatchNewOccurrenceAtomically(
   input: DispatchScheduleContext & { now: Date },
@@ -870,6 +1089,71 @@ async function dispatchNewOccurrenceAtomically(
     retryPolicy: input.schedule.retryPolicy,
   };
   return db.transaction(async (tx) => {
+    // Lock order: schedule -> task -> dependency rows -> active runs ->
+    // occurrence unique key. The schedule lock doubles as the revision CAS
+    // fence against mid-flight policy edits.
+    const [scheduleRow] = await tx
+      .select()
+      .from(executionScheduleTable)
+      .where(eq(executionScheduleTable.id, input.schedule.id))
+      .limit(1)
+      .for("update");
+    if (!scheduleRow) {
+      throw new HTTPException(404, { message: "schedule not found" });
+    }
+    if (
+      input.expectedScheduleRevision !== undefined &&
+      input.expectedScheduleRevision !== null &&
+      scheduleRow.scheduleRevision !== input.expectedScheduleRevision
+    ) {
+      return {
+        claim: emptyClaim(),
+        outcome: {
+          scheduleId: input.schedule.id,
+          occurrenceId: "",
+          runId: null,
+          outcome: "no_op" as const,
+          reason: "schedule_revision_changed",
+        },
+      };
+    }
+
+    // Dependency gates recheck BEFORE any occurrence is claimed: a gate that
+    // just failed must never consume an occurrence or create a run.
+    if (!input.noOpReason) {
+      try {
+        await assertDependencyGatesForDispatch(tx, input.schedule.taskId);
+      } catch (error) {
+        if (!(error instanceof DependencyGateError)) throw error;
+        const reason = `dependency_gate_failed: ${error.message}`;
+        await disableScheduleWithReason(
+          tx,
+          input.schedule.id,
+          reason,
+          input.now,
+        );
+        await enqueueNotificationEvent(tx, {
+          taskId: input.schedule.taskId,
+          kind: "failed",
+          payload: {
+            scheduleId: input.schedule.id,
+            outcome: "dependency_gate_failed",
+            reason: reason.slice(0, 300),
+          },
+        });
+        return {
+          claim: emptyClaim(),
+          outcome: {
+            scheduleId: input.schedule.id,
+            occurrenceId: "",
+            runId: null,
+            outcome: "no_op" as const,
+            reason,
+          },
+        };
+      }
+    }
+
     const claim = await claimScheduleOccurrence(
       {
         scheduleId: input.schedule.id,
@@ -961,12 +1245,17 @@ async function dispatchNewOccurrenceAtomically(
         tx,
       );
       const ackToken = randomBytes(32).toString("base64url");
+      const supervisorFence = randomBytes(32).toString("base64url");
       await markOccurrenceDispatched(
         {
           occurrenceId: claim.occurrenceId,
           runId: run.id,
           claimGeneration: claim.claimGeneration,
           claimedBy: claim.claimedBy ?? "",
+          scheduleRevision: scheduleRow.scheduleRevision,
+          planHash: scheduleRow.planHash,
+          taskRevision: run.taskRevisionAtClaim,
+          supervisorFenceHash: stableHash(supervisorFence),
         },
         tx,
         ackToken,
@@ -984,6 +1273,7 @@ async function dispatchNewOccurrenceAtomically(
           runId: run.id,
           outcome: "dispatched" as const,
           ackToken,
+          runnerSupervisorFence: supervisorFence,
         },
       };
     } catch (error) {

@@ -4,10 +4,17 @@ import { HTTPException } from "hono/http-exception";
 export const LEASE_TTL_MS = 60_000;
 export const EXECUTION_PROTOCOL_VERSION = 1;
 
+// Canonical run states (SPEC-kaneo-native-telegram-control-v0-1). Legacy
+// names (`running`, `stale`, `blocked`, `done`) are rejected on new writes
+// and only accepted through mapLegacyRunState for migration/reads.
 export const TASK_RUN_STATES = [
+  "created",
+  "leased",
   "in_progress",
+  "checkpointed",
   "in_review",
-  "blocked",
+  "finalized",
+  "rejected",
   "blocked_quota",
   "blocked_input",
   "blocked_clarification",
@@ -16,11 +23,157 @@ export const TASK_RUN_STATES = [
   "failed",
   "cancelled",
   "superseded",
-  "done",
-  "rejected",
 ] as const;
 
 export type TaskRunState = (typeof TASK_RUN_STATES)[number];
+
+/** `in_review` is worker-terminal only; parent review owns the outgoing
+ * transitions (finalized/rejected). Fully-terminal states must never have
+ * outgoing transitions (machine-enforced contract invariant). */
+export const WORKER_TERMINAL_RUN_STATES = ["in_review"] as const;
+
+export const FULLY_TERMINAL_RUN_STATES = [
+  "finalized",
+  "rejected",
+  "blocked_quota",
+  "blocked_input",
+  "blocked_clarification",
+  "blocked_branch_drift",
+  "orphaned",
+  "failed",
+  "cancelled",
+  "superseded",
+] as const;
+
+/** States a worker may report through the fenced worker report endpoint.
+ * `checkpointed` is NOT reportable here: checkpoints must go through the
+ * dedicated /checkpoints endpoint with a fixed Git guard push receipt. */
+export const WORKER_REPORTABLE_STATES = [
+  "in_progress",
+  "in_review",
+  "blocked_quota",
+  "blocked_input",
+  "blocked_clarification",
+  "blocked_branch_drift",
+  "failed",
+] as const;
+
+export const WORKER_FAILURE_KINDS = [
+  "provider_quota",
+  "provider_timeout",
+  "provider_5xx",
+  "provider_auth",
+  "worker_crash",
+  "test_failure",
+] as const;
+
+export type WorkerFailureKind = (typeof WORKER_FAILURE_KINDS)[number];
+
+export function validateFailureKind(
+  value: unknown,
+): WorkerFailureKind | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "string" ||
+    !(WORKER_FAILURE_KINDS as readonly string[]).includes(value)
+  ) {
+    throw new HTTPException(400, { message: "Invalid failureKind" });
+  }
+  return value as WorkerFailureKind;
+}
+
+export const LEGACY_TASK_RUN_STATES = [
+  "running",
+  "stale",
+  "blocked",
+  "done",
+] as const;
+
+export type LegacyTaskRunState = (typeof LEGACY_TASK_RUN_STATES)[number];
+
+/**
+ * Map a legacy run state to its canonical replacement for reads/migration.
+ * - `blocked` and `done` are ambiguous without evidence, so they map to
+ *   `failed`/`in_review` respectively and the caller must flag manual
+ *   recovery/review; new writes must never accept these names.
+ */
+export function mapLegacyRunState(
+  value: string,
+): { state: TaskRunState; manualFollowUpRequired: boolean } | null {
+  if ((TASK_RUN_STATES as readonly string[]).includes(value)) {
+    return { state: value as TaskRunState, manualFollowUpRequired: false };
+  }
+  switch (value) {
+    case "running":
+      return { state: "in_progress", manualFollowUpRequired: false };
+    case "stale":
+      return { state: "orphaned", manualFollowUpRequired: false };
+    case "blocked":
+      return { state: "failed", manualFollowUpRequired: true };
+    case "done":
+      return { state: "in_review", manualFollowUpRequired: true };
+    default:
+      return null;
+  }
+}
+
+/** Task lifecycle authority stored in `task.execution_state`. */
+export const TASK_EXECUTION_STATES = [
+  "published",
+  "ready",
+  "queued",
+  "running",
+  "in_review",
+  "done",
+  "archived",
+  "blocked",
+] as const;
+
+export type TaskExecutionState = (typeof TASK_EXECUTION_STATES)[number];
+
+export const CONTROL_REQUEST_ACTIONS = [
+  "read_status",
+  "notification_ack",
+  "create_dispatch_request",
+  "answer_clarification",
+  "continue_quota",
+] as const;
+
+export type ControlRequestAction = (typeof CONTROL_REQUEST_ACTIONS)[number];
+
+export const CONTROL_REQUEST_STATES = [
+  "pending",
+  "claimed",
+  "applied",
+  "rejected",
+  "expired",
+] as const;
+
+export type ControlRequestState = (typeof CONTROL_REQUEST_STATES)[number];
+
+export const NOTIFICATION_EVENT_KINDS = [
+  "started",
+  "checkpoint",
+  "blocked_quota",
+  "needs_input",
+  "in_review",
+  "failed",
+  "done",
+] as const;
+
+export type NotificationEventKind = (typeof NOTIFICATION_EVENT_KINDS)[number];
+
+export const NOTIFICATION_DELIVERY_STATES = [
+  "pending",
+  "sending",
+  "sent",
+  "send_unknown",
+  "acked",
+  "dead_letter",
+] as const;
+
+export type NotificationDeliveryState =
+  (typeof NOTIFICATION_DELIVERY_STATES)[number];
 
 export function validateScope(value: unknown): string[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > 100) {
@@ -189,9 +342,82 @@ export function validateRunState(value: unknown): TaskRunState {
     typeof value !== "string" ||
     !(TASK_RUN_STATES as readonly string[]).includes(value)
   ) {
+    if (
+      typeof value === "string" &&
+      (LEGACY_TASK_RUN_STATES as readonly string[]).includes(value)
+    ) {
+      throw new HTTPException(400, {
+        message: `Legacy run state "${value}" is rejected on new writes; use the canonical state instead`,
+      });
+    }
     throw new HTTPException(400, { message: "Invalid task run state" });
   }
   return value as TaskRunState;
+}
+
+export function validateWorkerReportState(value: unknown): TaskRunState {
+  if (
+    typeof value !== "string" ||
+    !(WORKER_REPORTABLE_STATES as readonly string[]).includes(value)
+  ) {
+    if (typeof value === "string" && value === "blocked") {
+      throw new HTTPException(400, {
+        message:
+          'Generic "blocked" report is rejected; use blocked_quota, blocked_input, blocked_clarification, blocked_branch_drift or failed with failureKind',
+      });
+    }
+    throw new HTTPException(400, {
+      message: "Invalid worker report state",
+    });
+  }
+  return value as TaskRunState;
+}
+
+export function validateExecutionState(value: unknown): TaskExecutionState {
+  if (
+    typeof value !== "string" ||
+    !(TASK_EXECUTION_STATES as readonly string[]).includes(value)
+  ) {
+    throw new HTTPException(400, { message: "Invalid task execution state" });
+  }
+  return value as TaskExecutionState;
+}
+
+export function validateRevision(
+  value: unknown,
+  field = "revision",
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new HTTPException(400, {
+      message: `${field} must be a positive integer`,
+    });
+  }
+  return value;
+}
+
+export function validateControlAction(value: unknown): ControlRequestAction {
+  if (
+    typeof value !== "string" ||
+    !(CONTROL_REQUEST_ACTIONS as readonly string[]).includes(value)
+  ) {
+    throw new HTTPException(400, { message: "Invalid control request action" });
+  }
+  return value as ControlRequestAction;
+}
+
+export function validateNotificationKind(
+  value: unknown,
+): NotificationEventKind {
+  if (
+    typeof value !== "string" ||
+    !(NOTIFICATION_EVENT_KINDS as readonly string[]).includes(value)
+  ) {
+    throw new HTTPException(400, {
+      message: "Invalid notification event kind",
+    });
+  }
+  return value as NotificationEventKind;
 }
 
 function canonicalize(value: unknown): unknown {

@@ -1,6 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   foreignKey,
   index,
@@ -378,6 +379,19 @@ export const executionScheduleTable = pgTable(
       .default(sql`'{}'::jsonb`),
     concurrencyKey: text("concurrency_key").notNull(),
     enabled: boolean("enabled").notNull().default(true),
+    // SPEC-kaneo-native-telegram-control-v0-1: dispatch binds this snapshot.
+    scheduleRevision: integer("schedule_revision").notNull().default(1),
+    disableReason: text("disable_reason"),
+    lastFailureAt: timestamp("last_failure_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    dependencyPolicy: text("dependency_policy").notNull().default("reject"),
+    notificationRoute: text("notification_route"),
+    telegramQuotaResume: text("telegram_quota_resume")
+      .notNull()
+      .default("disabled"),
+    planHash: text("plan_hash"),
     lastDispatchAt: timestamp("last_dispatch_at", {
       mode: "date",
       withTimezone: true,
@@ -423,6 +437,14 @@ export const executionScheduleOccurrenceTable = pgTable(
     claimedBy: text("claimed_by"),
     claimedAt: timestamp("claimed_at", { mode: "date", withTimezone: true }),
     claimGeneration: integer("claim_generation").notNull().default(0),
+    // Snapshot bound at dispatch (revision CAS against schedule/task drift).
+    scheduleRevision: integer("schedule_revision").notNull().default(1),
+    taskRevision: integer("task_revision").notNull().default(1),
+    manifestVersion: integer("manifest_version").notNull().default(1),
+    planHash: text("plan_hash"),
+    // Hash of the one-time supervisor fence handed to the fixed runner via
+    // the local 0600 handoff file; required by /supervisor-report.
+    supervisorFenceHash: text("supervisor_fence_hash"),
     ackTokenHash: text("ack_token_hash"),
     runId: text("run_id").references(() => taskRunTable.id, {
       onDelete: "set null",
@@ -528,6 +550,10 @@ export const taskTable = pgTable(
     priority: text("priority").default("low"),
     startDate: timestamp("start_date", { mode: "date" }),
     dueDate: timestamp("due_date", { mode: "date" }),
+    // SPEC-kaneo-native-telegram-control-v0-1: execution lifecycle authority.
+    // Kanban `status`/`columnId` above are presentation mapping only.
+    executionState: text("execution_state").notNull().default("published"),
+    taskRevision: integer("task_revision").notNull().default(1),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -591,6 +617,29 @@ export const taskRunTable = pgTable(
       .default(sql`'{}'::jsonb`),
     blocker: text("blocker"),
     nextAction: text("next_action"),
+    // SPEC-kaneo-native-telegram-control-v0-1: revision CAS fence + lineage.
+    runRevision: integer("run_revision").notNull().default(1),
+    taskRevisionAtClaim: integer("task_revision_at_claim").notNull().default(1),
+    scheduleRevision: integer("schedule_revision"),
+    parentRunId: text("parent_run_id").references(
+      (): AnyPgColumn => taskRunTable.id,
+      { onDelete: "set null", onUpdate: "cascade" },
+    ),
+    logicalSessionId: text("logical_session_id"),
+    retryAt: timestamp("retry_at", { mode: "date", withTimezone: true }),
+    modelFailed: text("model_failed"),
+    failureKind: text("failure_kind"),
+    attempt: integer("attempt").notNull().default(1),
+    maxAttempts: integer("max_attempts").notNull().default(1),
+    lastCheckpointSha: text("last_checkpoint_sha"),
+    lastCommitSha: text("last_commit_sha"),
+    finalizationReceipt: jsonb("finalization_receipt")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    manualRecoveryRequired: boolean("manual_recovery_required")
+      .notNull()
+      .default(false),
     requestKey: text("request_key").notNull(),
     requestHash: text("request_hash").notNull(),
     leaseEpoch: integer("lease_epoch").notNull().default(1),
@@ -641,6 +690,230 @@ export const taskRunEvidenceTable = pgTable(
   (table) => [
     index("task_run_evidence_runId_idx").on(table.runId),
     index("task_run_evidence_agentPrincipalId_idx").on(table.agentPrincipalId),
+  ],
+);
+
+// SPEC-kaneo-native-telegram-control-v0-1 (T1): durable checkpoint ledger.
+// A checkpoint is only accepted with a fixed Git guard push receipt proving
+// remote head == commit; requestId gives at-most-once acceptance per receipt.
+export const taskRunCheckpointTable = pgTable(
+  "task_run_checkpoint",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => taskRunTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    requestId: text("request_id").notNull().unique(),
+    leaseEpoch: integer("lease_epoch").notNull(),
+    baseSha: text("base_sha"),
+    headSha: text("head_sha").notNull(),
+    commitSha: text("commit_sha").notNull(),
+    guardReceipt: jsonb("guard_receipt")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    commands: jsonb("commands")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    artifactHashes: jsonb("artifact_hashes")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    verifyResult: jsonb("verify_result")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [index("task_run_checkpoint_runId_idx").on(table.runId)],
+);
+
+// Control requests are structured mutations created by parent or the Telegram
+// observer; only the dispatcher consumes them with a CAS claim. The actor is
+// always derived from the authenticated principal, never from the body.
+export const executionControlRequestTable = pgTable(
+  "execution_control_request",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    requestId: text("request_id").notNull().unique(),
+    actorType: text("actor_type").notNull(),
+    authenticatedPrincipalId: text("authenticated_principal_id"),
+    actorUserId: text("actor_user_id").references(() => userTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    route: text("route"),
+    host: text("host"),
+    action: text("action").notNull(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    runId: text("run_id").references(() => taskRunTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    eventId: text("event_id"),
+    deliveryId: text("delivery_id"),
+    payload: jsonb("payload")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    expectedTaskRevision: integer("expected_task_revision"),
+    expectedRunRevision: integer("expected_run_revision"),
+    state: text("state").notNull().default("pending"),
+    resultHash: text("result_hash"),
+    claimedBy: text("claimed_by"),
+    claimedAt: timestamp("claimed_at", { mode: "date", withTimezone: true }),
+    claimExpiresAt: timestamp("claim_expires_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    appliedAt: timestamp("applied_at", { mode: "date", withTimezone: true }),
+    expiresAt: timestamp("expires_at", {
+      mode: "date",
+      withTimezone: true,
+    }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("execution_control_request_state_idx").on(
+      table.state,
+      table.expiresAt,
+    ),
+    index("execution_control_request_host_idx").on(table.host, table.state),
+  ],
+);
+
+// Per-task monotonic sequence allocator for the transactional notification
+// outbox. Allocated with FOR UPDATE inside the emitting transaction.
+export const executionNotificationSequenceTable = pgTable(
+  "execution_notification_sequence",
+  {
+    taskId: text("task_id")
+      .primaryKey()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    nextSequence: integer("next_sequence").notNull().default(0),
+  },
+);
+
+// Transactional notification outbox. Rows are written in the same DB
+// transaction as the state mutation they announce; FIFO per task by sequence.
+export const executionNotificationEventTable = pgTable(
+  "execution_notification_event",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    runId: text("run_id").references(() => taskRunTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    sequence: integer("sequence").notNull(),
+    kind: text("kind").notNull(),
+    route: text("route").notNull(),
+    payload: jsonb("payload")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    payloadHash: text("payload_hash"),
+    state: text("state").notNull().default("pending"),
+    availableAt: timestamp("available_at", {
+      mode: "date",
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("execution_notification_event_route_state_idx").on(
+      table.route,
+      table.state,
+      table.availableAt,
+    ),
+  ],
+);
+
+// Delivery tracking for outbox events (at-least-once Telegram semantics).
+// send_unknown marks crash-after-send; reconcile, never auto-resend blindly.
+export const executionNotificationDeliveryTable = pgTable(
+  "execution_notification_delivery",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => executionNotificationEventTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    route: text("route").notNull(),
+    state: text("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    claimedBy: text("claimed_by"),
+    claimExpiresAt: timestamp("claim_expires_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    lastError: text("last_error"),
+    sendUnknown: boolean("send_unknown").notNull().default(false),
+    telegramMessageIds: jsonb("telegram_message_ids")
+      .$type<number[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    ackedAt: timestamp("acked_at", { mode: "date", withTimezone: true }),
+    deadLetteredAt: timestamp("dead_lettered_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("execution_notification_delivery_eventId_idx").on(table.eventId),
+    index("execution_notification_delivery_claim_idx").on(
+      table.state,
+      table.claimExpiresAt,
+    ),
   ],
 );
 

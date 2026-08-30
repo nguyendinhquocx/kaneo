@@ -5,12 +5,15 @@ import db from "../database";
 import {
   agentPrincipalTable,
   columnTable,
+  executionControlRequestTable,
   executionIdempotencyTable,
   executionManifestTable,
+  executionScheduleOccurrenceTable,
   executionScheduleTable,
   githubIntegrationTable,
   projectTable,
   taskRelationTable,
+  taskRunCheckpointTable,
   taskRunEvidenceTable,
   taskRunTable,
   taskTable,
@@ -26,6 +29,8 @@ import {
   EXECUTION_FLAGS,
   recordExecutionMetric,
 } from "./gates";
+import { enqueueNotificationEvent } from "./outbox";
+import { bumpRunRevision, bumpTaskRevision } from "./revisions";
 import {
   createLeaseToken,
   EXECUTION_PROTOCOL_VERSION,
@@ -39,15 +44,19 @@ import {
   type TaskRunState,
   taskSlug,
   validateBranchName,
+  validateControlAction,
   validateDocs,
+  validateFailureKind,
   validateGitSha,
   validateJsonObject,
   validateLeaseEpoch,
   validateModelId,
   validatePrUrl,
+  validateRevision,
   validateRunState,
   validateScope,
   validateVerificationProfile,
+  validateWorkerReportState,
 } from "./validation";
 
 export const AGENT_SCOPES = [
@@ -78,6 +87,9 @@ export type ParentReviewInput = {
   reason?: unknown;
   verification?: unknown;
   prResult?: unknown;
+  expectedTaskRevision?: unknown;
+  expectedRunRevision?: unknown;
+  reviewHeadSha?: unknown;
   requestKey: string;
 };
 
@@ -89,6 +101,7 @@ type ParentReviewPrResult = {
   prNumber?: number;
   prUrl?: string;
   prState?: string;
+  mergeCommitSha?: string;
   blocker?: string;
   reason?: string;
 };
@@ -175,9 +188,9 @@ function validatePolicy(value: unknown): Record<string, unknown> {
 }
 
 function assertReportState(state: TaskRunState) {
-  if (state === "done" || state === "rejected") {
+  if (state === "finalized" || state === "rejected") {
     throw new HTTPException(403, {
-      message: "Only a parent review gate can finish or reject a task run",
+      message: "Only a parent review gate can finalize or reject a task run",
     });
   }
 }
@@ -412,12 +425,27 @@ function validateParentReviewPrResult(
       message: `prResult.prState must be ${expectedState} for ${action}`,
     });
   }
+  // A merge receipt without the merge commit is not a verifiable receipt.
+  let mergeCommitSha: string | undefined;
+  if (action === "merge") {
+    mergeCommitSha = validateGitSha(
+      input.mergeCommitSha,
+      "prResult.mergeCommitSha",
+    );
+    if (!mergeCommitSha) {
+      throw new HTTPException(409, {
+        message:
+          "prResult.mergeCommitSha is required for a verified merge receipt",
+      });
+    }
+  }
   return {
     status,
     operation,
     prNumber: prNumber as number,
     prUrl: prUrl as string,
     prState,
+    ...(mergeCommitSha ? { mergeCommitSha } : {}),
     reason: typeof reason === "string" ? reason.trim() : undefined,
   };
 }
@@ -550,6 +578,9 @@ const IDEMPOTENCY_OPERATIONS = {
   report: "task_run.report",
   release: "task_run.release",
   review: "task_run.review",
+  checkpoint: "task_run.checkpoint",
+  supervisorReport: "task_run.supervisor_report",
+  controlRequest: "execution.control_request",
   preapprovedFallback: "task_run.preapproved_fallback",
 } as const;
 
@@ -592,6 +623,21 @@ function serializeRun(
     evidence: run.evidence,
     blocker: run.blocker,
     nextAction: run.nextAction,
+    // SPEC-kaneo-native-telegram-control-v0-1 typed run fields.
+    runRevision: run.runRevision,
+    taskRevisionAtClaim: run.taskRevisionAtClaim,
+    scheduleRevision: run.scheduleRevision,
+    parentRunId: run.parentRunId,
+    logicalSessionId: run.logicalSessionId,
+    retryAt: run.retryAt,
+    modelFailed: run.modelFailed,
+    failureKind: run.failureKind,
+    attempt: run.attempt,
+    maxAttempts: run.maxAttempts,
+    lastCheckpointSha: run.lastCheckpointSha,
+    lastCommitSha: run.lastCommitSha,
+    finalizationReceipt: run.finalizationReceipt,
+    manualRecoveryRequired: run.manualRecoveryRequired,
     leaseEpoch: run.leaseEpoch,
     leaseActive: run.leaseActive,
     leaseExpiresAt: run.leaseExpiresAt,
@@ -615,7 +661,7 @@ async function getIdempotencyReplay(
     operation: string;
     requestKey: string;
     requestHash: string;
-    runId: string;
+    runId: string | null;
   },
 ): Promise<TaskRunResponse | null> {
   const [reserved] = await tx
@@ -1611,9 +1657,36 @@ export async function resumeTaskRun(input: {
   userId: string;
   agentPrincipalId: string;
   preferredModel?: string | null;
+  /** "telegram" enables the continue_quota policy gate; parent resumes are
+   * unrestricted (SPEC-kaneo-native-telegram-control-v0-1 T5). */
+  initiatedBy?: unknown;
+  contextNote?: unknown;
   requestKey: string;
 }) {
   const requestKey = requireIdempotencyKey(input.requestKey);
+  let telegramInitiated = false;
+  if (input.initiatedBy !== undefined) {
+    if (input.initiatedBy !== "telegram" && input.initiatedBy !== "parent") {
+      throw new HTTPException(400, {
+        message: 'initiatedBy must be "telegram" or "parent"',
+      });
+    }
+    telegramInitiated = input.initiatedBy === "telegram";
+  }
+  let boundedContextNote: string | undefined;
+  if (input.contextNote !== undefined) {
+    if (
+      typeof input.contextNote !== "string" ||
+      !input.contextNote.trim() ||
+      input.contextNote.length > 2_000
+    ) {
+      throw new HTTPException(400, {
+        message:
+          "contextNote must be a bounded non-empty string (<= 2000 chars)",
+      });
+    }
+    boundedContextNote = input.contextNote.trim();
+  }
   const [source] = await db
     .select()
     .from(taskRunTable)
@@ -1645,6 +1718,41 @@ export async function resumeTaskRun(input: {
     throw new HTTPException(409, {
       message: "Cannot resume a run while its lease is active",
     });
+  }
+  // SPEC-kaneo-native-telegram-control-v0-1 (T5): a Telegram-initiated quota
+  // continue is fail-closed against schedule policy, retryAt and attempts.
+  if (telegramInitiated && source.state === "blocked_quota") {
+    if (source.retryAt && source.retryAt.getTime() > Date.now()) {
+      throw new HTTPException(409, {
+        message: "continue_quota is not allowed before retryAt",
+      });
+    }
+    if (source.attempt >= source.maxAttempts) {
+      throw new HTTPException(409, {
+        message: "quota resume attempts are exhausted (maxAttempts reached)",
+      });
+    }
+    if (!source.scheduleId) {
+      throw new HTTPException(403, {
+        message:
+          "quota resume requires a schedule with an explicit Telegram quota-resume policy",
+      });
+    }
+    const [schedule] = await db
+      .select({
+        telegramQuotaResume: executionScheduleTable.telegramQuotaResume,
+      })
+      .from(executionScheduleTable)
+      .where(eq(executionScheduleTable.id, source.scheduleId))
+      .limit(1);
+    if (
+      !schedule ||
+      schedule.telegramQuotaResume !== "allowed_same_model_after_reset"
+    ) {
+      throw new HTTPException(403, {
+        message: "Telegram quota resume is disabled for this schedule",
+      });
+    }
   }
   if (
     !source.agentPrincipalId ||
@@ -1710,6 +1818,22 @@ export async function resumeTaskRun(input: {
     resumeBaseSha: source.baseSha,
     resumeCommitSha: source.commitSha,
   });
+  if (boundedContextNote) {
+    await db
+      .update(taskRunTable)
+      .set({
+        evidence: {
+          ...(result.run.evidence ?? {}),
+          resumeContext: {
+            note: boundedContextNote,
+            by: input.initiatedBy ?? "parent",
+          },
+        },
+        runRevision: sql`${taskRunTable.runRevision} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(taskRunTable.id, result.run.id));
+  }
   await publishTaskRunUpdated(
     input.taskId,
     result.run.id,
@@ -2260,6 +2384,10 @@ export async function reportTaskRun({
   evidence,
   blocker,
   nextAction,
+  failureKind,
+  modelFailed,
+  retryAt,
+  expectedRunRevision,
   requestKey,
 }: {
   taskId: string;
@@ -2276,10 +2404,43 @@ export async function reportTaskRun({
   evidence?: Record<string, unknown>;
   blocker?: string;
   nextAction?: string;
+  failureKind?: unknown;
+  modelFailed?: unknown;
+  retryAt?: unknown;
+  expectedRunRevision?: unknown;
   requestKey: string;
 }) {
-  const nextState = validateRunState(state);
+  const nextState = validateWorkerReportState(state);
   assertReportState(nextState);
+  const nextFailureKind = validateFailureKind(failureKind);
+  let nextModelFailed: string | undefined;
+  if (modelFailed !== undefined) {
+    if (typeof modelFailed !== "string" || modelFailed.trim().length > 200) {
+      throw new HTTPException(400, {
+        message: "modelFailed must be a bounded string (<= 200 chars)",
+      });
+    }
+    nextModelFailed = modelFailed.trim();
+  }
+  let nextRetryAt: Date | undefined;
+  if (retryAt !== undefined) {
+    if (typeof retryAt !== "string") {
+      throw new HTTPException(400, {
+        message: "retryAt must be an ISO timestamp",
+      });
+    }
+    const parsed = new Date(retryAt);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new HTTPException(400, {
+        message: "retryAt must be an ISO timestamp",
+      });
+    }
+    nextRetryAt = parsed;
+  }
+  const expectedRevision = validateRevision(
+    expectedRunRevision,
+    "expectedRunRevision",
+  );
   const nextBaseSha = validateGitSha(baseSha, "baseSha");
   const nextCommitSha = validateGitSha(commitSha, "commitSha");
   const nextPrUrl = validatePrUrl(prUrl);
@@ -2308,6 +2469,10 @@ export async function reportTaskRun({
     evidence: evidence ?? null,
     blocker: blocker ?? null,
     nextAction: nextAction ?? null,
+    failureKind: nextFailureKind ?? null,
+    modelFailed: nextModelFailed ?? null,
+    retryAt: nextRetryAt?.toISOString() ?? null,
+    expectedRunRevision: expectedRevision ?? null,
   });
 
   const result = await db.transaction(async (tx) => {
@@ -2359,9 +2524,18 @@ export async function reportTaskRun({
         evidence: nextEvidence,
         blocker: blocker ?? null,
         nextAction: nextAction ?? null,
+        failureKind: nextFailureKind ?? run.failureKind,
+        modelFailed: nextModelFailed ?? run.modelFailed,
+        retryAt: nextRetryAt ?? run.retryAt,
+        lastCommitSha: nextCommitSha ?? run.lastCommitSha,
+        manualRecoveryRequired:
+          nextState === "failed" || nextState.startsWith("blocked_")
+            ? true
+            : run.manualRecoveryRequired,
         leaseActive: nextState === "in_progress",
         lastHeartbeatAt: now,
         leaseExpiresAt: getLeaseExpiry(now),
+        runRevision: sql`${taskRunTable.runRevision} + 1`,
         updatedAt: now,
       })
       .where(
@@ -2370,6 +2544,9 @@ export async function reportTaskRun({
           eq(taskRunTable.leaseEpoch, normalizedLeaseEpoch),
           eq(taskRunTable.leaseTokenHash, leaseTokenHash),
           eq(taskRunTable.leaseActive, true),
+          ...(expectedRevision === undefined
+            ? []
+            : [eq(taskRunTable.runRevision, expectedRevision)]),
         ),
       )
       .returning();
@@ -2430,10 +2607,16 @@ export async function releaseTaskRun({
   state?: unknown;
   requestKey: string;
 }) {
-  const nextState = state === undefined ? "blocked" : validateRunState(state);
-  if (nextState === "done" || nextState === "rejected") {
+  const nextState = state === undefined ? undefined : validateRunState(state);
+  if (nextState === undefined) {
+    throw new HTTPException(400, {
+      message:
+        "A canonical release state is required: blocked_quota, blocked_input, blocked_clarification, blocked_branch_drift, failed, cancelled or superseded",
+    });
+  }
+  if (nextState === "finalized" || nextState === "rejected") {
     throw new HTTPException(403, {
-      message: "Only a parent review gate can finish a task run",
+      message: "Only a parent review gate can finalize or reject a task run",
     });
   }
   const normalizedKey = requireIdempotencyKey(requestKey);
@@ -2504,6 +2687,905 @@ export async function releaseTaskRun({
   });
   await publishTaskRunUpdated(taskId, result.id, userId, result.state);
   return result;
+}
+
+/**
+ * SPEC-kaneo-native-telegram-control-v0-1 (T1): durable worker checkpoint.
+ * Only accepted with a fixed Git guard push receipt proving the remote branch
+ * HEAD equals the checkpoint commit; lease epoch + optional run revision CAS
+ * fence the write. Idempotent per requestKey.
+ */
+export async function createTaskRunCheckpoint({
+  taskId,
+  runId,
+  userId,
+  leaseEpoch,
+  leaseToken,
+  baseSha,
+  headSha,
+  commitSha,
+  guardReceipt,
+  commands,
+  artifactHashes,
+  verifyResult,
+  expectedRunRevision,
+  requestKey,
+}: {
+  taskId: string;
+  runId: string;
+  userId: string;
+  leaseEpoch: number;
+  leaseToken: string;
+  baseSha?: unknown;
+  headSha: unknown;
+  commitSha: unknown;
+  guardReceipt: unknown;
+  commands?: unknown;
+  artifactHashes?: unknown;
+  verifyResult?: unknown;
+  expectedRunRevision?: unknown;
+  requestKey: string;
+}): Promise<TaskRunResponse> {
+  const normalizedHeadSha = validateGitSha(headSha, "headSha");
+  const normalizedCommitSha = validateGitSha(commitSha, "commitSha");
+  const normalizedBaseSha = validateGitSha(baseSha, "baseSha");
+  if (!normalizedHeadSha || !normalizedCommitSha) {
+    throw new HTTPException(400, {
+      message: "headSha and commitSha are required for a checkpoint",
+    });
+  }
+  if (normalizedHeadSha.toLowerCase() !== normalizedCommitSha.toLowerCase()) {
+    throw new HTTPException(409, {
+      message:
+        "headSha must equal commitSha: the push is not verified as durable on the remote",
+    });
+  }
+  const receipt = validateJsonObject(guardReceipt, "guardReceipt");
+  for (const field of [
+    "receiptId",
+    "remoteRef",
+    "headSha",
+    "commitSha",
+    "receiptHash",
+  ]) {
+    if (typeof receipt[field] !== "string" || !receipt[field]) {
+      throw new HTTPException(400, {
+        message: `guardReceipt.${field} is required`,
+      });
+    }
+  }
+  if (
+    typeof receipt.headSha === "string" &&
+    receipt.headSha.toLowerCase() !== normalizedHeadSha.toLowerCase()
+  ) {
+    throw new HTTPException(409, {
+      message: "guardReceipt.headSha must match the checkpoint headSha",
+    });
+  }
+  if (
+    typeof receipt.commitSha === "string" &&
+    receipt.commitSha.toLowerCase() !== normalizedCommitSha.toLowerCase()
+  ) {
+    throw new HTTPException(409, {
+      message: "guardReceipt.commitSha must match the checkpoint commitSha",
+    });
+  }
+  const boundedCommands = commands === undefined ? [] : validateDocs(commands);
+  const boundedArtifacts =
+    artifactHashes === undefined
+      ? {}
+      : validateJsonObject(artifactHashes, "artifactHashes");
+  const boundedVerify =
+    verifyResult === undefined
+      ? {}
+      : validateJsonObject(verifyResult, "verifyResult");
+  const expectedRevision = validateRevision(
+    expectedRunRevision,
+    "expectedRunRevision",
+  );
+  const normalizedKey = requireIdempotencyKey(requestKey);
+  const normalizedLeaseEpoch = validateLeaseEpoch(leaseEpoch);
+  const leaseTokenHash = hashLeaseToken(leaseToken);
+  const requestHash = stableHash({
+    taskId,
+    runId,
+    leaseEpoch: normalizedLeaseEpoch,
+    leaseTokenHash,
+    headSha: normalizedHeadSha,
+    commitSha: normalizedCommitSha,
+    baseSha: normalizedBaseSha ?? null,
+    guardReceipt,
+    expectedRunRevision: expectedRevision ?? null,
+  });
+
+  const result = await db.transaction(async (tx) => {
+    const replay = await getIdempotencyReplay(tx, {
+      userId,
+      operation: IDEMPOTENCY_OPERATIONS.checkpoint,
+      requestKey: normalizedKey,
+      requestHash,
+      runId,
+    });
+    if (replay) return replay;
+
+    const { run, principal } = await assertCurrentLease(
+      tx,
+      runId,
+      userId,
+      normalizedLeaseEpoch,
+      leaseToken,
+      "run:report",
+    );
+    if (run.taskId !== taskId) {
+      throw new HTTPException(404, { message: "Task run not found" });
+    }
+    if (
+      typeof receipt.remoteRef !== "string" ||
+      receipt.remoteRef !== run.branchName
+    ) {
+      throw new HTTPException(409, {
+        message: "guardReceipt.remoteRef must equal the run branchName",
+      });
+    }
+    const nextState: TaskRunState = "checkpointed";
+    const now = new Date();
+    await tx.insert(taskRunCheckpointTable).values({
+      runId,
+      taskId,
+      requestId: normalizedKey,
+      leaseEpoch: normalizedLeaseEpoch,
+      baseSha: normalizedBaseSha ?? run.baseSha,
+      headSha: normalizedHeadSha,
+      commitSha: normalizedCommitSha,
+      guardReceipt: receipt,
+      commands: boundedCommands,
+      artifactHashes: boundedArtifacts,
+      verifyResult: boundedVerify,
+    });
+    const [updated] = await tx
+      .update(taskRunTable)
+      .set({
+        state: nextState,
+        lastCheckpointSha: normalizedHeadSha,
+        lastCommitSha: normalizedCommitSha,
+        baseSha: normalizedBaseSha ?? run.baseSha,
+        leaseActive: true,
+        lastHeartbeatAt: now,
+        leaseExpiresAt: getLeaseExpiry(now),
+        runRevision: sql`${taskRunTable.runRevision} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(taskRunTable.id, runId),
+          eq(taskRunTable.leaseEpoch, normalizedLeaseEpoch),
+          eq(taskRunTable.leaseTokenHash, leaseTokenHash),
+          eq(taskRunTable.leaseActive, true),
+          ...(expectedRevision === undefined
+            ? []
+            : [eq(taskRunTable.runRevision, expectedRevision)]),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      await recordExecutionMetric("stale_fence_rejected", {
+        runId,
+        taskId,
+        reason: "checkpoint_compare_and_swap_failed",
+      });
+      throw new HTTPException(409, { message: "Stale task run lease fence" });
+    }
+
+    await tx.insert(taskRunEvidenceTable).values({
+      runId,
+      agentPrincipalId: principal.id,
+      kind: "checkpoint",
+      payload: {
+        requestId: normalizedKey,
+        headSha: normalizedHeadSha,
+        commitSha: normalizedCommitSha,
+        baseSha: normalizedBaseSha ?? null,
+        receiptId: receipt.receiptId,
+      },
+    });
+    await enqueueNotificationEvent(tx, {
+      taskId,
+      runId,
+      kind: "checkpoint",
+      payload: {
+        taskId,
+        runId,
+        commitSha: normalizedCommitSha.slice(0, 12),
+        phase:
+          typeof boundedVerify.phase === "string" ? boundedVerify.phase : null,
+      },
+    });
+
+    return saveIdempotencyResponse(tx, {
+      userId,
+      agentPrincipalId: principal.id,
+      runId,
+      operation: IDEMPOTENCY_OPERATIONS.checkpoint,
+      requestKey: normalizedKey,
+      requestHash,
+      response: serializeRun(updated),
+    });
+  });
+  await publishTaskRunUpdated(taskId, result.id, userId, result.state);
+  return result;
+}
+
+/**
+ * SPEC-kaneo-native-telegram-control-v0-1 (T1): dispatcher supervisor report.
+ * The fixed dispatcher terminalizes a run whose worker process died before
+ * reporting, using the structured worker terminal receipt recorded in the run
+ * root. Idempotent per requestKey; the receipt's own finalState is the only
+ * state source (no substring guessing).
+ */
+export async function supervisorReportTaskRun({
+  taskId,
+  runId,
+  userId,
+  agentPrincipalId,
+  occurrenceId,
+  handoffHash,
+  supervisorFence,
+  workerTerminalReceipt,
+  expectedRunRevision,
+  requestKey,
+}: {
+  taskId: string;
+  runId: string;
+  userId: string;
+  agentPrincipalId: unknown;
+  occurrenceId?: unknown;
+  handoffHash?: unknown;
+  supervisorFence?: unknown;
+  workerTerminalReceipt: unknown;
+  expectedRunRevision?: unknown;
+  requestKey: string;
+}): Promise<TaskRunResponse> {
+  let normalizedFence: string | undefined;
+  if (
+    typeof supervisorFence !== "string" ||
+    !supervisorFence ||
+    supervisorFence.length > 200
+  ) {
+    throw new HTTPException(401, {
+      message: "A bounded supervisor fence is required",
+    });
+  }
+  normalizedFence = supervisorFence;
+  const normalizedPrincipalId = validateIdentity(
+    agentPrincipalId,
+    "agentPrincipalId",
+  );
+  const receipt = validateJsonObject(
+    workerTerminalReceipt,
+    "workerTerminalReceipt",
+  );
+  for (const field of [
+    "schemaVersion",
+    "taskId",
+    "runId",
+    "stopReason",
+    "finalState",
+  ]) {
+    if (typeof receipt[field] !== "string" || !receipt[field]) {
+      throw new HTTPException(400, {
+        message: `workerTerminalReceipt.${field} is required`,
+      });
+    }
+  }
+  if (receipt.taskId !== taskId || receipt.runId !== runId) {
+    throw new HTTPException(409, {
+      message: "workerTerminalReceipt must bind the exact task and run",
+    });
+  }
+  const nextState = validateRunState(receipt.finalState);
+  assertReportState(nextState);
+  const nextFailureKind = validateFailureKind(receipt.failureKind);
+  let nextRetryAt: Date | null = null;
+  if (receipt.retryAt !== undefined && receipt.retryAt !== null) {
+    if (typeof receipt.retryAt !== "string") {
+      throw new HTTPException(400, {
+        message: "receipt.retryAt must be an ISO timestamp",
+      });
+    }
+    const parsed = new Date(receipt.retryAt);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new HTTPException(400, {
+        message: "receipt.retryAt must be an ISO timestamp",
+      });
+    }
+    nextRetryAt = parsed;
+  }
+  if (handoffHash !== undefined) {
+    if (typeof handoffHash !== "string" || handoffHash.length > 128) {
+      throw new HTTPException(400, {
+        message: "handoffHash must be a bounded string",
+      });
+    }
+    if (receipt.handoffHash !== handoffHash) {
+      throw new HTTPException(409, {
+        message: "handoffHash must match receipt.handoffHash",
+      });
+    }
+  }
+  if (
+    occurrenceId !== undefined &&
+    (typeof occurrenceId !== "string" || !occurrenceId.trim())
+  ) {
+    throw new HTTPException(400, {
+      message: "occurrenceId must be a non-empty string",
+    });
+  }
+  const expectedRevision = validateRevision(
+    expectedRunRevision,
+    "expectedRunRevision",
+  );
+  const normalizedKey = requireIdempotencyKey(requestKey);
+  const requestHash = stableHash({
+    taskId,
+    runId,
+    agentPrincipalId: normalizedPrincipalId,
+    occurrenceId: occurrenceId ?? null,
+    handoffHash: handoffHash ?? null,
+    receiptHash: stableHash(receipt),
+    expectedRunRevision: expectedRevision ?? null,
+  });
+
+  const result = await db.transaction(async (tx) => {
+    const replay = await getIdempotencyReplay(tx, {
+      userId,
+      operation: IDEMPOTENCY_OPERATIONS.supervisorReport,
+      requestKey: normalizedKey,
+      requestHash,
+      runId,
+    });
+    if (replay) return replay;
+
+    const [run] = await tx
+      .select()
+      .from(taskRunTable)
+      .where(and(eq(taskRunTable.id, runId), eq(taskRunTable.taskId, taskId)))
+      .limit(1)
+      .for("update");
+    if (!run) throw new HTTPException(404, { message: "Task run not found" });
+    // Supervisor fence: the one-time token handed to the fixed runner through
+    // the local 0600 handoff file at dispatch time. Without a matching fence
+    // the report is rejected before any state change.
+    const [occurrence] = await tx
+      .select({
+        id: executionScheduleOccurrenceTable.id,
+        state: executionScheduleOccurrenceTable.state,
+        supervisorFenceHash:
+          executionScheduleOccurrenceTable.supervisorFenceHash,
+      })
+      .from(executionScheduleOccurrenceTable)
+      .where(eq(executionScheduleOccurrenceTable.runId, runId))
+      .limit(1);
+    if (
+      !occurrence ||
+      !occurrence.supervisorFenceHash ||
+      occurrence.state !== "dispatched" ||
+      stableHash(normalizedFence) !== occurrence.supervisorFenceHash
+    ) {
+      throw new HTTPException(401, {
+        message:
+          "Supervisor fence is invalid or the occurrence is not dispatched",
+      });
+    }
+    // The dispatcher must own the run's worker principal: it spawned this
+    // worker and is the only actor allowed to terminalize it on crash.
+    const [principal] = await tx
+      .select({
+        id: agentPrincipalTable.id,
+        userId: agentPrincipalTable.userId,
+      })
+      .from(agentPrincipalTable)
+      .where(eq(agentPrincipalTable.runtimeId, normalizedPrincipalId))
+      .limit(1);
+    if (!principal || principal.id !== run.agentPrincipalId) {
+      throw new HTTPException(403, {
+        message:
+          "Supervisor report must come from the run's own agent principal",
+      });
+    }
+    if (
+      expectedRevision !== undefined &&
+      expectedRevision !== run.runRevision
+    ) {
+      throw new HTTPException(409, {
+        message:
+          "Stale expectedRunRevision: run changed before supervisor report",
+      });
+    }
+    const now = new Date();
+    const nextEvidence = {
+      ...(run.evidence ?? {}),
+      supervisorReceipt: receipt,
+    };
+    const [updated] = await tx
+      .update(taskRunTable)
+      .set({
+        state: nextState,
+        failureKind: nextFailureKind ?? run.failureKind,
+        retryAt: nextRetryAt ?? run.retryAt,
+        evidence: nextEvidence,
+        manualRecoveryRequired:
+          nextState === "failed" ||
+          nextState === "orphaned" ||
+          nextState.startsWith("blocked_"),
+        leaseActive: false,
+        runRevision: sql`${taskRunTable.runRevision} + 1`,
+        updatedAt: now,
+      })
+      .where(eq(taskRunTable.id, runId))
+      .returning();
+    if (!updated) {
+      throw new HTTPException(409, {
+        message: "Task run changed before supervisor report",
+      });
+    }
+
+    await tx.insert(taskRunEvidenceTable).values({
+      runId,
+      agentPrincipalId: run.agentPrincipalId,
+      kind: "supervisor_report",
+      payload: { requestId: normalizedKey, finalState: nextState },
+    });
+    const outboxKind =
+      nextState === "in_review"
+        ? "in_review"
+        : nextState === "blocked_quota"
+          ? "blocked_quota"
+          : nextState === "blocked_input" ||
+              nextState === "blocked_clarification"
+            ? "needs_input"
+            : "failed";
+    await enqueueNotificationEvent(tx, {
+      taskId,
+      runId,
+      kind: outboxKind,
+      payload: {
+        taskId,
+        runId,
+        finalState: nextState,
+        failureKind: nextFailureKind ?? null,
+        retryAt: nextRetryAt ? nextRetryAt.toISOString() : null,
+        lastCheckpointSha: run.lastCheckpointSha,
+      },
+    });
+
+    return saveIdempotencyResponse(tx, {
+      userId,
+      agentPrincipalId: run.agentPrincipalId,
+      runId,
+      operation: IDEMPOTENCY_OPERATIONS.supervisorReport,
+      requestKey: normalizedKey,
+      requestHash,
+      response: serializeRun(updated),
+    });
+  });
+  await publishTaskRunUpdated(taskId, result.id, userId, result.state);
+  return result;
+}
+
+export type ControlRequestActorType = "parent" | "telegram";
+
+/**
+ * SPEC-kaneo-native-telegram-control-v0-1 (T1): structured control request.
+ * Telegram/parent create requests; only the dispatcher consumes them with a
+ * CAS claim. The actor type is derived from the authenticated API key scope
+ * by the route, never from the request body.
+ */
+export async function createControlRequest({
+  taskId,
+  runId,
+  action,
+  actorType,
+  authenticatedPrincipalId,
+  actorUserId,
+  route,
+  host,
+  eventId,
+  deliveryId,
+  payload,
+  expectedTaskRevision,
+  expectedRunRevision,
+  expiresInSeconds,
+  requestKey,
+}: {
+  taskId: unknown;
+  runId?: unknown;
+  action: unknown;
+  actorType: ControlRequestActorType;
+  authenticatedPrincipalId?: string | null;
+  actorUserId?: string | null;
+  route?: string | null;
+  host?: string | null;
+  eventId?: unknown;
+  deliveryId?: unknown;
+  payload?: unknown;
+  expectedTaskRevision?: unknown;
+  expectedRunRevision?: unknown;
+  expiresInSeconds?: unknown;
+  requestKey: string;
+}) {
+  const normalizedTaskId = validateIdentity(taskId, "taskId");
+  const normalizedRunId =
+    runId === undefined || runId === null
+      ? null
+      : validateIdentity(runId, "runId");
+  const normalizedAction = validateControlAction(action);
+  const boundedPayload =
+    payload === undefined
+      ? {}
+      : validateJsonObject(payload, "payload", 8 * 1024);
+  if (
+    normalizedAction === "continue_quota" &&
+    Object.keys(boundedPayload).some((key) =>
+      ["model", "scope", "contract", "preferredModel"].includes(key),
+    )
+  ) {
+    throw new HTTPException(400, {
+      message:
+        "continue_quota payload must not contain model/scope/contract overrides",
+    });
+  }
+  const expectedTask = validateRevision(
+    expectedTaskRevision,
+    "expectedTaskRevision",
+  );
+  const expectedRun = validateRevision(
+    expectedRunRevision,
+    "expectedRunRevision",
+  );
+  const ttl =
+    expiresInSeconds === undefined
+      ? 3_600
+      : typeof expiresInSeconds === "number" &&
+          Number.isInteger(expiresInSeconds) &&
+          expiresInSeconds >= 30 &&
+          expiresInSeconds <= 86_400
+        ? expiresInSeconds
+        : -1;
+  if (ttl === -1) {
+    throw new HTTPException(400, {
+      message: "expiresInSeconds must be an integer between 30 and 86400",
+    });
+  }
+  const requestKeyTrimmed = requestKey.trim();
+  if (!requestKeyTrimmed || requestKeyTrimmed.length > 200) {
+    throw new HTTPException(400, {
+      message:
+        "Idempotency-Key (requestId) is required and must be <= 200 characters",
+    });
+  }
+  const requestHash = stableHash({
+    taskId: normalizedTaskId,
+    runId: normalizedRunId,
+    action: normalizedAction,
+    actorType,
+    eventId: eventId ?? null,
+    deliveryId: deliveryId ?? null,
+    payload: boundedPayload,
+    expectedTaskRevision: expectedTask ?? null,
+    expectedRunRevision: expectedRun ?? null,
+  });
+
+  return db.transaction(async (tx) => {
+    const replay = await getIdempotencyReplay(tx, {
+      userId: actorUserId ?? "",
+      operation: IDEMPOTENCY_OPERATIONS.controlRequest,
+      requestKey: requestKeyTrimmed,
+      requestHash,
+      runId: normalizedRunId,
+    });
+    if (replay) {
+      return {
+        outcome: "replayed" as const,
+        request: replay as unknown as Record<string, unknown>,
+      };
+    }
+
+    const [task] = await tx
+      .select({ id: taskTable.id, projectId: taskTable.projectId })
+      .from(taskTable)
+      .where(eq(taskTable.id, normalizedTaskId))
+      .limit(1);
+    if (!task) throw new HTTPException(404, { message: "Task not found" });
+    if (normalizedRunId) {
+      const [run] = await tx
+        .select({ id: taskRunTable.id })
+        .from(taskRunTable)
+        .where(
+          and(
+            eq(taskRunTable.id, normalizedRunId),
+            eq(taskRunTable.taskId, normalizedTaskId),
+          ),
+        )
+        .limit(1);
+      if (!run) {
+        throw new HTTPException(404, {
+          message: "Task run not found for task",
+        });
+      }
+    }
+
+    const [created] = await tx
+      .insert(executionControlRequestTable)
+      .values({
+        requestId: requestKeyTrimmed,
+        actorType,
+        authenticatedPrincipalId: authenticatedPrincipalId ?? null,
+        actorUserId: actorUserId ?? null,
+        route: route ?? null,
+        host: host ?? null,
+        action: normalizedAction,
+        taskId: normalizedTaskId,
+        runId: normalizedRunId,
+        eventId: typeof eventId === "string" ? eventId : null,
+        deliveryId: typeof deliveryId === "string" ? deliveryId : null,
+        payload: boundedPayload,
+        expectedTaskRevision: expectedTask ?? null,
+        expectedRunRevision: expectedRun ?? null,
+        state: "pending",
+        expiresAt: new Date(Date.now() + ttl * 1_000),
+      })
+      .onConflictDoNothing({
+        target: executionControlRequestTable.requestId,
+      })
+      .returning();
+    if (!created) {
+      const [existing] = await tx
+        .select()
+        .from(executionControlRequestTable)
+        .where(eq(executionControlRequestTable.requestId, requestKeyTrimmed))
+        .limit(1);
+      if (
+        existing &&
+        stableHash({
+          taskId: existing.taskId,
+          runId: existing.runId,
+          action: existing.action,
+          actorType: existing.actorType,
+          eventId: existing.eventId,
+          deliveryId: existing.deliveryId,
+          payload: existing.payload,
+          expectedTaskRevision: existing.expectedTaskRevision,
+          expectedRunRevision: existing.expectedRunRevision,
+        }) === requestHash
+      ) {
+        return {
+          outcome: "replayed" as const,
+          request: serializeControlRequest(existing),
+        };
+      }
+      throw new HTTPException(409, {
+        message:
+          "requestId already exists with a different payload (idempotency conflict)",
+      });
+    }
+    return {
+      outcome: "created" as const,
+      request: serializeControlRequest(created),
+    };
+  });
+}
+
+function serializeControlRequest(
+  request: typeof executionControlRequestTable.$inferSelect,
+) {
+  return {
+    id: request.id,
+    requestId: request.requestId,
+    actorType: request.actorType,
+    authenticatedPrincipalId: request.authenticatedPrincipalId,
+    actorUserId: request.actorUserId,
+    route: request.route,
+    host: request.host,
+    action: request.action,
+    taskId: request.taskId,
+    runId: request.runId,
+    eventId: request.eventId,
+    deliveryId: request.deliveryId,
+    payload: request.payload,
+    expectedTaskRevision: request.expectedTaskRevision,
+    expectedRunRevision: request.expectedRunRevision,
+    state: request.state,
+    claimedBy: request.claimedBy,
+    claimExpiresAt: request.claimExpiresAt,
+    appliedAt: request.appliedAt,
+    expiresAt: request.expiresAt,
+    createdAt: request.createdAt,
+    updatedAt: request.updatedAt,
+  };
+}
+
+/**
+ * Dispatcher view of pending control requests for its host, oldest first.
+ * Expired-but-still-pending rows are marked expired on read (best effort).
+ */
+export async function listDueControlRequests({
+  host,
+  limit = 50,
+}: {
+  host: string;
+  limit?: number;
+}) {
+  const boundedLimit = Math.min(Math.max(limit, 1), 200);
+  const now = new Date();
+  await db
+    .update(executionControlRequestTable)
+    .set({ state: "expired" })
+    .where(
+      and(
+        eq(executionControlRequestTable.state, "pending"),
+        lte(executionControlRequestTable.expiresAt, now),
+      ),
+    );
+  const rows = await db
+    .select()
+    .from(executionControlRequestTable)
+    .where(
+      and(
+        eq(executionControlRequestTable.state, "pending"),
+        eq(executionControlRequestTable.host, host),
+      ),
+    )
+    .orderBy(asc(executionControlRequestTable.createdAt))
+    .limit(boundedLimit);
+  return rows.map(serializeControlRequest);
+}
+
+/** CAS claim a pending control request for a named consumer. */
+export async function claimControlRequest({
+  id,
+  consumerId,
+  claimTtlSeconds,
+}: {
+  id: unknown;
+  consumerId: unknown;
+  claimTtlSeconds?: unknown;
+}) {
+  const normalizedId = validateIdentity(id, "id");
+  if (
+    typeof consumerId !== "string" ||
+    !consumerId.trim() ||
+    consumerId.length > 120
+  ) {
+    throw new HTTPException(400, {
+      message: "consumerId must be a bounded string",
+    });
+  }
+  const ttl =
+    claimTtlSeconds === undefined
+      ? 300
+      : typeof claimTtlSeconds === "number" &&
+          Number.isInteger(claimTtlSeconds) &&
+          claimTtlSeconds >= 30 &&
+          claimTtlSeconds <= 3_600
+        ? claimTtlSeconds
+        : -1;
+  if (ttl === -1) {
+    throw new HTTPException(400, {
+      message: "claimTtlSeconds must be an integer between 30 and 3600",
+    });
+  }
+  const now = new Date();
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(executionControlRequestTable)
+      .where(eq(executionControlRequestTable.id, normalizedId))
+      .limit(1)
+      .for("update");
+    if (!existing) {
+      throw new HTTPException(404, { message: "Control request not found" });
+    }
+    if (existing.state === "claimed") {
+      if (
+        existing.claimedBy === consumerId.trim() &&
+        existing.claimExpiresAt &&
+        existing.claimExpiresAt.getTime() > now.getTime()
+      ) {
+        return {
+          outcome: "already_claimed" as const,
+          request: serializeControlRequest(existing),
+        };
+      }
+      throw new HTTPException(409, {
+        message: "Control request already claimed",
+      });
+    }
+    if (existing.state !== "pending") {
+      return {
+        outcome: existing.state as "applied" | "rejected" | "expired",
+        request: serializeControlRequest(existing),
+      };
+    }
+    const [claimed] = await tx
+      .update(executionControlRequestTable)
+      .set({
+        state: "claimed",
+        claimedBy: consumerId.trim(),
+        claimedAt: now,
+        claimExpiresAt: new Date(now.getTime() + ttl * 1_000),
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(executionControlRequestTable.id, normalizedId),
+          eq(executionControlRequestTable.state, "pending"),
+        ),
+      )
+      .returning();
+    if (!claimed) {
+      throw new HTTPException(409, {
+        message: "Control request changed before claim",
+      });
+    }
+    return {
+      outcome: "claimed" as const,
+      request: serializeControlRequest(claimed),
+    };
+  });
+}
+
+/**
+ * CAS apply a claimed control request. Policy enforcement for the wrapped
+ * action lives in the endpoints the dispatcher calls next (resume, fallback,
+ * ready_task); apply only records the outcome with a CAS on claim ownership.
+ */
+export async function applyControlRequest({
+  id,
+  consumerId,
+  outcome,
+  result,
+}: {
+  id: unknown;
+  consumerId: unknown;
+  outcome: unknown;
+  result?: unknown;
+}) {
+  const normalizedId = validateIdentity(id, "id");
+  if (typeof consumerId !== "string" || !consumerId.trim()) {
+    throw new HTTPException(400, {
+      message: "consumerId must be a non-empty string",
+    });
+  }
+  if (outcome !== "applied" && outcome !== "rejected") {
+    throw new HTTPException(400, {
+      message: 'outcome must be "applied" or "rejected"',
+    });
+  }
+  const boundedResult =
+    result === undefined ? {} : validateJsonObject(result, "result", 8 * 1024);
+  const now = new Date();
+  const [updated] = await db
+    .update(executionControlRequestTable)
+    .set({
+      state: outcome,
+      resultHash: stableHash(boundedResult),
+      appliedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(executionControlRequestTable.id, normalizedId),
+        eq(executionControlRequestTable.state, "claimed"),
+        eq(executionControlRequestTable.claimedBy, consumerId.trim()),
+      ),
+    )
+    .returning();
+  if (!updated) {
+    throw new HTTPException(409, {
+      message: "Control request is not claimed by this consumer (CAS failed)",
+    });
+  }
+  return { outcome, request: serializeControlRequest(updated) };
 }
 
 export async function reclaimStaleTaskRuns(input?: {
@@ -2611,6 +3693,9 @@ export async function reviewTaskRun({
   reason,
   verification,
   prResult,
+  expectedTaskRevision,
+  expectedRunRevision,
+  reviewHeadSha,
   requestKey,
 }: {
   taskId: string;
@@ -2631,6 +3716,32 @@ export async function reviewTaskRun({
     });
   }
   const normalizedKey = requireIdempotencyKey(requestKey);
+  const expectedTaskRevisionValue = validateRevision(
+    expectedTaskRevision,
+    "expectedTaskRevision",
+  );
+  const expectedRunRevisionValue = validateRevision(
+    expectedRunRevision,
+    "expectedRunRevision",
+  );
+  const normalizedReviewHeadSha = validateGitSha(
+    reviewHeadSha,
+    "reviewHeadSha",
+  );
+  if (normalizedDecision === "reject" && !normalizedReviewHeadSha) {
+    throw new HTTPException(400, {
+      message: "reviewHeadSha is required when rejecting a run",
+    });
+  }
+  if (
+    normalizedDecision === "approve" &&
+    normalizedAction === "merge" &&
+    !normalizedReviewHeadSha
+  ) {
+    throw new HTTPException(400, {
+      message: "reviewHeadSha is required when finalizing a merge",
+    });
+  }
   const normalizedVerification =
     normalizedDecision === "approve"
       ? validateParentReviewVerification(verification)
@@ -2649,6 +3760,9 @@ export async function reviewTaskRun({
     reason: normalizedReason ?? null,
     verification: normalizedVerification ?? null,
     prResult: normalizedPrResult ?? null,
+    expectedTaskRevision: expectedTaskRevisionValue ?? null,
+    expectedRunRevision: expectedRunRevisionValue ?? null,
+    reviewHeadSha: normalizedReviewHeadSha ?? null,
   });
 
   const result = await db.transaction(async (tx) => {
@@ -2726,9 +3840,18 @@ export async function reviewTaskRun({
       });
     }
 
-    if (run.state === "done" || run.state === "rejected") {
+    if (run.state === "finalized" || run.state === "rejected") {
       throw new HTTPException(409, {
         message: "Terminal task runs cannot be reviewed again",
+      });
+    }
+    if (
+      normalizedReviewHeadSha &&
+      (!run.commitSha ||
+        normalizedReviewHeadSha.toLowerCase() !== run.commitSha.toLowerCase())
+    ) {
+      throw new HTTPException(409, {
+        message: "reviewHeadSha must equal the reviewed run commitSha",
       });
     }
 
@@ -2739,9 +3862,10 @@ export async function reviewTaskRun({
       });
     }
 
-    let nextState: TaskRunState = "blocked";
+    let nextState: TaskRunState;
     let blocker: string | null = null;
     let nextAction: string | null = null;
+    let finalizationReceipt: Record<string, unknown> | null = null;
     let prFields: {
       prNumber?: number;
       prUrl?: string;
@@ -2766,78 +3890,99 @@ export async function reviewTaskRun({
         manifest,
         approvalVerification,
       );
-      if (normalizedAction !== "none") {
-        const policyKey =
-          normalizedAction === "create_pr" ? "allowPrCreate" : "allowMerge";
-        const policyAllowsAction = manifest.policy[policyKey] === true;
-        if (!policyAllowsAction) {
-          blocker = "credential_blocked";
-          nextAction = `Manifest policy ${policyKey} must be true and a reviewed host credential adapter is required`;
-          await recordExecutionMetric(
-            normalizedAction === "create_pr"
-              ? "pr_gate_blocked"
-              : "merge_gate_blocked",
-            { taskId, runId, reason: "manifest_policy" },
-          );
-        } else if (normalizedPrResult?.status !== "PASS") {
-          await recordExecutionMetric(
-            normalizedAction === "create_pr"
-              ? "pr_gate_blocked"
-              : "merge_gate_blocked",
-            {
-              taskId,
-              runId,
-              reason: normalizedPrResult?.blocker ?? "adapter_blocked",
-            },
-          );
-          blocker = normalizedPrResult?.blocker ?? "credential_blocked";
-          nextAction =
-            normalizedPrResult?.reason ??
-            `A passing host credential adapter result is required for ${normalizedAction}`;
-        } else {
-          try {
-            assertPrResultMatchesIntegration(normalizedPrResult, integration);
-          } catch (error) {
-            await recordExecutionMetric(
-              normalizedAction === "create_pr"
-                ? "pr_gate_blocked"
-                : "merge_gate_blocked",
-              { taskId, runId, reason: "repository_mismatch" },
-            );
-            throw error;
-          }
-          if (
-            normalizedAction === "merge" &&
-            (!run.prNumber ||
-              normalizedPrResult.prNumber !== run.prNumber ||
-              (run.prUrl && normalizedPrResult.prUrl !== run.prUrl))
-          ) {
-            await recordExecutionMetric("merge_gate_blocked", {
-              taskId,
-              runId,
-              reason: "pull_request_mismatch",
-            });
-            throw new HTTPException(409, {
-              message:
-                "Merge evidence must match the pull request recorded on the run",
-            });
-          }
-          prFields = {
-            prNumber: normalizedPrResult.prNumber,
-            prUrl: normalizedPrResult.prUrl,
-            prState: normalizedPrResult.prState,
-          };
-          if (normalizedAction === "create_pr") {
-            // Creating a PR records the review and leaves the final merge gate open.
-            nextState = "in_review";
-            nextAction =
-              "Human merge gate is required before task finalization";
-          } else {
-            nextState = "done";
-          }
-        }
+      if (normalizedAction === "none") {
+        // Spec: action=none must never finalize a run. It would be a kill-
+        // switch bypass around the merge gate.
+        throw new HTTPException(409, {
+          message:
+            "Approval requires action create_pr or merge; action none cannot finalize a run",
+        });
+      }
+      const policyKey =
+        normalizedAction === "create_pr" ? "allowPrCreate" : "allowMerge";
+      const policyAllowsAction = manifest.policy[policyKey] === true;
+      if (!policyAllowsAction) {
+        // Gate blocked: keep the run in_review so the parent can retry after
+        // fixing manifest policy/credentials; never swallow it into a
+        // terminal state here.
+        nextState = "in_review";
+        blocker = "credential_blocked";
+        nextAction = `Manifest policy ${policyKey} must be true and a reviewed host credential adapter is required`;
+        await recordExecutionMetric(
+          normalizedAction === "create_pr"
+            ? "pr_gate_blocked"
+            : "merge_gate_blocked",
+          { taskId, runId, reason: "manifest_policy" },
+        );
+      } else if (normalizedPrResult?.status !== "PASS") {
+        await recordExecutionMetric(
+          normalizedAction === "create_pr"
+            ? "pr_gate_blocked"
+            : "merge_gate_blocked",
+          {
+            taskId,
+            runId,
+            reason: normalizedPrResult?.blocker ?? "adapter_blocked",
+          },
+        );
+        nextState = "in_review";
+        blocker = normalizedPrResult?.blocker ?? "credential_blocked";
+        nextAction =
+          normalizedPrResult?.reason ??
+          `A passing host credential adapter result is required for ${normalizedAction}`;
       } else {
-        nextState = "done";
+        try {
+          assertPrResultMatchesIntegration(normalizedPrResult, integration);
+        } catch (error) {
+          await recordExecutionMetric(
+            normalizedAction === "create_pr"
+              ? "pr_gate_blocked"
+              : "merge_gate_blocked",
+            { taskId, runId, reason: "repository_mismatch" },
+          );
+          throw error;
+        }
+        if (
+          normalizedAction === "merge" &&
+          (!run.prNumber ||
+            normalizedPrResult.prNumber !== run.prNumber ||
+            (run.prUrl && normalizedPrResult.prUrl !== run.prUrl))
+        ) {
+          await recordExecutionMetric("merge_gate_blocked", {
+            taskId,
+            runId,
+            reason: "pull_request_mismatch",
+          });
+          throw new HTTPException(409, {
+            message:
+              "Merge evidence must match the pull request recorded on the run",
+          });
+        }
+        prFields = {
+          prNumber: normalizedPrResult.prNumber,
+          prUrl: normalizedPrResult.prUrl,
+          prState: normalizedPrResult.prState,
+        };
+        if (normalizedAction === "create_pr") {
+          // Creating a PR records the review and leaves the final merge gate open.
+          nextState = "in_review";
+          nextAction = "Human merge gate is required before task finalization";
+        } else {
+          nextState = "finalized";
+          finalizationReceipt = {
+            receiptId: `review-${normalizedKey}`,
+            prNumber: normalizedPrResult.prNumber ?? null,
+            prUrl: normalizedPrResult.prUrl ?? null,
+            mergeCommitSha: normalizedPrResult.mergeCommitSha ?? null,
+            verifiedAt: new Date().toISOString(),
+            receiptHash: stableHash({
+              prNumber: normalizedPrResult.prNumber ?? null,
+              prUrl: normalizedPrResult.prUrl ?? null,
+              mergeCommitSha: normalizedPrResult.mergeCommitSha ?? null,
+              reviewHeadSha: normalizedReviewHeadSha ?? null,
+            }),
+          };
+        }
       }
     }
 
@@ -2847,7 +3992,7 @@ export async function reviewTaskRun({
       title: string;
       oldStatus: string;
     } | null = null;
-    if (nextState === "done") {
+    if (nextState === "finalized") {
       const [doneColumn] = await tx
         .select({ id: columnTable.id })
         .from(columnTable)
@@ -2863,18 +4008,58 @@ export async function reviewTaskRun({
           message: "Project has no done column for parent finalization",
         });
       }
-      if (task.status !== "done") {
-        await tx
-          .update(taskTable)
-          .set({ status: "done", columnId: doneColumn.id })
-          .where(eq(taskTable.id, taskId));
-        taskStatusChanged = {
-          taskId,
-          projectId: task.projectId,
-          title: task.title,
-          oldStatus: task.status,
-        };
+      // CAS the task revision, then switch execution authority state + the
+      // Kanban presentation mapping in the same transaction.
+      await bumpTaskRevision(tx, {
+        taskId,
+        expected: expectedTaskRevisionValue ?? undefined,
+      });
+      await tx
+        .update(taskTable)
+        .set({
+          status: "done",
+          columnId: doneColumn.id,
+          executionState: "done",
+          updatedAt: new Date(),
+        })
+        .where(eq(taskTable.id, taskId));
+      taskStatusChanged = {
+        taskId,
+        projectId: task.projectId,
+        title: task.title,
+        oldStatus: task.status,
+      };
+    } else if (nextState === "rejected") {
+      // Reject atomically requeues the task as ready for a branch-per-run
+      // retry; the Kanban mapping follows the execution authority state.
+      const [todoColumn] = await tx
+        .select({ id: columnTable.id })
+        .from(columnTable)
+        .where(
+          and(
+            eq(columnTable.projectId, task.projectId),
+            eq(columnTable.slug, "to-do"),
+          ),
+        )
+        .limit(1);
+      if (!todoColumn) {
+        throw new HTTPException(409, {
+          message: "Project has no to-do column for rejection requeue",
+        });
       }
+      await bumpTaskRevision(tx, {
+        taskId,
+        expected: expectedTaskRevisionValue ?? undefined,
+      });
+      await tx
+        .update(taskTable)
+        .set({
+          status: "to-do",
+          columnId: todoColumn.id,
+          executionState: "ready",
+          updatedAt: new Date(),
+        })
+        .where(eq(taskTable.id, taskId));
     }
 
     const parentReview = {
@@ -2892,6 +4077,14 @@ export async function reviewTaskRun({
       ...(run.evidence ?? {}),
       parentReview,
     };
+    if (
+      expectedRunRevisionValue !== undefined &&
+      expectedRunRevisionValue !== run.runRevision
+    ) {
+      throw new HTTPException(409, {
+        message: "Stale expectedRunRevision: run changed before review",
+      });
+    }
     const [updated] = await tx
       .update(taskRunTable)
       .set({
@@ -2900,6 +4093,8 @@ export async function reviewTaskRun({
         blocker,
         nextAction,
         evidence: nextEvidence,
+        ...(finalizationReceipt ? { finalizationReceipt } : {}),
+        runRevision: sql`${taskRunTable.runRevision} + 1`,
         ...prFields,
         updatedAt: new Date(),
       })
@@ -2917,6 +4112,35 @@ export async function reviewTaskRun({
       kind: "parent_review",
       payload: parentReview,
     });
+
+    // Transactional outbox: terminal review outcomes always notify Telegram.
+    if (nextState === "finalized") {
+      await enqueueNotificationEvent(tx, {
+        taskId,
+        runId,
+        kind: "done",
+        payload: {
+          taskId,
+          runId,
+          branch: run.branchName,
+          commitSha: run.commitSha,
+          prNumber: updated.prNumber ?? null,
+          outcome: "finalized",
+        },
+      });
+    } else if (nextState === "rejected") {
+      await enqueueNotificationEvent(tx, {
+        taskId,
+        runId,
+        kind: "failed",
+        payload: {
+          taskId,
+          runId,
+          outcome: "parent_rejected",
+          reason: (normalizedReason ?? "").slice(0, 300),
+        },
+      });
+    }
 
     const response = await saveIdempotencyResponse(tx, {
       userId,

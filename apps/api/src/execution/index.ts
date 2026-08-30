@@ -12,6 +12,11 @@ import { requireWorkspacePermission } from "../utils/require-workspace-permissio
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import { listExecutionFlags, setExecutionFlag } from "./gates";
 import {
+  DEFAULT_NOTIFICATION_ROUTE,
+  listDueNotificationEvents,
+  updateNotificationDelivery,
+} from "./outbox";
+import {
   acknowledgeScheduleDispatch,
   createExecutionSchedule,
   dispatchScheduleOnce,
@@ -21,12 +26,17 @@ import {
 } from "./schedules";
 import {
   advancePreapprovedFallback,
+  applyControlRequest,
+  claimControlRequest,
   claimTaskRun,
   createAgentPrincipal,
+  createControlRequest,
+  createTaskRunCheckpoint,
   getExecutionManifest,
   getTaskRun,
   heartbeatTaskRun,
   listAgentPrincipals,
+  listDueControlRequests,
   listPreapprovedFallbackCandidates,
   listTaskRunEvidence,
   listTaskRuns,
@@ -35,6 +45,7 @@ import {
   reportTaskRun,
   resumeTaskRun,
   reviewTaskRun,
+  supervisorReportTaskRun,
   toTaskRunResponse,
   upsertExecutionManifest,
 } from "./service";
@@ -476,6 +487,10 @@ const execution = new Hono<{
         evidence: v.optional(v.record(v.string(), v.unknown())),
         blocker: v.optional(v.string()),
         nextAction: v.optional(v.string()),
+        failureKind: v.optional(v.string()),
+        modelFailed: v.optional(v.string()),
+        retryAt: v.optional(v.string()),
+        expectedRunRevision: v.optional(v.number()),
       }),
     ),
     workspaceAccess.fromTask("taskId"),
@@ -501,6 +516,120 @@ const execution = new Hono<{
         evidence: body.evidence,
         blocker: body.blocker,
         nextAction: body.nextAction,
+        failureKind: body.failureKind,
+        modelFailed: body.modelFailed,
+        retryAt: body.retryAt,
+        expectedRunRevision: body.expectedRunRevision,
+        requestKey,
+      });
+      return c.json(run);
+    },
+  )
+  .post(
+    "/task/:taskId/runs/:runId/checkpoints",
+    describeRoute({
+      operationId: "createTaskRunCheckpoint",
+      tags: ["Execution"],
+      description:
+        "Record a durable worker checkpoint backed by a fixed Git guard push receipt",
+      responses: {
+        200: {
+          description: "Checkpoint accepted",
+          content: {
+            "application/json": { schema: resolver(taskRunSchema) },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string(), runId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        leaseEpoch: v.number(),
+        baseSha: v.optional(v.string()),
+        headSha: v.string(),
+        commitSha: v.string(),
+        guardReceipt: v.record(v.string(), v.unknown()),
+        commands: v.optional(v.array(v.string())),
+        artifactHashes: v.optional(v.record(v.string(), v.unknown())),
+        verifyResult: v.optional(v.record(v.string(), v.unknown())),
+        expectedRunRevision: v.optional(v.number()),
+      }),
+    ),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c) => {
+      const { taskId, runId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const leaseToken = c.req.header("X-Kaneo-Lease-Token")?.trim();
+      if (!leaseToken) return c.json({ error: "Lease token is required" }, 401);
+      const run = await createTaskRunCheckpoint({
+        taskId,
+        runId,
+        userId: c.get("userId"),
+        leaseEpoch: body.leaseEpoch,
+        leaseToken,
+        baseSha: body.baseSha,
+        headSha: body.headSha,
+        commitSha: body.commitSha,
+        guardReceipt: body.guardReceipt,
+        commands: body.commands,
+        artifactHashes: body.artifactHashes,
+        verifyResult: body.verifyResult,
+        expectedRunRevision: body.expectedRunRevision,
+        requestKey,
+      });
+      return c.json(run);
+    },
+  )
+  .post(
+    "/task/:taskId/runs/:runId/supervisor-report",
+    describeRoute({
+      operationId: "supervisorReportTaskRun",
+      tags: ["Execution"],
+      description:
+        "Dispatcher supervisor terminalizes a run from the structured worker terminal receipt",
+      responses: {
+        200: {
+          description: "Supervisor report applied",
+          content: {
+            "application/json": { schema: resolver(taskRunSchema) },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string(), runId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        agentPrincipalId: v.string(),
+        occurrenceId: v.optional(v.string()),
+        handoffHash: v.optional(v.string()),
+        workerTerminalReceipt: v.record(v.string(), v.unknown()),
+        expectedRunRevision: v.optional(v.number()),
+      }),
+    ),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c) => {
+      const { taskId, runId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const supervisorFence = c.req.header("X-Kaneo-Supervisor-Fence")?.trim();
+      if (!supervisorFence) {
+        return c.json({ error: "Supervisor fence is required" }, 401);
+      }
+      const run = await supervisorReportTaskRun({
+        taskId,
+        runId,
+        userId: c.get("userId"),
+        agentPrincipalId: body.agentPrincipalId,
+        occurrenceId: body.occurrenceId,
+        handoffHash: body.handoffHash,
+        supervisorFence,
+        workerTerminalReceipt: body.workerTerminalReceipt,
+        expectedRunRevision: body.expectedRunRevision,
         requestKey,
       });
       return c.json(run);
@@ -531,6 +660,9 @@ const execution = new Hono<{
         reason: v.optional(v.string()),
         verification: v.optional(v.record(v.string(), v.unknown())),
         prResult: v.optional(v.record(v.string(), v.unknown())),
+        expectedTaskRevision: v.optional(v.number()),
+        expectedRunRevision: v.optional(v.number()),
+        reviewHeadSha: v.optional(v.string()),
       }),
     ),
     workspaceAccess.fromTask("taskId"),
@@ -548,6 +680,9 @@ const execution = new Hono<{
         reason: body.reason,
         verification: body.verification,
         prResult: body.prResult,
+        expectedTaskRevision: body.expectedTaskRevision,
+        expectedRunRevision: body.expectedRunRevision,
+        reviewHeadSha: body.reviewHeadSha,
         requestKey,
       });
       return c.json(run);
@@ -575,6 +710,8 @@ const execution = new Hono<{
       v.object({
         agentPrincipalId: v.string(),
         preferredModel: v.optional(v.nullable(v.string())),
+        initiatedBy: v.optional(v.picklist(["telegram", "parent"])),
+        contextNote: v.optional(v.string()),
       }),
     ),
     workspaceAccess.fromTask("taskId"),
@@ -589,6 +726,8 @@ const execution = new Hono<{
         userId: c.get("userId"),
         agentPrincipalId: body.agentPrincipalId,
         preferredModel: body.preferredModel,
+        initiatedBy: body.initiatedBy,
+        contextNote: body.contextNote,
         requestKey,
       });
       return c.json(
@@ -719,6 +858,10 @@ const execution = new Hono<{
         maxRuntimeSeconds: v.number(),
         concurrencyKey: v.optional(v.string()),
         retryPolicy: v.optional(v.record(v.string(), v.unknown())),
+        dependencyPolicy: v.optional(v.string()),
+        notificationRoute: v.optional(v.string()),
+        telegramQuotaResume: v.optional(v.string()),
+        planHash: v.optional(v.string()),
       }),
     ),
     workspaceAccess.fromTask("taskId"),
@@ -741,6 +884,10 @@ const execution = new Hono<{
         maxRuntimeSeconds: body.maxRuntimeSeconds,
         concurrencyKey: body.concurrencyKey,
         retryPolicy: body.retryPolicy,
+        dependencyPolicy: body.dependencyPolicy,
+        notificationRoute: body.notificationRoute,
+        telegramQuotaResume: body.telegramQuotaResume,
+        planHash: body.planHash,
       });
       return c.json({ id: schedule.id }, 201);
     },
@@ -820,6 +967,7 @@ const execution = new Hono<{
                   outcome: v.string(),
                   reason: v.optional(v.string()),
                   ackToken: v.optional(v.string()),
+                  runnerSupervisorFence: v.optional(v.string()),
                 }),
               ),
             },
@@ -834,6 +982,7 @@ const execution = new Hono<{
         scope: v.array(v.string()),
         agentPrincipalId: v.string(),
         noOpReason: v.optional(v.string()),
+        expectedScheduleRevision: v.optional(v.number()),
       }),
     ),
     async (c) => {
@@ -870,6 +1019,7 @@ const execution = new Hono<{
         },
         scope: body.scope,
         noOpReason: body.noOpReason,
+        expectedScheduleRevision: body.expectedScheduleRevision,
       });
       return c.json(outcome);
     },
@@ -923,6 +1073,344 @@ const execution = new Hono<{
         ackToken: body.ackToken,
       });
       return c.json({ id: schedule.id });
+    },
+  )
+  .post(
+    "/control-requests",
+    describeRoute({
+      operationId: "createExecutionControlRequest",
+      tags: ["Execution"],
+      description:
+        "Create a structured control request (parent or Telegram actor derived from API key scope)",
+      responses: {
+        200: {
+          description: "Control request created or replayed",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator(
+      "json",
+      v.object({
+        taskId: v.string(),
+        runId: v.optional(v.string()),
+        action: v.string(),
+        eventId: v.optional(v.string()),
+        deliveryId: v.optional(v.string()),
+        payload: v.optional(v.record(v.string(), v.unknown())),
+        expectedTaskRevision: v.optional(v.number()),
+        expectedRunRevision: v.optional(v.number()),
+        expiresInSeconds: v.optional(v.number()),
+        host: v.optional(v.string()),
+      }),
+    ),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ execution: ["review"] }),
+    async (c) => {
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      const isTelegram =
+        Boolean(apiKey?.permissions?.execution?.includes("telegram_control")) &&
+        !apiKey?.permissions?.execution?.includes("review");
+      const actorType = isTelegram ? "telegram" : "parent";
+      if (isTelegram && body.action === "create_dispatch_request") {
+        // Telegram dispatch requests are always modelPolicy=inherit; the
+        // payload cannot carry a preferred model.
+        if (
+          body.payload &&
+          Object.keys(body.payload).some((key) =>
+            ["preferredModel", "model", "modelPolicy"].includes(key),
+          )
+        ) {
+          return c.json(
+            { error: "Telegram dispatch requests cannot carry a model policy" },
+            400,
+          );
+        }
+      }
+      const result = await createControlRequest({
+        taskId: body.taskId,
+        runId: body.runId,
+        action: body.action,
+        actorType,
+        route: isTelegram ? "prodesk-telegram" : null,
+        host: body.host ?? (isTelegram ? "pi-prodesk" : null),
+        eventId: body.eventId,
+        deliveryId: body.deliveryId,
+        payload: body.payload,
+        expectedTaskRevision: body.expectedTaskRevision,
+        expectedRunRevision: body.expectedRunRevision,
+        expiresInSeconds: body.expiresInSeconds,
+        requestKey,
+      });
+      return c.json(result);
+    },
+  )
+  .get(
+    "/control-requests/due",
+    describeRoute({
+      operationId: "listDueControlRequests",
+      tags: ["Execution"],
+      description: "Dispatcher view of pending control requests for a host",
+      responses: {
+        200: {
+          description: "Pending control requests",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator(
+      "query",
+      v.object({ host: v.string(), limit: v.optional(v.number()) }),
+    ),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (
+        apiKey &&
+        !apiKey.permissions?.execution?.some((scope) =>
+          ["dispatch", "review"].includes(scope),
+        )
+      ) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const query = c.req.valid("query");
+      const requests = await listDueControlRequests({
+        host: query.host,
+        limit: query.limit,
+      });
+      return c.json(requests);
+    },
+  )
+  .post(
+    "/control-requests/:id/claim",
+    describeRoute({
+      operationId: "claimExecutionControlRequest",
+      tags: ["Execution"],
+      description: "CAS claim a pending control request for a consumer",
+      responses: {
+        200: {
+          description: "Claim outcome",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ id: v.string() })),
+    validator(
+      "json",
+      v.object({
+        consumerId: v.string(),
+        claimTtlSeconds: v.optional(v.number()),
+      }),
+    ),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (
+        apiKey &&
+        !apiKey.permissions?.execution?.some((scope) =>
+          ["dispatch", "review"].includes(scope),
+        )
+      ) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const { id } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const result = await claimControlRequest({
+        id,
+        consumerId: body.consumerId,
+        claimTtlSeconds: body.claimTtlSeconds,
+      });
+      return c.json(result);
+    },
+  )
+  .post(
+    "/control-requests/:id/apply",
+    describeRoute({
+      operationId: "applyExecutionControlRequest",
+      tags: ["Execution"],
+      description: "CAS apply a claimed control request outcome",
+      responses: {
+        200: {
+          description: "Apply outcome",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ id: v.string() })),
+    validator(
+      "json",
+      v.object({
+        consumerId: v.string(),
+        outcome: v.picklist(["applied", "rejected"]),
+        result: v.optional(v.record(v.string(), v.unknown())),
+      }),
+    ),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (
+        apiKey &&
+        !apiKey.permissions?.execution?.some((scope) =>
+          ["dispatch", "review"].includes(scope),
+        )
+      ) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const { id } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const result = await applyControlRequest({
+        id,
+        consumerId: body.consumerId,
+        outcome: body.outcome,
+        result: body.result,
+      });
+      return c.json(result);
+    },
+  )
+  .get(
+    "/notification-events/due",
+    describeRoute({
+      operationId: "listDueNotificationEvents",
+      tags: ["Execution"],
+      description:
+        "TelePi observer view of due notification events for a route",
+      responses: {
+        200: {
+          description: "Due notification events with delivery rows",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator(
+      "query",
+      v.object({
+        route: v.optional(v.string()),
+        limit: v.optional(v.number()),
+      }),
+    ),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (
+        apiKey &&
+        !apiKey.permissions?.execution?.some((scope) =>
+          ["telegram_read", "telegram_control"].includes(scope),
+        )
+      ) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const query = c.req.valid("query");
+      const events = await listDueNotificationEvents({
+        route: query.route ?? DEFAULT_NOTIFICATION_ROUTE,
+        limit: query.limit,
+      });
+      return c.json(events);
+    },
+  )
+  .post(
+    "/notification-deliveries/:id",
+    describeRoute({
+      operationId: "updateNotificationDelivery",
+      tags: ["Execution"],
+      description: "Record delivery lifecycle state for a notification event",
+      responses: {
+        200: {
+          description: "Delivery updated",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ id: v.string() })),
+    validator(
+      "json",
+      v.object({
+        state: v.picklist([
+          "pending",
+          "sending",
+          "sent",
+          "send_unknown",
+          "acked",
+          "dead_letter",
+        ]),
+        route: v.optional(v.string()),
+        telegramMessageIds: v.optional(v.array(v.number())),
+        lastError: v.optional(v.string()),
+      }),
+    ),
+    async (c) => {
+      if (!(await isInstanceAdmin(c))) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      const apiKey = c.get("apiKey") as
+        | { permissions?: Record<string, string[]> | null }
+        | undefined;
+      if (
+        apiKey &&
+        !apiKey.permissions?.execution?.includes("telegram_control")
+      ) {
+        return c.json({ error: "Insufficient API key scope" }, 403);
+      }
+      const { id } = c.req.valid("param");
+      const body = c.req.valid("json");
+      try {
+        const delivery = await updateNotificationDelivery({
+          id,
+          route: body.route,
+          state: body.state,
+          telegramMessageIds: body.telegramMessageIds,
+          lastError: body.lastError,
+        });
+        return c.json(delivery);
+      } catch (error) {
+        return c.json(
+          { error: error instanceof Error ? error.message : "unknown" },
+          400,
+        );
+      }
     },
   );
 
