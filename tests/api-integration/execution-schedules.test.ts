@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
+import { stableHash } from "../../apps/api/src/execution/validation";
 import { createApp } from "../../apps/api/src/index";
 import { handleExecutionRunUpdated } from "../../apps/api/src/plugins/telegram/events";
 import { mockAuthenticatedSession } from "./helpers/auth";
@@ -266,6 +267,74 @@ describe("API integration: execution schedules (T6)", () => {
     );
     expect(due.status).toBe(200);
     expect(await due.json()).toEqual([]);
+  });
+
+  it("accepts a supervisor report addressed with the principal row ID", async () => {
+    const fixture = await createScheduleFixture();
+    const created = await createSchedule(fixture.app, fixture.task.id);
+    expect(created.status).toBe(201);
+    const scheduleId = ((await created.json()) as { id: string }).id;
+    const dispatch = await fixture.app.request(
+      `/api/execution/schedules/${scheduleId}/dispatch`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: ["apps/api/src/execution/service.ts"],
+          agentPrincipalId: fixture.principal.id,
+        }),
+      },
+    );
+    expect(dispatch.status).toBe(200);
+    const [occurrence] = await db
+      .select()
+      .from(schema.executionScheduleOccurrenceTable)
+      .where(
+        eq(schema.executionScheduleOccurrenceTable.scheduleId, scheduleId),
+      );
+    const [run] = await db
+      .select()
+      .from(schema.taskRunTable)
+      .where(eq(schema.taskRunTable.scheduleId, scheduleId));
+    if (!occurrence || !run) throw new Error("scheduled run fixture missing");
+
+    // The real dispatcher keeps the raw fence in its local handoff file. The
+    // test swaps only the stored hash so it can exercise the HTTP contract
+    // without exposing a production fence in test code.
+    const supervisorFence = "fixture-supervisor-fence";
+    await db
+      .update(schema.executionScheduleOccurrenceTable)
+      .set({ supervisorFenceHash: stableHash(supervisorFence) })
+      .where(eq(schema.executionScheduleOccurrenceTable.id, occurrence.id));
+
+    const report = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${run.id}/supervisor-report`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "supervisor-report-principal-row-id",
+          "X-Kaneo-Supervisor-Fence": supervisorFence,
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          occurrenceId: occurrence.id,
+          expectedRunRevision: run.runRevision,
+          workerTerminalReceipt: {
+            schemaVersion: "1",
+            taskId: fixture.task.id,
+            runId: run.id,
+            stopReason: "process_exit",
+            finalState: "failed",
+            failureKind: "worker_crash",
+          },
+        }),
+      },
+    );
+    expect(report.status).toBe(200);
+    expect((await report.json()) as { state: string }).toMatchObject({
+      state: "failed",
+    });
   });
 
   it("does not let a normal claim adopt an unscheduled active run", async () => {

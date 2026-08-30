@@ -3077,14 +3077,16 @@ export async function supervisorReportTaskRun({
       });
     }
     // The dispatcher must own the run's worker principal: it spawned this
-    // worker and is the only actor allowed to terminalize it on crash.
+    // worker and is the only actor allowed to terminalize it on crash. The
+    // wire field is the server-issued principal row ID; runtimeId is a
+    // separate stable identity used by the host binding.
     const [principal] = await tx
       .select({
         id: agentPrincipalTable.id,
         userId: agentPrincipalTable.userId,
       })
       .from(agentPrincipalTable)
-      .where(eq(agentPrincipalTable.runtimeId, normalizedPrincipalId))
+      .where(eq(agentPrincipalTable.id, normalizedPrincipalId))
       .limit(1);
     if (!principal || principal.id !== run.agentPrincipalId) {
       throw new HTTPException(403, {
