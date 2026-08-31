@@ -36,6 +36,7 @@ import {
   EXECUTION_PROTOCOL_VERSION,
   extractWorkerContractScope,
   extractWorkerContractState,
+  FULLY_TERMINAL_RUN_STATES,
   getLeaseExpiry,
   hashLeaseToken,
   isLeaseExpired,
@@ -57,6 +58,7 @@ import {
   validateScope,
   validateVerificationProfile,
   validateWorkerReportState,
+  WORKER_TERMINAL_RUN_STATES,
 } from "./validation";
 
 export const AGENT_SCOPES = [
@@ -3092,6 +3094,21 @@ export async function supervisorReportTaskRun({
       throw new HTTPException(403, {
         message:
           "Supervisor report must come from the run's own agent principal",
+      });
+    }
+    // The supervisor crash sweep exists to terminalize workers that died
+    // before reporting. A run that already reached a terminal state carries
+    // an authoritative worker report (in_review) or parent/final decision;
+    // overwriting it from the sweep would destroy exactly the evidence the
+    // parent review gate needs. The dispatcher also skips these states, so
+    // this guard is the machine-enforced backstop (SPEC canonical states).
+    if (
+      (WORKER_TERMINAL_RUN_STATES as readonly string[]).includes(run.state) ||
+      (FULLY_TERMINAL_RUN_STATES as readonly string[]).includes(run.state)
+    ) {
+      throw new HTTPException(409, {
+        message:
+          "Run already terminal; supervisor report must not override the worker or parent decision",
       });
     }
     if (

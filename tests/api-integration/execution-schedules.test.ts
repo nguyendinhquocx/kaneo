@@ -337,6 +337,82 @@ describe("API integration: execution schedules (T6)", () => {
     });
   });
 
+  it("refuses to override an in_review run from the supervisor sweep", async () => {
+    // Regression (ProDesk run tszq17): the worker reported in_review with a
+    // guarded commit, then the dispatcher crash sweep classified exit 0 as
+    // failed/test_failure and clobbered the worker report. The supervisor
+    // report must never override a worker-terminal or fully-terminal run.
+    const fixture = await createScheduleFixture();
+    const created = await createSchedule(fixture.app, fixture.task.id);
+    expect(created.status).toBe(201);
+    const scheduleId = ((await created.json()) as { id: string }).id;
+    const dispatch = await fixture.app.request(
+      `/api/execution/schedules/${scheduleId}/dispatch`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: ["apps/api/src/execution/service.ts"],
+          agentPrincipalId: fixture.principal.id,
+        }),
+      },
+    );
+    expect(dispatch.status).toBe(200);
+    const [occurrence] = await db
+      .select()
+      .from(schema.executionScheduleOccurrenceTable)
+      .where(
+        eq(schema.executionScheduleOccurrenceTable.scheduleId, scheduleId),
+      );
+    const [run] = await db
+      .select()
+      .from(schema.taskRunTable)
+      .where(eq(schema.taskRunTable.scheduleId, scheduleId));
+    if (!occurrence || !run) throw new Error("scheduled run fixture missing");
+
+    // Simulate the worker having reported in_review (worker-terminal).
+    await db
+      .update(schema.taskRunTable)
+      .set({ state: "in_review", runRevision: run.runRevision + 1 })
+      .where(eq(schema.taskRunTable.id, run.id));
+
+    const supervisorFence = "fixture-supervisor-fence-in-review";
+    await db
+      .update(schema.executionScheduleOccurrenceTable)
+      .set({ supervisorFenceHash: stableHash(supervisorFence) })
+      .where(eq(schema.executionScheduleOccurrenceTable.id, occurrence.id));
+
+    const report = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${run.id}/supervisor-report`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "supervisor-report-in-review-guard",
+          "X-Kaneo-Supervisor-Fence": supervisorFence,
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          occurrenceId: occurrence.id,
+          workerTerminalReceipt: {
+            schemaVersion: "1",
+            taskId: fixture.task.id,
+            runId: run.id,
+            stopReason: "process_exit",
+            finalState: "failed",
+            failureKind: "test_failure",
+          },
+        }),
+      },
+    );
+    expect(report.status).toBe(409);
+    const [after] = await db
+      .select()
+      .from(schema.taskRunTable)
+      .where(eq(schema.taskRunTable.id, run.id));
+    expect(after?.state).toBe("in_review");
+  });
+
   it("does not let a normal claim adopt an unscheduled active run", async () => {
     const fixture = await createScheduleFixture();
     const scope = ["apps/api/src/execution/service.ts"];
