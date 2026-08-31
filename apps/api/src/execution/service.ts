@@ -1261,6 +1261,7 @@ type ClaimTaskRunInput = {
   resumeBranchName?: string;
   resumeBaseSha?: string | null;
   resumeCommitSha?: string | null;
+  logicalSessionId?: string | null;
   resumeFallback?: ResumeFallbackEvidence;
 };
 
@@ -1283,6 +1284,7 @@ export async function claimTaskRun(
     resumeBranchName,
     resumeBaseSha,
     resumeCommitSha,
+    logicalSessionId,
     resumeFallback,
   } = input;
   if (!requestKey || requestKey.length > 200) {
@@ -1303,6 +1305,7 @@ export async function claimTaskRun(
     resumeBranchName: resumeBranchName ?? null,
     resumeBaseSha: resumeBaseSha ?? null,
     resumeCommitSha: resumeCommitSha ?? null,
+    logicalSessionId: logicalSessionId ?? null,
     resumeFallback: resumeFallback ?? null,
   });
 
@@ -1621,6 +1624,8 @@ export async function claimTaskRun(
         baseBranch: manifest.baseBranch,
         state: "in_progress",
         role: "worker",
+        parentRunId: resumeFromRunId ?? null,
+        logicalSessionId: logicalSessionId ?? null,
         attempt: runAttempt,
         maxAttempts: runMaxAttempts,
         agentPrincipalId: principal.id,
@@ -1836,10 +1841,12 @@ export async function resumeTaskRun(input: {
     requestKey,
     expectedHostId: source.hostId,
     modelPolicy,
+    scheduleId: source.scheduleId ?? undefined,
     resumeFromRunId: source.id,
     resumeBranchName: branchName,
     resumeBaseSha: source.baseSha,
     resumeCommitSha: source.commitSha,
+    logicalSessionId: source.logicalSessionId,
   });
   if (boundedContextNote) {
     await db
@@ -2210,6 +2217,7 @@ export async function advancePreapprovedFallback(input: {
         resumeBranchName: source.branchName,
         resumeBaseSha: source.baseSha,
         resumeCommitSha: source.commitSha,
+        logicalSessionId: source.logicalSessionId,
         resumeFallback: {
           scheduleId: schedule.id,
           fromRunId: source.id,
