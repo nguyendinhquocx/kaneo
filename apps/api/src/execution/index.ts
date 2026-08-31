@@ -56,6 +56,8 @@ import {
 } from "./service";
 
 type ExecutionApiKeyContext = {
+  id?: string;
+  userId?: string;
   permissions?: Record<string, string[]> | null;
 };
 
@@ -1175,9 +1177,7 @@ const execution = new Hono<{
     async (c) => {
       const body = c.req.valid("json");
       const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
-      const apiKey = c.get("apiKey") as
-        | { permissions?: Record<string, string[]> | null }
-        | undefined;
+      const apiKey = c.get("apiKey") as ExecutionApiKeyContext | undefined;
       const isTelegram =
         Boolean(apiKey?.permissions?.execution?.includes("telegram_control")) &&
         !apiKey?.permissions?.execution?.includes("review");
@@ -1202,6 +1202,8 @@ const execution = new Hono<{
         runId: body.runId,
         action: body.action,
         actorType,
+        authenticatedPrincipalId: apiKey?.id ?? null,
+        actorUserId: c.get("userId") || apiKey?.userId || null,
         route: isTelegram ? "prodesk-telegram" : null,
         host: body.host ?? (isTelegram ? "pi-prodesk" : null),
         eventId: body.eventId,

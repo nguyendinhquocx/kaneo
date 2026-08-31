@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
@@ -26,6 +27,15 @@ type RunResponse = {
   leaseActive: boolean;
   state: string;
 };
+
+async function hashApiKeyForTest(key: string): Promise<string> {
+  const hash = createHash("sha256").update(key).digest();
+  return hash
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
+}
 
 async function createTaskFixture() {
   const member = await createWorkspaceMember({ role: "admin" });
@@ -74,6 +84,58 @@ describe("API integration: execution Task 1", () => {
   beforeEach(async () => {
     await resetTestDatabase();
     resetExecutionMetricsForTests();
+  });
+
+  it("records the authenticated API-key actor when Telegram creates a control request", async () => {
+    const { member, task } = await createTaskFixture();
+    const rawKey = `telegram_control_${randomUUID()}`;
+    const now = new Date();
+    const hashedKey = await hashApiKeyForTest(rawKey);
+    const [apiKey] = await db
+      .insert(schema.apikeyTable)
+      .values({
+        referenceId: member.user.id,
+        userId: member.user.id,
+        key: hashedKey,
+        name: "telegram control test key",
+        start: rawKey.slice(0, 12),
+        prefix: "kaneo",
+        createdAt: now,
+        updatedAt: now,
+        permissions: JSON.stringify({
+          task: ["read"],
+          execution: ["telegram_control"],
+        }),
+      })
+      .returning({ id: schema.apikeyTable.id });
+
+    const { app } = createApp();
+    const response = await app.request("/api/execution/control-requests", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${rawKey}`,
+        "content-type": "application/json",
+        "Idempotency-Key": "telegram-control-actor-1",
+      },
+      body: JSON.stringify({
+        taskId: task.id,
+        action: "read_status",
+        expiresInSeconds: 300,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      outcome: "created",
+      request: {
+        actorType: "telegram",
+        authenticatedPrincipalId: apiKey?.id,
+        actorUserId: member.user.id,
+        taskId: task.id,
+        action: "read_status",
+        state: "pending",
+      },
+    });
   });
 
   it("serializes manifest, allows one concurrent claim, and fences stale takeover", async () => {
