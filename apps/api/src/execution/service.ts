@@ -30,7 +30,7 @@ import {
   recordExecutionMetric,
 } from "./gates";
 import { enqueueNotificationEvent } from "./outbox";
-import { bumpRunRevision, bumpTaskRevision } from "./revisions";
+import { bumpTaskRevision } from "./revisions";
 import {
   createLeaseToken,
   EXECUTION_PROTOCOL_VERSION,
@@ -1570,6 +1570,38 @@ export async function claimTaskRun(
       }
     }
 
+    let resumeSource:
+      | { taskId: string; attempt: number; maxAttempts: number }
+      | undefined;
+    if (resumeFromRunId) {
+      const [source] = await tx
+        .select({
+          taskId: taskRunTable.taskId,
+          attempt: taskRunTable.attempt,
+          maxAttempts: taskRunTable.maxAttempts,
+        })
+        .from(taskRunTable)
+        .where(eq(taskRunTable.id, resumeFromRunId))
+        .limit(1);
+      if (!source || source.taskId !== taskId) {
+        throw new HTTPException(404, {
+          message: "Resume source task run not found for task",
+        });
+      }
+      resumeSource = source;
+    }
+    const policyMaxAttempts = modelPolicy?.retryPolicy?.maxAttempts;
+    const configuredMaxAttempts =
+      typeof policyMaxAttempts === "number" &&
+      Number.isInteger(policyMaxAttempts) &&
+      policyMaxAttempts >= 1
+        ? policyMaxAttempts
+        : 1;
+    const runAttempt = resumeSource ? resumeSource.attempt + 1 : 1;
+    const runMaxAttempts = Math.max(
+      resumeSource?.maxAttempts ?? 1,
+      configuredMaxAttempts,
+    );
     const runId = createId();
     const branchName = resumeBranchName
       ? validateBranchName(resumeBranchName, "resumeBranchName")
@@ -1589,6 +1621,8 @@ export async function claimTaskRun(
         baseBranch: manifest.baseBranch,
         state: "in_progress",
         role: "worker",
+        attempt: runAttempt,
+        maxAttempts: runMaxAttempts,
         agentPrincipalId: principal.id,
         hostId: principal.hostId,
         branchName,
@@ -1721,6 +1755,14 @@ export async function resumeTaskRun(input: {
       message: "Cannot resume a run while its lease is active",
     });
   }
+  const sourceEvidence = asEvidenceRecord(source.evidence);
+  const scheduleEvidence = asEvidenceRecord(sourceEvidence.schedule);
+  const scheduleRetryPolicy = readRetryPolicy(scheduleEvidence.retryPolicy);
+  const effectiveMaxAttempts = Math.max(
+    source.maxAttempts,
+    scheduleRetryPolicy.maxAttempts ?? 1,
+  );
+
   // SPEC-kaneo-native-telegram-control-v0-1 (T5): a Telegram-initiated quota
   // continue is fail-closed against schedule policy, retryAt and attempts.
   if (telegramInitiated && source.state === "blocked_quota") {
@@ -1729,7 +1771,7 @@ export async function resumeTaskRun(input: {
         message: "continue_quota is not allowed before retryAt",
       });
     }
-    if (source.attempt >= source.maxAttempts) {
+    if (source.attempt >= effectiveMaxAttempts) {
       throw new HTTPException(409, {
         message: "quota resume attempts are exhausted (maxAttempts reached)",
       });
@@ -1769,41 +1811,20 @@ export async function resumeTaskRun(input: {
     input.preferredModel === undefined || input.preferredModel === null
       ? input.preferredModel === null
         ? null
-        : (() => {
-            const scheduleEvidence = source.evidence?.schedule;
-            if (
-              scheduleEvidence &&
-              typeof scheduleEvidence === "object" &&
-              !Array.isArray(scheduleEvidence) &&
-              typeof (scheduleEvidence as Record<string, unknown>)
-                .preferredModel === "string"
-            ) {
-              return validateModelId(
-                (scheduleEvidence as Record<string, unknown>).preferredModel,
-                "preferredModel",
-              );
-            }
-            return null;
-          })()
+        : typeof scheduleEvidence.preferredModel === "string"
+          ? validateModelId(scheduleEvidence.preferredModel, "preferredModel")
+          : null
       : validateModelId(input.preferredModel, "preferredModel");
-  const scheduleEvidence = source.evidence?.schedule;
-  const maxRuntimeSeconds =
-    scheduleEvidence &&
-    typeof scheduleEvidence === "object" &&
-    !Array.isArray(scheduleEvidence) &&
-    Number.isInteger(
-      (scheduleEvidence as Record<string, unknown>).maxRuntimeSeconds,
-    )
-      ? ((scheduleEvidence as Record<string, unknown>)
-          .maxRuntimeSeconds as number)
-      : 3600;
+  const maxRuntimeSeconds = Number.isInteger(scheduleEvidence.maxRuntimeSeconds)
+    ? (scheduleEvidence.maxRuntimeSeconds as number)
+    : 3600;
   const modelPolicy: ScheduleRunModelPolicy = {
     preferredModel,
     fallbackMode: "manual",
     fallbackModels: [],
     maxRuntimeSeconds,
     concurrencyKey: `resume:${input.taskId}`,
-    retryPolicy: {},
+    retryPolicy: scheduleRetryPolicy,
   };
   const context = await getTaskContext(input.taskId);
   assertManifestModelPolicy(context.manifest.policy ?? {}, modelPolicy);
@@ -1855,6 +1876,22 @@ function asEvidenceRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function readRetryPolicy(value: unknown): Record<string, number> {
+  const record = asEvidenceRecord(value);
+  const policy: Record<string, number> = {};
+  for (const key of ["maxAttempts", "backoffSeconds"] as const) {
+    const candidate = record[key];
+    if (
+      typeof candidate === "number" &&
+      Number.isInteger(candidate) &&
+      candidate >= 1
+    ) {
+      policy[key] = candidate;
+    }
+  }
+  return policy;
 }
 
 function readWorkerFailureKind(

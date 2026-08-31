@@ -118,6 +118,7 @@ describe("API integration: execution schedules (T6)", () => {
     const notBefore = new Date(Date.now() - 1_000).toISOString();
     const first = await createSchedule(fixture.app, fixture.task.id, {
       notBefore,
+      retryPolicy: { maxAttempts: 2, backoffSeconds: 15 },
     });
     expect(first.status).toBe(201);
     const scheduleId = ((await first.json()) as { id: string }).id;
@@ -187,6 +188,8 @@ describe("API integration: execution schedules (T6)", () => {
     });
     expect(runs).toHaveLength(1);
     expect(runs[0]?.scheduleId).toBe(scheduleId);
+    expect(runs[0]?.attempt).toBe(1);
+    expect(runs[0]?.maxAttempts).toBe(2);
 
     const workerAdoption = await fixture.app.request(
       `/api/execution/task/${fixture.task.id}/runs/claim`,
@@ -817,6 +820,78 @@ describe("API integration: execution schedules (T6)", () => {
     expect(replay.status).toBe(200);
     expect((await replay.json()).id).toBe(resumed.id);
     expect(await db.select().from(schema.taskRunTable)).toHaveLength(2);
+  });
+
+  it("uses the stored schedule retry budget for Telegram quota resume", async () => {
+    const fixture = await createScheduleFixture();
+    const created = await createSchedule(fixture.app, fixture.task.id, {
+      preferredModel: "zai/glm-5.3",
+      telegramQuotaResume: "allowed_same_model_after_reset",
+      retryPolicy: { maxAttempts: 2, backoffSeconds: 15 },
+    });
+    expect(created.status).toBe(201);
+    const scheduleId = ((await created.json()) as { id: string }).id;
+    const dispatch = await fixture.app.request(
+      `/api/execution/schedules/${scheduleId}/dispatch`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: ["apps/api/src/execution/service.ts"],
+          agentPrincipalId: fixture.principal.id,
+        }),
+      },
+    );
+    expect(dispatch.status).toBe(200);
+    const dispatched = (await dispatch.json()) as { runId: string | null };
+    expect(dispatched.runId).toEqual(expect.any(String));
+
+    const [source] = await db
+      .select()
+      .from(schema.taskRunTable)
+      .where(eq(schema.taskRunTable.id, dispatched.runId ?? ""));
+    expect(source).toBeDefined();
+    await db
+      .update(schema.taskRunTable)
+      .set({
+        state: "blocked_quota",
+        leaseActive: false,
+        leaseExpiresAt: new Date(0),
+        retryAt: new Date(Date.now() - 1_000),
+        maxAttempts: 1,
+        failureKind: "provider_quota",
+        evidence: {
+          schedule: {
+            scheduleId,
+            preferredModel: "zai/glm-5.3",
+            maxRuntimeSeconds: 3600,
+            retryPolicy: { maxAttempts: 2, backoffSeconds: 15 },
+          },
+        },
+      })
+      .where(eq(schema.taskRunTable.id, dispatched.runId ?? ""));
+
+    const resumed = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${dispatched.runId}/resume`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "telegram-quota-resume-budget-1",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          initiatedBy: "telegram",
+        }),
+      },
+    );
+    expect(resumed.status).toBe(201);
+    expect(await resumed.json()).toMatchObject({
+      attempt: 2,
+      maxAttempts: 2,
+      parentRunId: dispatched.runId,
+      scheduleId,
+    });
   });
 
   it("reclaims stale leases with durable watchdog evidence", async () => {
