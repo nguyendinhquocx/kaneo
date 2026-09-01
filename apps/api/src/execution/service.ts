@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createId } from "@paralleldrive/cuid2";
 import { and, asc, desc, eq, gt, inArray, lte, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
@@ -1864,13 +1865,89 @@ export async function resumeTaskRun(input: {
       })
       .where(eq(taskRunTable.id, result.run.id));
   }
+  // SPEC-kaneo-native-telegram-control-v0-1 (T5): a Telegram resume must
+  // actually spawn a worker on the host. Bind a dispatched occurrence with a
+  // one-time supervisor fence + ack token (same fencing shape as a schedule
+  // dispatch) so the calling dispatcher can precreate the worktree, write the
+  // 0600 handoff and acknowledge the spawn. Parent resumes keep the old
+  // semantics (host spawn is arranged by the parent flow, not this route).
+  let dispatch: ResumeDispatchMetadata | null = null;
+  if (telegramInitiated && source.scheduleId) {
+    dispatch = await bindResumeDispatchOccurrence({
+      source,
+      run: result.run,
+    });
+  }
   await publishTaskRunUpdated(
     input.taskId,
     result.run.id,
     input.userId,
     result.run.state,
   );
-  return result;
+  return { run: result.run, leaseToken: result.leaseToken, dispatch };
+}
+
+export type ResumeDispatchMetadata = {
+  scheduleId: string;
+  occurrenceId: string;
+  ackToken: string;
+  runnerSupervisorFence: string;
+  preferredModel: string | null;
+  maxRuntimeSeconds: number;
+};
+
+async function bindResumeDispatchOccurrence({
+  source,
+  run,
+}: {
+  source: typeof taskRunTable.$inferSelect;
+  run: typeof taskRunTable.$inferSelect;
+}): Promise<ResumeDispatchMetadata | null> {
+  const scheduleId = source.scheduleId;
+  if (!scheduleId) return null;
+  const ackToken = randomBytes(32).toString("base64url");
+  const supervisorFence = randomBytes(32).toString("base64url");
+  const [occurrence] = await db
+    .insert(executionScheduleOccurrenceTable)
+    .values({
+      id: createId(),
+      scheduleId,
+      // Unique per resumed run; keeps the resume fence separate from the
+      // original one-shot occurrence key.
+      occurrenceKey: `${scheduleId}:resume:${run.id}`,
+      scheduledFor: new Date(),
+      state: "dispatched",
+      claimedBy: `dispatcher:${source.agentPrincipalId}`,
+      claimedAt: new Date(),
+      claimGeneration: 1,
+      scheduleRevision: run.scheduleRevision ?? 1,
+      taskRevision: run.taskRevisionAtClaim,
+      manifestVersion: run.manifestVersion,
+      supervisorFenceHash: stableHash(supervisorFence),
+      ackTokenHash: stableHash(ackToken),
+      runId: run.id,
+    })
+    .onConflictDoNothing({
+      target: executionScheduleOccurrenceTable.occurrenceKey,
+    })
+    .returning();
+  if (!occurrence) return null;
+  const scheduleEvidence = asEvidenceRecord(
+    asEvidenceRecord(source.evidence).schedule,
+  );
+  return {
+    scheduleId,
+    occurrenceId: occurrence.id,
+    ackToken,
+    runnerSupervisorFence: supervisorFence,
+    preferredModel:
+      typeof scheduleEvidence.preferredModel === "string"
+        ? scheduleEvidence.preferredModel
+        : null,
+    maxRuntimeSeconds: Number.isInteger(scheduleEvidence.maxRuntimeSeconds)
+      ? (scheduleEvidence.maxRuntimeSeconds as number)
+      : 3600,
+  };
 }
 
 const PREAPPROVED_FALLBACK_FAILURE_KINDS = new Set([

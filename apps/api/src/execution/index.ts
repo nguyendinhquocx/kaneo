@@ -794,8 +794,12 @@ const execution = new Hono<{
         contextNote: body.contextNote,
         requestKey,
       });
+      // Dispatch metadata (occurrence + one-time fence/ack) rides only on the
+      // create response to the authorized dispatcher caller, mirroring the
+      // schedule dispatch response contract.
+      const payload = toTaskRunResponse(result.run, result.leaseToken);
       return c.json(
-        toTaskRunResponse(result.run, result.leaseToken),
+        result.dispatch ? { ...payload, dispatch: result.dispatch } : payload,
         result.leaseToken ? 201 : 200,
       );
     },

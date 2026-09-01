@@ -894,6 +894,145 @@ describe("API integration: execution schedules (T6)", () => {
     });
   });
 
+  it("binds dispatch fencing to a Telegram resume so the host can spawn it", async () => {
+    const fixture = await createScheduleFixture();
+    const created = await createSchedule(fixture.app, fixture.task.id, {
+      preferredModel: "zai/glm-5.3",
+      telegramQuotaResume: "allowed_same_model_after_reset",
+      retryPolicy: { maxAttempts: 2, backoffSeconds: 15 },
+    });
+    expect(created.status).toBe(201);
+    const scheduleId = ((await created.json()) as { id: string }).id;
+    const dispatch = await fixture.app.request(
+      `/api/execution/schedules/${scheduleId}/dispatch`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scope: ["apps/api/src/execution/service.ts"],
+          agentPrincipalId: fixture.principal.id,
+        }),
+      },
+    );
+    expect(dispatch.status).toBe(200);
+    const dispatched = (await dispatch.json()) as { runId: string | null };
+
+    await db
+      .update(schema.taskRunTable)
+      .set({
+        state: "blocked_quota",
+        leaseActive: false,
+        leaseExpiresAt: new Date(0),
+        retryAt: new Date(Date.now() - 1_000),
+        maxAttempts: 1,
+        failureKind: "provider_quota",
+        logicalSessionId: "logical-session-1",
+        evidence: {
+          schedule: {
+            scheduleId,
+            preferredModel: "zai/glm-5.3",
+            maxRuntimeSeconds: 3600,
+            retryPolicy: { maxAttempts: 2, backoffSeconds: 15 },
+          },
+        },
+      })
+      .where(eq(schema.taskRunTable.id, dispatched.runId ?? ""));
+
+    const resumed = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${dispatched.runId}/resume`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "telegram-resume-dispatch-1",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          initiatedBy: "telegram",
+        }),
+      },
+    );
+    expect(resumed.status).toBe(201);
+    const resumedBody = (await resumed.json()) as {
+      id: string;
+      parentRunId: string | null;
+      scheduleId: string | null;
+      logicalSessionId: string | null;
+      dispatch?: {
+        scheduleId: string;
+        occurrenceId: string;
+        ackToken: string;
+        runnerSupervisorFence: string;
+        preferredModel: string | null;
+        maxRuntimeSeconds: number;
+      };
+    };
+    expect(resumedBody.parentRunId).toBe(dispatched.runId);
+    expect(resumedBody.scheduleId).toBe(scheduleId);
+    expect(resumedBody.logicalSessionId).toBe("logical-session-1");
+    expect(resumedBody.dispatch).toMatchObject({
+      scheduleId,
+      preferredModel: "zai/glm-5.3",
+      maxRuntimeSeconds: 3600,
+    });
+    expect(resumedBody.dispatch?.ackToken).toEqual(expect.any(String));
+    expect(resumedBody.dispatch?.runnerSupervisorFence).toEqual(
+      expect.any(String),
+    );
+
+    const [occurrence] = await db
+      .select()
+      .from(schema.executionScheduleOccurrenceTable)
+      .where(
+        eq(
+          schema.executionScheduleOccurrenceTable.occurrenceKey,
+          `${scheduleId}:resume:${resumedBody.id}`,
+        ),
+      );
+    expect(occurrence?.state).toBe("dispatched");
+    expect(occurrence?.runId).toBe(resumedBody.id);
+    expect(occurrence?.supervisorFenceHash).toBe(
+      stableHash(resumedBody.dispatch?.runnerSupervisorFence ?? ""),
+    );
+
+    const ack = await fixture.app.request(
+      `/api/execution/schedules/${scheduleId}/ack`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          occurrenceId: resumedBody.dispatch?.occurrenceId,
+          runId: resumedBody.id,
+          agentPrincipalId: fixture.principal.id,
+          ackToken: resumedBody.dispatch?.ackToken,
+        }),
+      },
+    );
+    expect(ack.status).toBe(200);
+
+    const replay = await fixture.app.request(
+      `/api/execution/task/${fixture.task.id}/runs/${dispatched.runId}/resume`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": "telegram-resume-dispatch-1",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: fixture.principal.id,
+          initiatedBy: "telegram",
+        }),
+      },
+    );
+    expect(replay.status).toBe(200);
+    const replayBody = (await replay.json()) as {
+      id: string;
+      dispatch?: unknown;
+    };
+    expect(replayBody.id).toBe(resumedBody.id);
+    expect(replayBody.dispatch).toBeUndefined();
+  });
+
   it("reclaims stale leases with durable watchdog evidence", async () => {
     const fixture = await createScheduleFixture();
     const created = await createSchedule(fixture.app, fixture.task.id);
