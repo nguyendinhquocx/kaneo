@@ -1763,6 +1763,14 @@ export async function resumeTaskRun(input: {
   }
   const sourceEvidence = asEvidenceRecord(source.evidence);
   const scheduleEvidence = asEvidenceRecord(sourceEvidence.schedule);
+  const supervisorReceipt = asEvidenceRecord(sourceEvidence.supervisorReceipt);
+  const sourceLogicalSessionId =
+    typeof source.logicalSessionId === "string" && source.logicalSessionId
+      ? source.logicalSessionId
+      : typeof supervisorReceipt.logicalSessionId === "string" &&
+          supervisorReceipt.logicalSessionId
+        ? supervisorReceipt.logicalSessionId
+        : null;
   const scheduleRetryPolicy = readRetryPolicy(scheduleEvidence.retryPolicy);
   const effectiveMaxAttempts = Math.max(
     source.maxAttempts,
@@ -1812,7 +1820,6 @@ export async function resumeTaskRun(input: {
       message: "Resume must keep the original worker principal and branch",
     });
   }
-  const branchName = validateBranchName(source.branchName, "resumeBranchName");
   const preferredModel =
     input.preferredModel === undefined || input.preferredModel === null
       ? input.preferredModel === null
@@ -1844,10 +1851,11 @@ export async function resumeTaskRun(input: {
     modelPolicy,
     scheduleId: source.scheduleId ?? undefined,
     resumeFromRunId: source.id,
-    resumeBranchName: branchName,
-    resumeBaseSha: source.baseSha,
+    // No resumeBranchName: claimTaskRun generates a new branch containing the
+    // new run ID, so an old run worktree/branch can never block recovery.
+    resumeBaseSha: source.lastCheckpointSha ?? source.baseSha,
     resumeCommitSha: source.commitSha,
-    logicalSessionId: source.logicalSessionId,
+    logicalSessionId: sourceLogicalSessionId,
   });
   if (boundedContextNote) {
     await db
@@ -2291,10 +2299,19 @@ export async function advancePreapprovedFallback(input: {
         concurrencyKey: schedule.concurrencyKey,
         modelPolicy,
         resumeFromRunId: source.id,
-        resumeBranchName: source.branchName,
-        resumeBaseSha: source.baseSha,
+        // Fallback runs also receive a fresh branch; never reuse the source
+        // branch that may still be checked out by its old worktree.
+        resumeBaseSha: source.lastCheckpointSha ?? source.baseSha,
         resumeCommitSha: source.commitSha,
-        logicalSessionId: source.logicalSessionId,
+        logicalSessionId:
+          source.logicalSessionId ??
+          (typeof asEvidenceRecord(
+            asEvidenceRecord(source.evidence).supervisorReceipt,
+          ).logicalSessionId === "string"
+            ? (asEvidenceRecord(
+                asEvidenceRecord(source.evidence).supervisorReceipt,
+              ).logicalSessionId as string)
+            : null),
         resumeFallback: {
           scheduleId: schedule.id,
           fromRunId: source.id,

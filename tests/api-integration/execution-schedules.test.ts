@@ -804,11 +804,12 @@ describe("API integration: execution schedules (T6)", () => {
       evidence: Record<string, unknown>;
     };
     expect(resumed.id).not.toBe(claimed.id);
-    expect(resumed.branchName).toBe(claimed.branchName);
+    expect(resumed.branchName).not.toBe(claimed.branchName);
+    expect(resumed.branchName).toContain(resumed.id);
     expect(resumed.baseSha).toBe("1111111111111111111111111111111111111111");
     expect(resumed.commitSha).toBe("2222222222222222222222222222222222222222");
     expect(resumed.evidence).toMatchObject({
-      resume: { fromRunId: claimed.id, branchName: claimed.branchName },
+      resume: { fromRunId: claimed.id, branchName: resumed.branchName },
     });
     const replay = await fixture.app.request(
       `/api/execution/task/${fixture.task.id}/runs/${claimed.id}/resume`,
