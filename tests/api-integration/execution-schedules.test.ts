@@ -125,6 +125,7 @@ describe("API integration: execution schedules (T6)", () => {
 
     const replay = await createSchedule(fixture.app, fixture.task.id, {
       notBefore,
+      retryPolicy: { maxAttempts: 2, backoffSeconds: 15 },
     });
     expect(replay.status).toBe(201);
     expect((await replay.json()).id).toBe(scheduleId);
@@ -597,6 +598,9 @@ describe("API integration: execution schedules (T6)", () => {
   });
 
   it("retries transient lease conflicts with a bounded backoff", async () => {
+    // SPEC v0.1 dependencyPolicy=reject: requires_no_active_run rejects the
+    // FIRST dispatch while another run holds the lease — no occurrence, and
+    // the schedule is disabled with the gate reason instead of retrying.
     const fixture = await createScheduleFixture();
     const scope = ["apps/api/src/execution/service.ts"];
     const manualScope = ["apps/api/src/execution/validation.ts"];
@@ -633,18 +637,22 @@ describe("API integration: execution schedules (T6)", () => {
       },
     );
     expect(firstDispatch.status).toBe(200);
-    expect(await firstDispatch.json()).toMatchObject({ outcome: "no_op" });
+    expect(await firstDispatch.json()).toMatchObject({
+      outcome: "no_op",
+      reason: expect.stringContaining("dependency_gate_failed"),
+    });
 
     const [afterFirst] = await db
       .select()
       .from(schema.executionScheduleTable)
       .where(eq(schema.executionScheduleTable.id, scheduleId));
-    const [firstOccurrence] = await db
-      .select()
-      .from(schema.executionScheduleOccurrenceTable);
-    expect(firstOccurrence?.state).toBe("failed");
-    expect(afterFirst?.enabled).toBe(true);
-    expect(afterFirst?.nextDispatchAt?.getTime()).toBeGreaterThan(Date.now());
+    // Gate failure creates no occurrence and disables the schedule with the
+    // typed reason so the parent can fix the dependency and re-schedule.
+    expect(
+      await db.select().from(schema.executionScheduleOccurrenceTable),
+    ).toEqual([]);
+    expect(afterFirst?.enabled).toBe(false);
+    expect(afterFirst?.disableReason).toContain("requires_no_active_run");
     expect(
       await fixture.app
         .request("/api/execution/schedules/due?host=prodesk-home")
@@ -666,8 +674,7 @@ describe("API integration: execution schedules (T6)", () => {
         }),
       },
     );
-    expect(secondDispatch.status).toBe(200);
-    expect(await secondDispatch.json()).toMatchObject({ outcome: "no_op" });
+    expect(secondDispatch.status).toBe(409);
     const [afterSecond] = await db
       .select()
       .from(schema.executionScheduleTable)

@@ -359,6 +359,8 @@ describe("API integration: execution kill-switch flags", () => {
           },
           body: JSON.stringify({
             decision: "approve",
+            action: "merge",
+            reviewHeadSha: "b".repeat(40),
             verification: verification(),
           }),
         },
@@ -371,7 +373,9 @@ describe("API integration: execution kill-switch flags", () => {
     expect((await approve()).status).toBe(409);
     expect(getExecutionMetrics()).toMatchObject({
       gate_blocked: 2,
-      merge_gate_blocked: 2,
+      // Third approval: merge flag is on but the manifest policy/adapter gate
+      // still records merge_gate_blocked while keeping the run in_review.
+      merge_gate_blocked: 3,
     });
   });
 
@@ -411,12 +415,14 @@ describe("API integration: execution kill-switch flags", () => {
           decision: "approve",
           action: "merge",
           verification: verification(),
+          reviewHeadSha: "b".repeat(40),
           prResult: {
             status: "PASS",
             operation: "merge",
             prNumber: 41,
             prUrl: "https://github.com/owner/repository/pull/41",
             prState: "merged",
+            mergeCommitSha: "c".repeat(40),
           },
         }),
       },

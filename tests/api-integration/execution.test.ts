@@ -181,7 +181,7 @@ describe("API integration: execution Task 1", () => {
           docs: ["README.md", "docs/execution.md"],
           verificationProfile: "kaneo-api-test",
           allowedAgentIds: [laptop.id, prodesk.id],
-          policy: { merge: "parent" },
+          policy: { merge: "parent", allowMerge: true },
         }),
       },
     );
@@ -329,7 +329,7 @@ describe("API integration: execution Task 1", () => {
         },
         body: JSON.stringify({
           leaseEpoch: firstRun.leaseEpoch,
-          state: "blocked",
+          state: "failed",
           blocker: "stale worker",
         }),
       },
@@ -356,7 +356,8 @@ describe("API integration: execution Task 1", () => {
         }),
       },
     );
-    expect(forbiddenFinalization.status).toBe(403);
+    // Canonical validation rejects the legacy "done" run state outright.
+    expect(forbiddenFinalization.status).toBe(400);
 
     const reviewReport = await app.request(
       `/api/execution/task/${task.id}/runs/${takeoverRun.id}/report`,
@@ -373,6 +374,9 @@ describe("API integration: execution Task 1", () => {
           state: "in_review",
           baseSha: "a".repeat(40),
           commitSha: "b".repeat(40),
+          prNumber: 41,
+          prUrl: "https://github.com/owner/repository/pull/41",
+          prState: "open",
           evidence: { tests: "pass" },
         }),
       },
@@ -393,6 +397,9 @@ describe("API integration: execution Task 1", () => {
           state: "in_review",
           baseSha: "a".repeat(40),
           commitSha: "b".repeat(40),
+          prNumber: 41,
+          prUrl: "https://github.com/owner/repository/pull/41",
+          prState: "open",
           evidence: { tests: "pass" },
         }),
       },
@@ -515,6 +522,8 @@ describe("API integration: execution Task 1", () => {
         },
         body: JSON.stringify({
           decision: "approve",
+          action: "merge",
+          reviewHeadSha: "b".repeat(40),
           verification: {
             verificationProfile: "kaneo-api-test",
             baseSha: "a".repeat(40),
@@ -525,13 +534,21 @@ describe("API integration: execution Task 1", () => {
             branchValid: true,
             testsPassed: true,
           },
+          prResult: {
+            status: "PASS",
+            operation: "merge",
+            prNumber: 41,
+            prUrl: "https://github.com/owner/repository/pull/41",
+            prState: "merged",
+            mergeCommitSha: "c".repeat(40),
+          },
         }),
       },
     );
     expect(parentReview.status).toBe(200);
     expect(await parentReview.json()).toMatchObject({
       id: takeoverRun.id,
-      state: "done",
+      state: "finalized",
       leaseActive: false,
       blocker: null,
     });
@@ -552,6 +569,8 @@ describe("API integration: execution Task 1", () => {
         },
         body: JSON.stringify({
           decision: "approve",
+          action: "merge",
+          reviewHeadSha: "b".repeat(40),
           verification: {
             verificationProfile: "kaneo-api-test",
             baseSha: "a".repeat(40),
@@ -562,13 +581,21 @@ describe("API integration: execution Task 1", () => {
             branchValid: true,
             testsPassed: true,
           },
+          prResult: {
+            status: "PASS",
+            operation: "merge",
+            prNumber: 41,
+            prUrl: "https://github.com/owner/repository/pull/41",
+            prState: "merged",
+            mergeCommitSha: "c".repeat(40),
+          },
         }),
       },
     );
     expect(parentReviewReplay.status).toBe(200);
     expect(await parentReviewReplay.json()).toMatchObject({
       id: takeoverRun.id,
-      state: "done",
+      state: "finalized",
     });
 
     const evidenceResponse = await app.request(
@@ -720,7 +747,9 @@ describe("API integration: execution Task 1", () => {
     expect(blocked.status).toBe(200);
     expect(await blocked.json()).toMatchObject({
       id: claimed.id,
-      state: "blocked",
+      // Canonical states: a blocked PR gate keeps the worker-terminal run
+      // in_review instead of the legacy "blocked" state.
+      state: "in_review",
       blocker: "credential_blocked",
       leaseActive: false,
     });
@@ -871,12 +900,14 @@ describe("API integration: execution Task 1", () => {
           decision: "approve",
           action: "merge",
           verification,
+          reviewHeadSha: verification.commitSha,
           prResult: {
             status: "PASS",
             operation: "merge",
             prNumber: 42,
             prUrl: "https://github.com/owner/repository/pull/42",
             prState: "merged",
+            mergeCommitSha: "c".repeat(40),
           },
         }),
       },
@@ -896,20 +927,22 @@ describe("API integration: execution Task 1", () => {
           decision: "approve",
           action: "merge",
           verification,
+          reviewHeadSha: verification.commitSha,
           prResult: {
             status: "PASS",
             operation: "merge",
             prNumber: 41,
             prUrl: "https://github.com/owner/repository/pull/41",
             prState: "merged",
+            mergeCommitSha: "c".repeat(40),
           },
         }),
       },
     );
     expect(mergePr.status).toBe(200);
-    expect(await mergePr.json()).toMatchObject({
+    expect(await mergePr.clone().json()).toMatchObject({
       id: claimed.id,
-      state: "done",
+      state: "finalized",
       prNumber: 41,
       prState: "merged",
       leaseActive: false,
@@ -1084,7 +1117,7 @@ describe("API integration: execution Task 1", () => {
         },
         body: JSON.stringify({
           leaseEpoch: claimed.leaseEpoch,
-          state: "blocked",
+          state: "failed",
           blocker: "verify_failed",
         }),
       },
@@ -1274,7 +1307,9 @@ describe("API integration: execution Task 1", () => {
         },
         body: JSON.stringify({
           leaseEpoch: claimed.leaseEpoch,
-          state: "blocked",
+          state: "failed",
+          baseSha: "a".repeat(40),
+          commitSha: "b".repeat(40),
           blocker: "verify_failed",
         }),
       },
@@ -1304,7 +1339,11 @@ describe("API integration: execution Task 1", () => {
           "Idempotency-Key": "reject-matrix-reject-blocked-1",
           Authorization: parentAuthorization,
         },
-        body: JSON.stringify({ decision: "reject", reason: "Scope is wrong" }),
+        body: JSON.stringify({
+          decision: "reject",
+          reason: "Scope is wrong",
+          reviewHeadSha: "b".repeat(40),
+        }),
       },
     );
     expect(rejectBlocked.status).toBe(200);
@@ -1331,7 +1370,11 @@ describe("API integration: execution Task 1", () => {
           "Idempotency-Key": "reject-matrix-reject-blocked-1",
           Authorization: parentAuthorization,
         },
-        body: JSON.stringify({ decision: "reject", reason: "Scope is wrong" }),
+        body: JSON.stringify({
+          decision: "reject",
+          reason: "Scope is wrong",
+          reviewHeadSha: "b".repeat(40),
+        }),
       },
     );
     expect(rejectReplay.status).toBe(200);

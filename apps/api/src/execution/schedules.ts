@@ -1119,8 +1119,25 @@ async function dispatchNewOccurrenceAtomically(
     }
 
     // Dependency gates recheck BEFORE any occurrence is claimed: a gate that
-    // just failed must never consume an occurrence or create a run.
-    if (!input.noOpReason) {
+    // just failed must never consume an occurrence or create a run. The gates
+    // apply only to the first claim of an occurrence — a reconciling
+    // dispatcher racing an existing occurrence must reconcile the run, not
+    // gate-fail and disable the schedule mid-race.
+    const scheduleOccurrenceKey = occurrenceKey(
+      input.schedule.id,
+      input.schedule.notBefore,
+    );
+    const [preexistingOccurrence] = await tx
+      .select({ id: executionScheduleOccurrenceTable.id })
+      .from(executionScheduleOccurrenceTable)
+      .where(
+        eq(
+          executionScheduleOccurrenceTable.occurrenceKey,
+          scheduleOccurrenceKey,
+        ),
+      )
+      .limit(1);
+    if (!input.noOpReason && !preexistingOccurrence) {
       try {
         await assertDependencyGatesForDispatch(tx, input.schedule.taskId);
       } catch (error) {
