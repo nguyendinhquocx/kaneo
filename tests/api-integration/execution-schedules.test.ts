@@ -153,9 +153,11 @@ describe("API integration: execution schedules (T6)", () => {
     const dispatchBody = (await dispatch.json()) as {
       outcome: string;
       ackToken?: string;
+      runnerSupervisorFence?: string;
     };
     expect(dispatchBody).toMatchObject({ outcome: "dispatched" });
     expect(dispatchBody.ackToken).toEqual(expect.any(String));
+    expect(dispatchBody.runnerSupervisorFence).toEqual(expect.any(String));
 
     const retry = await fixture.app.request(
       `/api/execution/schedules/${scheduleId}/dispatch`,
@@ -172,11 +174,13 @@ describe("API integration: execution schedules (T6)", () => {
     const retryBody = (await retry.json()) as {
       outcome: string;
       ackToken?: string;
+      runnerSupervisorFence?: string;
     };
     expect(retryBody).toMatchObject({
       outcome: "reconciled_existing_run",
     });
     expect(retryBody.ackToken).toEqual(expect.any(String));
+    expect(retryBody.runnerSupervisorFence).toEqual(expect.any(String));
 
     const [occurrence] = await db
       .select()
@@ -229,12 +233,14 @@ describe("API integration: execution schedules (T6)", () => {
       outcome: string;
       runId?: string;
       ackToken?: string;
+      runnerSupervisorFence?: string;
     };
     expect(recoveredBody).toMatchObject({
       outcome: "reconciled_existing_run",
       runId: runs[0]?.id,
     });
     expect(recoveredBody.ackToken).toEqual(expect.any(String));
+    expect(recoveredBody.runnerSupervisorFence).toEqual(expect.any(String));
     expect(await db.select().from(schema.taskRunTable)).toHaveLength(1);
 
     const invalidAck = await fixture.app.request(

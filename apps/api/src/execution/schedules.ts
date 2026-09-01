@@ -632,6 +632,40 @@ async function issueDispatchAckToken(
   return token;
 }
 
+/**
+ * Re-issue the dispatcher-only fence when a due occurrence is reconciled
+ * after the original dispatcher lost its in-memory token. The hash is the
+ * durable record; the raw token is returned only to the current dispatcher so
+ * it can write the new local handoff file.
+ */
+async function issueDispatchSupervisorFence(input: {
+  occurrenceId: string;
+  runId: string;
+  now?: Date;
+}) {
+  const fence = randomBytes(32).toString("base64url");
+  const [updated] = await db
+    .update(executionScheduleOccurrenceTable)
+    .set({
+      supervisorFenceHash: stableHash(fence),
+      updatedAt: input.now ?? new Date(),
+    })
+    .where(
+      and(
+        eq(executionScheduleOccurrenceTable.id, input.occurrenceId),
+        eq(executionScheduleOccurrenceTable.state, "dispatched"),
+        eq(executionScheduleOccurrenceTable.runId, input.runId),
+      ),
+    )
+    .returning({ id: executionScheduleOccurrenceTable.id });
+  if (!updated) {
+    throw new HTTPException(409, {
+      message: "schedule occurrence is not ready for supervisor dispatch fence",
+    });
+  }
+  return fence;
+}
+
 function matchesAckToken(expectedHash: string | null, token: string): boolean {
   if (!expectedHash || token.length > 200) return false;
   const expected = Buffer.from(expectedHash, "utf8");
@@ -1423,11 +1457,13 @@ export async function dispatchScheduleOnce(
             reason: `scheduled run is already terminal: ${pendingRun.state}`,
           };
         }
+        const supervisorFence = randomBytes(32).toString("base64url");
         await markOccurrenceDispatched({
           occurrenceId: claim.occurrenceId,
           runId: pendingRun.id,
           claimGeneration: claim.claimGeneration,
           claimedBy: claim.claimedBy ?? "",
+          supervisorFenceHash: stableHash(supervisorFence),
         });
         const ackToken = await issueDispatchAckToken({
           occurrenceId: claim.occurrenceId,
@@ -1444,6 +1480,7 @@ export async function dispatchScheduleOnce(
           runId: pendingRun.id,
           outcome: "reconciled_existing_run",
           ackToken,
+          runnerSupervisorFence: supervisorFence,
         };
       }
     }
@@ -1492,6 +1529,11 @@ export async function dispatchScheduleOnce(
           concurrencyKey: input.schedule.concurrencyKey,
           modelPolicy,
         });
+        const supervisorFence = await issueDispatchSupervisorFence({
+          occurrenceId: claim.occurrenceId,
+          runId: run.id,
+          now,
+        });
         const ackToken = await issueDispatchAckToken({
           occurrenceId: claim.occurrenceId,
           runId: run.id,
@@ -1507,6 +1549,7 @@ export async function dispatchScheduleOnce(
           runId: run.id,
           outcome: "reconciled_existing_run",
           ackToken,
+          runnerSupervisorFence: supervisorFence,
         };
       } catch (error) {
         if (
