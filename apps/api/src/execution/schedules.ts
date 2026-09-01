@@ -1315,6 +1315,25 @@ async function dispatchNewOccurrenceAtomically(
         .update(executionScheduleTable)
         .set({ lastDispatchAt: input.now })
         .where(eq(executionScheduleTable.id, input.schedule.id));
+      // Kanban is presentation-only, but a dispatched run must be visible as
+      // In Progress without waiting for the worker's first report.
+      await tx
+        .update(taskTable)
+        .set({ status: "in-progress", updatedAt: input.now })
+        .where(eq(taskTable.id, input.schedule.taskId));
+      // Transactional outbox: exactly-once "started" notification. Emitted
+      // only on the first atomic claim; reconciliation paths below never
+      // re-notify, so a dispatcher retry cannot spam Telegram.
+      await enqueueNotificationEvent(tx, {
+        taskId: input.schedule.taskId,
+        runId: run.id,
+        kind: "started",
+        payload: {
+          taskId: input.schedule.taskId,
+          runId: run.id,
+          model: input.schedule.preferredModel,
+        },
+      });
       return {
         claim,
         runId: run.id,
@@ -1471,6 +1490,10 @@ export async function dispatchScheduleOnce(
           now,
         });
         await db
+          .update(taskTable)
+          .set({ status: "in-progress", updatedAt: now })
+          .where(eq(taskTable.id, input.schedule.taskId));
+        await db
           .update(executionScheduleTable)
           .set({ lastDispatchAt: now })
           .where(eq(executionScheduleTable.id, input.schedule.id));
@@ -1539,6 +1562,10 @@ export async function dispatchScheduleOnce(
           runId: run.id,
           now,
         });
+        await db
+          .update(taskTable)
+          .set({ status: "in-progress", updatedAt: now })
+          .where(eq(taskTable.id, input.schedule.taskId));
         await db
           .update(executionScheduleTable)
           .set({ lastDispatchAt: now })

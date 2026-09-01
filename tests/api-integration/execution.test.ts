@@ -757,7 +757,7 @@ describe("API integration: execution Task 1", () => {
       .select({ status: schema.taskTable.status })
       .from(schema.taskTable)
       .where(eq(schema.taskTable.id, task.id));
-    expect(unchangedTask[0]?.status).toBe("to-do");
+    expect(unchangedTask[0]?.status).toBe("in-review");
   });
 
   it("records a host-adapter PR, keeps the human merge gate open, then finalizes after merge evidence", async () => {
@@ -885,7 +885,7 @@ describe("API integration: execution Task 1", () => {
       .select({ status: schema.taskTable.status })
       .from(schema.taskTable)
       .where(eq(schema.taskTable.id, task.id));
-    expect(afterCreate[0]?.status).toBe("to-do");
+    expect(afterCreate[0]?.status).toBe("in-review");
 
     const mismatchedMerge = await app.request(
       `/api/execution/task/${task.id}/runs/${claimed.id}/review`,
@@ -1517,7 +1517,7 @@ describe("API integration: execution Task 1", () => {
       .select({ status: schema.taskTable.status })
       .from(schema.taskTable)
       .where(eq(schema.taskTable.id, task.id));
-    expect(unchangedTask?.status).toBe("to-do");
+    expect(unchangedTask?.status).toBe("in-review");
 
     const [persistedSecondRun] = await db
       .select({

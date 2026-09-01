@@ -2717,6 +2717,53 @@ export async function reportTaskRun({
       },
     });
 
+    // Kanban is presentation-only and never bumps task_revision, but the
+    // board must follow the run lifecycle: worker-terminal in_review moves
+    // the card to In Review for the parent gate.
+    if (nextState === "in_review") {
+      await tx
+        .update(taskTable)
+        .set({ status: "in-review", updatedAt: now })
+        .where(eq(taskTable.id, taskId));
+    }
+
+    // Transactional outbox: worker-reachable notifications. The supervisor
+    // sweep covers crashed workers; this covers every live worker report.
+    if (nextState === "in_review") {
+      await enqueueNotificationEvent(tx, {
+        taskId,
+        runId,
+        kind: "in_review",
+        payload: {
+          taskId,
+          runId,
+          branch: run.branchName,
+          commitSha: nextCommitSha ?? run.commitSha,
+        },
+      });
+    } else if (nextState !== "in_progress") {
+      await enqueueNotificationEvent(tx, {
+        taskId,
+        runId,
+        kind:
+          nextState === "blocked_quota"
+            ? "blocked_quota"
+            : nextState === "blocked_input" ||
+                nextState === "blocked_clarification"
+              ? "needs_input"
+              : "failed",
+        payload: {
+          taskId,
+          runId,
+          finalState: nextState,
+          failureKind: nextFailureKind ?? null,
+          retryAt: nextRetryAt ? nextRetryAt.toISOString() : null,
+          lastCheckpointSha: run.lastCheckpointSha,
+          blocker: blocker ?? null,
+        },
+      });
+    }
+
     return saveIdempotencyResponse(tx, {
       userId,
       agentPrincipalId: principal.id,

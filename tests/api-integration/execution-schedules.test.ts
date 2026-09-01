@@ -196,6 +196,23 @@ describe("API integration: execution schedules (T6)", () => {
     expect(runs[0]?.attempt).toBe(1);
     expect(runs[0]?.maxAttempts).toBe(2);
 
+    // Dispatch syncs the Kanban card and emits exactly one "started"
+    // notification (worker-received acknowledgment for Telegram).
+    const [taskAfterDispatch] = await db
+      .select()
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, fixture.task.id));
+    expect(taskAfterDispatch?.status).toBe("in-progress");
+    const notificationEvents = await db
+      .select()
+      .from(schema.executionNotificationEventTable);
+    expect(notificationEvents).toHaveLength(1);
+    expect(notificationEvents[0]).toMatchObject({
+      taskId: fixture.task.id,
+      runId: runs[0]?.id,
+      kind: "started",
+    });
+
     const workerAdoption = await fixture.app.request(
       `/api/execution/task/${fixture.task.id}/runs/claim`,
       {
