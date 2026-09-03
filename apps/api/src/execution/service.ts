@@ -3450,6 +3450,7 @@ export async function maybeSteerActiveRunFromComment(input: {
       id: taskRunTable.id,
       leaseEpoch: taskRunTable.leaseEpoch,
       agentPrincipalId: taskRunTable.agentPrincipalId,
+      hostId: taskRunTable.hostId,
     })
     .from(taskRunTable)
     .where(
@@ -3492,6 +3493,9 @@ export async function maybeSteerActiveRunFromComment(input: {
       action: "steer_message",
       actorType: "parent",
       actorUserId: input.userId,
+      // T11 fix: the dispatcher polls due requests BY HOST; a request
+      // without a host is invisible to every consumer.
+      host: activeRun.hostId ?? undefined,
       payload: { message },
       expectedTaskRevision: undefined,
       expectedRunRevision: undefined,
