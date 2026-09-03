@@ -101,15 +101,19 @@ describe("revision and enum validators", () => {
     expect(() => validateRevision("3")).toThrow();
   });
 
-  it("validates the five telegram control actions", () => {
+  it("validates the telegram control actions", () => {
     expect(CONTROL_REQUEST_ACTIONS).toEqual([
       "read_status",
       "notification_ack",
       "create_dispatch_request",
       "answer_clarification",
       "continue_quota",
+      // SPEC-kaneo-wavefix-v0-2 (T10): plain replies/comments steer the
+      // live worker; scope/contract overrides are rejected at creation.
+      "steer_message",
     ]);
     expect(validateControlAction("continue_quota")).toBe("continue_quota");
+    expect(validateControlAction("steer_message")).toBe("steer_message");
     expect(() => validateControlAction("merge")).toThrow();
   });
 

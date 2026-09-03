@@ -1048,6 +1048,24 @@ async function markDispatchFailure(input: {
       occurrenceId: input.occurrenceId,
       reason: input.reason.slice(0, 500),
     });
+    // SPEC-kaneo-wavefix-v0-2 (T6): permanent dispatch failures must reach
+    // the user via the durable outbox, not just the journal.
+    const [scheduleRow] = await db
+      .select({ taskId: executionScheduleTable.taskId })
+      .from(executionScheduleTable)
+      .where(eq(executionScheduleTable.id, input.scheduleId))
+      .limit(1);
+    if (scheduleRow) {
+      await enqueueNotificationEvent(db, {
+        taskId: scheduleRow.taskId,
+        kind: "failed",
+        payload: {
+          scheduleId: input.scheduleId,
+          outcome: "schedule_dispatch_failed",
+          reason: input.reason.slice(0, 300),
+        },
+      });
+    }
   }
 }
 
@@ -1432,6 +1450,17 @@ export async function dispatchScheduleOnce(
         occurrenceId: claim.occurrenceId,
         reason: atomic.outcome.reason.slice(0, 500),
       });
+      // T6: permanent no-ops (bad contract, laptop-only, eligibility) must
+      // surface to the user — the dispatcher only logs them today.
+      await enqueueNotificationEvent(db, {
+        taskId: input.schedule.taskId,
+        kind: "failed",
+        payload: {
+          scheduleId: input.schedule.id,
+          outcome: "schedule_dispatch_no_op",
+          reason: atomic.outcome.reason.slice(0, 300),
+        },
+      });
     }
     return atomic.outcome;
   }
@@ -1632,4 +1661,365 @@ export async function listRunsForSchedule(scheduleId: string) {
     .select()
     .from(taskRunTable)
     .where(eq(taskRunTable.scheduleId, scheduleId));
+}
+
+// ---------------------------------------------------------------------------
+// SPEC-kaneo-wavefix-v0-2 (T4): parent schedule update/cancel with CAS.
+// Pending-only: an already-dispatched schedule is immutable — run-level
+// controls (resume/cancel via control requests) own it from that point.
+// Every mutation bumps schedule_revision so an in-flight dispatcher claim
+// loses its expectedScheduleRevision race and becomes a clean no_op.
+// ---------------------------------------------------------------------------
+
+export const SCHEDULE_CANCEL_REASON = "cancelled";
+
+async function assertNoDispatchedOccurrence(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  scheduleId: string,
+): Promise<void> {
+  const [dispatched] = await tx
+    .select({ id: executionScheduleOccurrenceTable.id })
+    .from(executionScheduleOccurrenceTable)
+    .where(
+      and(
+        eq(executionScheduleOccurrenceTable.scheduleId, scheduleId),
+        eq(executionScheduleOccurrenceTable.state, "dispatched"),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (dispatched) {
+    throw new HTTPException(409, {
+      message: "schedule_already_dispatched_use_run_control",
+    });
+  }
+}
+
+export interface UpdateScheduleInput {
+  scheduleId: string;
+  userId: string;
+  expectedScheduleRevision: number;
+  notBefore?: Date;
+  preferredModel?: string | null;
+  fallbackMode?: unknown;
+  fallbackModels?: unknown;
+  maxRuntimeSeconds?: unknown;
+  notificationRoute?: unknown;
+  telegramQuotaResume?: unknown;
+  planHash?: unknown;
+}
+
+export async function updateExecutionSchedule(
+  input: UpdateScheduleInput,
+) {
+  if (!Number.isInteger(input.expectedScheduleRevision) || input.expectedScheduleRevision < 1) {
+    throw new HTTPException(400, {
+      message: "expectedScheduleRevision must be a positive integer",
+    });
+  }
+  return db.transaction(async (tx) => {
+    const [schedule] = await tx
+      .select()
+      .from(executionScheduleTable)
+      .where(eq(executionScheduleTable.id, input.scheduleId))
+      .limit(1)
+      .for("update");
+    if (!schedule) {
+      throw new HTTPException(404, { message: "schedule not found" });
+    }
+    if (schedule.scheduleRevision !== input.expectedScheduleRevision) {
+      throw new HTTPException(409, { message: "schedule_revision_changed" });
+    }
+    await assertNoDispatchedOccurrence(tx, input.scheduleId);
+    if (schedule.disableReason === SCHEDULE_CANCEL_REASON) {
+      throw new HTTPException(409, { message: "schedule_is_cancelled" });
+    }
+
+    const now = new Date();
+    const updates: Record<string, unknown> = {
+      scheduleRevision: schedule.scheduleRevision + 1,
+      updatedAt: now,
+    };
+    if (input.notBefore !== undefined) {
+      assertScheduleShape({ notBefore: input.notBefore, cronExpr: undefined });
+      updates.notBefore = input.notBefore;
+      updates.nextDispatchAt = input.notBefore;
+    }
+    if (input.preferredModel !== undefined) {
+      updates.preferredModel =
+        input.preferredModel === null
+          ? null
+          : validateModelId(input.preferredModel, "preferredModel");
+    }
+    if (input.maxRuntimeSeconds !== undefined) {
+      const policy = validateSchedulePolicy({
+        host: schedule.host,
+        maxRuntimeSeconds: input.maxRuntimeSeconds,
+        fallbackMode: undefined,
+        fallbackModels: undefined,
+        concurrencyKey: undefined,
+      });
+      updates.maxRuntimeSeconds = policy.maxRuntimeSeconds;
+    }
+    if (input.notificationRoute !== undefined) {
+      if (
+        typeof input.notificationRoute !== "string" ||
+        !(SCHEDULE_NOTIFICATION_ROUTES as readonly string[]).includes(
+          input.notificationRoute,
+        )
+      ) {
+        throw new HTTPException(400, {
+          message: `notificationRoute must be one of: ${SCHEDULE_NOTIFICATION_ROUTES.join(", ")}`,
+        });
+      }
+      updates.notificationRoute = input.notificationRoute;
+    }
+    if (input.telegramQuotaResume !== undefined) {
+      if (
+        typeof input.telegramQuotaResume !== "string" ||
+        !(SCHEDULE_QUOTA_RESUME_MODES as readonly string[]).includes(
+          input.telegramQuotaResume,
+        )
+      ) {
+        throw new HTTPException(400, {
+          message: `telegramQuotaResume must be one of: ${SCHEDULE_QUOTA_RESUME_MODES.join(", ")}`,
+        });
+      }
+      updates.telegramQuotaResume = input.telegramQuotaResume;
+    }
+    if (input.planHash !== undefined) {
+      if (
+        typeof input.planHash !== "string" ||
+        input.planHash.length < 8 ||
+        input.planHash.length > 128
+      ) {
+        throw new HTTPException(400, {
+          message: "planHash must be a bounded string (8-128 chars)",
+        });
+      }
+      updates.planHash = input.planHash;
+    }
+
+    const [updated] = await tx
+      .update(executionScheduleTable)
+      .set(updates)
+      .where(
+        and(
+          eq(executionScheduleTable.id, input.scheduleId),
+          eq(
+            executionScheduleTable.scheduleRevision,
+            input.expectedScheduleRevision,
+          ),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      throw new HTTPException(409, { message: "schedule_revision_changed" });
+    }
+    await publishEvent("execution.schedule.updated", {
+      scheduleId: updated.id,
+      taskId: updated.taskId,
+      scheduleRevision: updated.scheduleRevision,
+      userId: input.userId,
+    });
+    return updated;
+  });
+}
+
+export async function cancelExecutionSchedule(input: {
+  scheduleId: string;
+  userId: string;
+  expectedScheduleRevision: number;
+}) {
+  if (!Number.isInteger(input.expectedScheduleRevision) || input.expectedScheduleRevision < 1) {
+    throw new HTTPException(400, {
+      message: "expectedScheduleRevision must be a positive integer",
+    });
+  }
+  return db.transaction(async (tx) => {
+    const [schedule] = await tx
+      .select()
+      .from(executionScheduleTable)
+      .where(eq(executionScheduleTable.id, input.scheduleId))
+      .limit(1)
+      .for("update");
+    if (!schedule) {
+      throw new HTTPException(404, { message: "schedule not found" });
+    }
+    if (schedule.disableReason === SCHEDULE_CANCEL_REASON) {
+      // Idempotent cancel: repeating the request is a success, not a conflict.
+      return schedule;
+    }
+    if (schedule.scheduleRevision !== input.expectedScheduleRevision) {
+      throw new HTTPException(409, { message: "schedule_revision_changed" });
+    }
+    await assertNoDispatchedOccurrence(tx, input.scheduleId);
+    const now = new Date();
+    const [updated] = await tx
+      .update(executionScheduleTable)
+      .set({
+        enabled: false,
+        nextDispatchAt: null,
+        disableReason: SCHEDULE_CANCEL_REASON,
+        scheduleRevision: schedule.scheduleRevision + 1,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(executionScheduleTable.id, input.scheduleId),
+          eq(
+            executionScheduleTable.scheduleRevision,
+            input.expectedScheduleRevision,
+          ),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      throw new HTTPException(409, { message: "schedule_revision_changed" });
+    }
+    await publishEvent("execution.schedule.cancelled", {
+      scheduleId: updated.id,
+      taskId: updated.taskId,
+      scheduleRevision: updated.scheduleRevision,
+      userId: input.userId,
+    });
+    await enqueueNotificationEvent(tx, {
+      taskId: updated.taskId,
+      kind: "failed",
+      payload: {
+        scheduleId: updated.id,
+        outcome: "schedule_cancelled",
+        by: input.userId,
+      },
+    });
+    return updated;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// SPEC-kaneo-wavefix-v0-2 (T14): chain advance after finalization. The API
+// is the single chain authority: after a task finalizes with a merge
+// receipt, every unblocked dependant gets its chain schedule created
+// idempotently (requestKey dedup). Any missing dependency, cycle guard or
+// error becomes a durable failed notification instead of a silent stall.
+// ---------------------------------------------------------------------------
+
+export async function advanceChainAfterFinalize(input: {
+  projectId: string;
+  finalizedTaskId: string;
+  finalizedRequestKey: string;
+}): Promise<void> {
+  try {
+    const relations = await db
+      .select({ targetTaskId: taskRelationTable.targetTaskId })
+      .from(taskRelationTable)
+      .where(
+        and(
+          eq(taskRelationTable.sourceTaskId, input.finalizedTaskId),
+          eq(taskRelationTable.relationType, "blocks"),
+        ),
+      );
+    const targets = [
+      ...new Set(
+        relations
+          .map((row) => row.targetTaskId)
+          .filter((id): id is string => typeof id === "string"),
+      ),
+    ];
+    for (const targetTaskId of targets) {
+      const [targetTask] = await db
+        .select({
+          id: taskTable.id,
+          executionState: taskTable.executionState,
+        })
+        .from(taskTable)
+        .where(eq(taskTable.id, targetTaskId))
+        .limit(1);
+      if (!targetTask || targetTask.executionState === "done") continue;
+
+      const blockers = await db
+        .select({ sourceTaskId: taskRelationTable.sourceTaskId })
+        .from(taskRelationTable)
+        .where(
+          and(
+            eq(taskRelationTable.targetTaskId, targetTaskId),
+            eq(taskRelationTable.relationType, "blocks"),
+          ),
+        );
+      const sourceIds = [
+        ...new Set(blockers.map((row) => row.sourceTaskId)),
+      ];
+      let allDone = true;
+      for (const sourceId of sourceIds) {
+        const [source] = await db
+          .select({ executionState: taskTable.executionState })
+          .from(taskTable)
+          .where(eq(taskTable.id, sourceId))
+          .limit(1);
+        if (!source || source.executionState !== "done") {
+          allDone = false;
+          break;
+        }
+      }
+      if (!allDone) continue;
+
+      const [existingEnabled] = await db
+        .select({ id: executionScheduleTable.id })
+        .from(executionScheduleTable)
+        .where(
+          and(
+            eq(executionScheduleTable.taskId, targetTaskId),
+            eq(executionScheduleTable.enabled, true),
+          ),
+        )
+        .limit(1);
+      if (existingEnabled) continue;
+
+      // Inherit the dispatch policy from the finalized task's latest
+      // schedule so chain nodes run with the same host/model policy.
+      const [sourceSchedule] = await db
+        .select()
+        .from(executionScheduleTable)
+        .where(eq(executionScheduleTable.taskId, input.finalizedTaskId))
+        .orderBy(desc(executionScheduleTable.createdAt))
+        .limit(1);
+
+      const requestKey = `chain:${targetTaskId}:${input.finalizedTaskId}:${input.finalizedRequestKey}`;
+      await createExecutionSchedule({
+        taskId: targetTaskId,
+        projectId: input.projectId,
+        userId: sourceSchedule?.createdByUserId ?? "",
+        requestKey,
+        notBefore: new Date(),
+        host: sourceSchedule?.host ?? "pi-prodesk",
+        preferredModel: sourceSchedule?.preferredModel ?? null,
+        fallbackMode: sourceSchedule?.fallbackMode ?? undefined,
+        fallbackModels: sourceSchedule?.fallbackModels ?? undefined,
+        maxRuntimeSeconds: sourceSchedule?.maxRuntimeSeconds ?? 3_600,
+        concurrencyKey: sourceSchedule?.concurrencyKey ?? undefined,
+        retryPolicy: sourceSchedule?.retryPolicy ?? undefined,
+        dependencyPolicy: "reject",
+        notificationRoute: sourceSchedule?.notificationRoute ?? undefined,
+        telegramQuotaResume: sourceSchedule?.telegramQuotaResume ?? undefined,
+        planHash: sourceSchedule?.planHash ?? undefined,
+      });
+      await enqueueNotificationEvent(db, {
+        taskId: targetTaskId,
+        kind: "started",
+        payload: {
+          outcome: "chain_scheduled",
+          after: input.finalizedTaskId,
+        },
+      });
+    }
+  } catch (error) {
+    await enqueueNotificationEvent(db, {
+      taskId: input.finalizedTaskId,
+      kind: "failed",
+      payload: {
+        outcome: "chain_advance_failed",
+        reason: error instanceof Error ? error.message.slice(0, 300) : "unknown",
+      },
+    });
+  }
 }

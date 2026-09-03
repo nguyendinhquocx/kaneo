@@ -32,6 +32,7 @@ import {
 } from "./gates";
 import { enqueueNotificationEvent } from "./outbox";
 import { bumpTaskRevision } from "./revisions";
+import { isRunTransitionAllowed } from "./transitions";
 import {
   createLeaseToken,
   EXECUTION_PROTOCOL_VERSION,
@@ -1346,11 +1347,16 @@ export async function claimTaskRun(
           message: "Idempotency-Key belongs to a different host binding",
         });
       }
+      // SPEC-kaneo-wavefix-v0-2 (T7): bounded recovery — an endlessly
+      // recycling run must escalate to the parent instead of adopting
+      // forever (each recovery burns quota and may repeat the same crash).
+      const MAX_RECOVERY_EPOCH = 4;
       if (
         scheduleDispatch &&
         existingRequest.agentPrincipalId === agentPrincipalId &&
         (existingRequest.state === "in_progress" ||
           existingRequest.state === "orphaned") &&
+        existingRequest.leaseEpoch < MAX_RECOVERY_EPOCH &&
         (!existingRequest.leaseActive ||
           isLeaseExpired(existingRequest.leaseExpiresAt))
       ) {
@@ -1369,6 +1375,7 @@ export async function claimTaskRun(
             leaseTokenHash: recoveryToken.hash,
             leaseExpiresAt: getLeaseExpiry(),
             lastHeartbeatAt: new Date(),
+            lastProgressAt: new Date(),
             updatedAt: new Date(),
           })
           .where(
@@ -1520,6 +1527,7 @@ export async function claimTaskRun(
             leaseTokenHash: adoptionToken.hash,
             leaseExpiresAt: getLeaseExpiry(),
             lastHeartbeatAt: new Date(),
+            lastProgressAt: new Date(),
             updatedAt: new Date(),
           })
           .where(
@@ -1671,6 +1679,7 @@ export async function claimTaskRun(
         leaseActive: true,
         leaseExpiresAt: getLeaseExpiry(),
         lastHeartbeatAt: new Date(),
+        lastProgressAt: new Date(),
       })
       .returning();
     if (!run) {
@@ -2476,6 +2485,7 @@ export async function heartbeatTaskRun({
       .update(taskRunTable)
       .set({
         lastHeartbeatAt: now,
+        lastProgressAt: now,
         leaseExpiresAt: getLeaseExpiry(now),
         updatedAt: now,
       })
@@ -2645,6 +2655,15 @@ export async function reportTaskRun({
     if (run.taskId !== taskId) {
       throw new HTTPException(404, { message: "Task run not found" });
     }
+    // SPEC-kaneo-wavefix-v0-2 (T0): centralized lifecycle enforcement — a
+    // worker report may never move a run through an unlisted transition
+    // (e.g. finalized -> in_progress); resume paths must go through
+    // claimTaskRun so the old epoch is fenced.
+    if (!isRunTransitionAllowed(run.state as TaskRunState, nextState)) {
+      throw new HTTPException(409, {
+        message: `run_transition_rejected: ${run.state} -> ${nextState}`,
+      });
+    }
     const now = new Date();
     const nextEvidence =
       evidence === undefined
@@ -2675,6 +2694,7 @@ export async function reportTaskRun({
             : run.manualRecoveryRequired,
         leaseActive: nextState === "in_progress",
         lastHeartbeatAt: now,
+        lastProgressAt: now,
         leaseExpiresAt: getLeaseExpiry(now),
         runRevision: sql`${taskRunTable.runRevision} + 1`,
         updatedAt: now,
@@ -2725,6 +2745,24 @@ export async function reportTaskRun({
         .update(taskTable)
         .set({ status: "in-review", updatedAt: now })
         .where(eq(taskTable.id, taskId));
+      // SPEC-kaneo-wavefix-v0-2 (T8): board cards must update in real time.
+      // Without this event the execution path mutated the row silently and
+      // the UI stayed stale until a manual reload.
+      const [taskRow] = await tx
+        .select({ projectId: taskTable.projectId })
+        .from(taskTable)
+        .where(eq(taskTable.id, taskId))
+        .limit(1);
+      if (taskRow) {
+        await publishEvent("task.status_changed", {
+          taskId,
+          projectId: taskRow.projectId,
+          userId,
+          oldStatus: "in-progress",
+          newStatus: "in-review",
+          type: "status_changed",
+        });
+      }
     }
 
     // Transactional outbox: worker-reachable notifications. The supervisor
@@ -3007,6 +3045,12 @@ export async function createTaskRunCheckpoint({
     if (run.taskId !== taskId) {
       throw new HTTPException(404, { message: "Task run not found" });
     }
+    // T0: checkpoint reports follow the same centralized lifecycle rules.
+    if (!isRunTransitionAllowed(run.state as TaskRunState, "checkpointed")) {
+      throw new HTTPException(409, {
+        message: `run_transition_rejected: ${run.state} -> checkpointed`,
+      });
+    }
     if (
       typeof receipt.remoteRef !== "string" ||
       receipt.remoteRef !== run.branchName
@@ -3039,6 +3083,7 @@ export async function createTaskRunCheckpoint({
         baseSha: normalizedBaseSha ?? run.baseSha,
         leaseActive: true,
         lastHeartbeatAt: now,
+        lastProgressAt: now,
         leaseExpiresAt: getLeaseExpiry(now),
         runRevision: sql`${taskRunTable.runRevision} + 1`,
         updatedAt: now,
@@ -3385,6 +3430,57 @@ export type ControlRequestActorType = "parent" | "telegram";
  * CAS claim. The actor type is derived from the authenticated API key scope
  * by the route, never from the request body.
  */
+/**
+ * SPEC-kaneo-wavefix-v0-2 (T11): route a human Kaneo comment to the live
+ * worker run as a steer_message control request. No-op when there is no
+ * active lease — the caller (comment controller) ignores the outcome so a
+ * plain comment never fails because steering is unavailable.
+ */
+export async function maybeSteerActiveRunFromComment(input: {
+  taskId: string;
+  userId: string;
+  content: string;
+}): Promise<{ steered: boolean; reason?: string }> {
+  const message = input.content.trim().slice(0, 2_000);
+  if (!message) return { steered: false, reason: "empty_comment" };
+  const [activeRun] = await db
+    .select({
+      id: taskRunTable.id,
+      leaseEpoch: taskRunTable.leaseEpoch,
+      agentPrincipalId: taskRunTable.agentPrincipalId,
+    })
+    .from(taskRunTable)
+    .where(
+      and(
+        eq(taskRunTable.taskId, input.taskId),
+        eq(taskRunTable.state, "in_progress"),
+        eq(taskRunTable.leaseActive, true),
+      ),
+    )
+    .limit(1);
+  if (!activeRun) return { steered: false, reason: "no_active_run" };
+  try {
+    await createControlRequest({
+      taskId: input.taskId,
+      runId: activeRun.id,
+      action: "steer_message",
+      actorType: "parent",
+      actorUserId: input.userId,
+      payload: { message },
+      expectedTaskRevision: undefined,
+      expectedRunRevision: undefined,
+      expiresInSeconds: 3_600,
+      requestKey: `comment-steer-${activeRun.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    });
+    return { steered: true };
+  } catch (error) {
+    return {
+      steered: false,
+      reason: error instanceof Error ? error.message : "steer_request_failed",
+    };
+  }
+}
+
 export async function createControlRequest({
   taskId,
   runId,
@@ -3438,6 +3534,24 @@ export async function createControlRequest({
       message:
         "continue_quota payload must not contain model/scope/contract overrides",
     });
+  }
+  // SPEC-kaneo-wavefix-v0-2 (T10): steering payloads are bounded untrusted
+  // text; scope/model/contract overrides must go through contract amendment
+  // (parent flow), never through a Telegram reply.
+  if (normalizedAction === "steer_message") {
+    const message = boundedPayload.message;
+    if (typeof message !== "string" || message.trim().length === 0) {
+      throw new HTTPException(400, {
+        message: "steer_message payload requires a non-empty message string",
+      });
+    }
+    if (Object.keys(boundedPayload).some((key) =>
+      ["model", "scope", "contract", "preferredModel", "files", "writes"].includes(key),
+    )) {
+      throw new HTTPException(400, {
+        message: "steer_message payload must not contain scope/contract overrides",
+      });
+    }
   }
   const expectedTask = validateRevision(
     expectedTaskRevision,
@@ -3810,6 +3924,10 @@ export async function reclaimStaleTaskRuns(input?: {
   }
   const cutoff = new Date(now.getTime() - staleAfterSeconds * 1_000);
   const reclaimed = await db.transaction(async (tx) => {
+    // SPEC-kaneo-wavefix-v0-2 (T7): liveness is the last PROGRESS signal
+    // (claim/heartbeat/report/checkpoint), falling back to the heartbeat for
+    // rows created before last_progress_at existed.
+    const lastLive = sql`COALESCE(${taskRunTable.lastProgressAt}, ${taskRunTable.lastHeartbeatAt})`;
     const candidates = await tx
       .select({
         id: taskRunTable.id,
@@ -3823,7 +3941,7 @@ export async function reclaimStaleTaskRuns(input?: {
         and(
           eq(taskRunTable.state, "in_progress"),
           eq(taskRunTable.leaseActive, true),
-          lte(taskRunTable.lastHeartbeatAt, cutoff),
+          lte(lastLive, cutoff),
           lte(taskRunTable.leaseExpiresAt, now),
         ),
       )
@@ -3884,6 +4002,18 @@ export async function reclaimStaleTaskRuns(input?: {
       taskId: run.taskId,
       runId: run.id,
       leaseEpoch: run.leaseEpoch,
+    });
+    // SPEC-kaneo-wavefix-v0-2 (T7): a silent orphan is the exact failure
+    // class that wedged the TrelloX E2E for ten hours — surface it.
+    await enqueueNotificationEvent(db, {
+      taskId: run.taskId,
+      runId: run.id,
+      kind: "failed",
+      payload: {
+        outcome: "watchdog_reclaimed",
+        reason: "run stalled: no progress heartbeat within the stale window",
+        leaseEpoch: run.leaseEpoch,
+      },
     });
   }
   return reclaimed;
@@ -4360,6 +4490,19 @@ export async function reviewTaskRun({
   });
 
   await publishTaskRunUpdated(taskId, runId, userId, result.response.state);
+  // SPEC-kaneo-wavefix-v0-2 (T14): the API is the single chain authority.
+  // Post-commit, best-effort: a failed advance is a durable failed
+  // notification, never a finalized-run rollback.
+  if (result.response.state === "finalized") {
+    const { advanceChainAfterFinalize } = await import("./schedules");
+    void advanceChainAfterFinalize({
+      // taskStatusChanged is always set on the finalized path (it carries the
+      // project id for the done transition).
+      projectId: result.taskStatusChanged!.projectId,
+      finalizedTaskId: taskId,
+      finalizedRequestKey: normalizedKey,
+    }).catch(() => {});
+  }
   if (result.taskStatusChanged) {
     await publishEvent("task.status_changed", {
       taskId: result.taskStatusChanged.taskId,

@@ -9,6 +9,7 @@ import {
 } from "../../database/schema";
 import { publishEvent } from "../../events";
 import createNotification from "../../notification/controllers/create-notification";
+import { maybeSteerActiveRunFromComment } from "../../execution/service";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
 async function createComment(taskId: string, userId: string, content: string) {
@@ -27,6 +28,15 @@ async function createComment(taskId: string, userId: string, content: string) {
       message: "Failed to create activity",
     });
   }
+
+  // SPEC-kaneo-wavefix-v0-2 (T11): a human comment on a task with a live
+  // worker run becomes a steer_message control request (same pipeline as
+  // Telegram replies). Best-effort: never fail the comment itself.
+  maybeSteerActiveRunFromComment({
+    taskId,
+    userId,
+    content,
+  }).catch(() => {});
 
   const [user] = await db
     .select({ name: userTable.name })

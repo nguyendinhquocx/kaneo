@@ -23,11 +23,13 @@ import {
 } from "./outbox";
 import {
   acknowledgeScheduleDispatch,
+  cancelExecutionSchedule,
   createExecutionSchedule,
   dispatchScheduleOnce,
   getScheduleById,
   getTaskProjectId,
   listDueSchedules,
+  updateExecutionSchedule,
 } from "./schedules";
 import {
   advancePreapprovedFallback,
@@ -958,6 +960,86 @@ const execution = new Hono<{
         planHash: body.planHash,
       });
       return c.json({ id: schedule.id }, 201);
+    },
+  )
+  .patch(
+    "/schedules/:scheduleId",
+    describeRoute({
+      operationId: "updateExecutionSchedule",
+      tags: ["Execution"],
+      description:
+        "Update a pending schedule with CAS (SPEC-kaneo-wavefix-v0-2 T4). Already-dispatched schedules are immutable.",
+      responses: {
+        200: {
+          description: "Schedule updated",
+          content: {
+            "application/json": { schema: resolver(v.object({ id: v.string(), scheduleRevision: v.number() })) },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ scheduleId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        expectedScheduleRevision: v.number(),
+        notBefore: v.optional(v.pipe(v.string(), v.transform((value) => new Date(value)))),
+        preferredModel: v.optional(v.nullable(v.string())),
+        maxRuntimeSeconds: v.optional(v.number()),
+        notificationRoute: v.optional(v.string()),
+        telegramQuotaResume: v.optional(v.string()),
+        planHash: v.optional(v.string()),
+      }),
+    ),
+    requireWorkspacePermission({ execution: ["review"] }),
+    async (c) => {
+      const { scheduleId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const updated = await updateExecutionSchedule({
+        scheduleId,
+        userId: c.get("userId"),
+        expectedScheduleRevision: body.expectedScheduleRevision,
+        notBefore: body.notBefore,
+        preferredModel: body.preferredModel,
+        maxRuntimeSeconds: body.maxRuntimeSeconds,
+        notificationRoute: body.notificationRoute,
+        telegramQuotaResume: body.telegramQuotaResume,
+        planHash: body.planHash,
+      });
+      return c.json({ id: updated.id, scheduleRevision: updated.scheduleRevision });
+    },
+  )
+  .post(
+    "/schedules/:scheduleId/cancel",
+    describeRoute({
+      operationId: "cancelExecutionSchedule",
+      tags: ["Execution"],
+      description:
+        "Cancel a pending schedule with CAS (SPEC-kaneo-wavefix-v0-2 T4). Idempotent on already-cancelled; 409 on already-dispatched.",
+      responses: {
+        200: {
+          description: "Schedule cancelled",
+          content: {
+            "application/json": { schema: resolver(v.object({ id: v.string(), scheduleRevision: v.number() })) },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ scheduleId: v.string() })),
+    validator(
+      "json",
+      v.object({ expectedScheduleRevision: v.number() }),
+    ),
+    requireWorkspacePermission({ execution: ["review"] }),
+    async (c) => {
+      const { scheduleId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const cancelled = await cancelExecutionSchedule({
+        scheduleId,
+        userId: c.get("userId"),
+        expectedScheduleRevision: body.expectedScheduleRevision,
+      });
+      return c.json({ id: cancelled.id, scheduleRevision: cancelled.scheduleRevision });
     },
   )
   .get(

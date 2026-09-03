@@ -498,6 +498,35 @@ export function registerMcpTools(
   );
 
   server.registerTool(
+    "get_task_execution_runs",
+    {
+      description:
+        "SPEC-kaneo-wavefix-v0-2 (T10): sanitized execution runs for a task — id, state, leaseActive, leaseEpoch, branch, scheduleId. Lets the Telegram bridge route replies to the live worker run.",
+      inputSchema: z.object({
+        taskId: nonEmptyString,
+      }),
+    },
+    async (args) =>
+      run(async () => {
+        const runs = (await client.json(
+          `/api/execution/task/${encodeURIComponent(args.taskId)}/runs`,
+          { method: "GET" },
+        )) as Array<Record<string, unknown>>;
+        const list = Array.isArray(runs) ? runs : [];
+        return {
+          runs: list.map((item) => ({
+            id: item.id,
+            state: item.state,
+            leaseActive: item.leaseActive,
+            leaseEpoch: item.leaseEpoch,
+            branch: item.branchName,
+            scheduleId: item.scheduleId,
+          })),
+        };
+      }),
+  );
+
+  server.registerTool(
     "create_task_comment",
     {
       description: "Add a comment to a task.",

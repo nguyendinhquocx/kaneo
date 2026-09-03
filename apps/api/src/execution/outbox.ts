@@ -13,9 +13,12 @@ import {
 } from "../database/schema";
 import { stableHash } from "./validation";
 
-export type OutboxTransaction = Parameters<
-  Parameters<typeof db.transaction>[0]
->[0];
+// SPEC-kaneo-wavefix-v0-2 (T6): post-commit helpers call the outbox with the
+// pooled db handle (no wrapping transaction); Drizzle exposes the same query
+// surface, so both are accepted here.
+export type OutboxTransaction =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Logical notification route for the ProDesk Telegram observer (v0.1). */
 export const DEFAULT_NOTIFICATION_ROUTE = "prodesk-telegram";

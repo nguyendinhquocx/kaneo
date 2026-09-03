@@ -649,6 +649,10 @@ export const taskRunTable = pgTable(
     lastHeartbeatAt: timestamp("last_heartbeat_at", { mode: "date" })
       .defaultNow()
       .notNull(),
+    // SPEC-kaneo-wavefix-v0-2 (T0): last liveness/progress signal (claim,
+    // heartbeat, report, checkpoint). Nullable for rows predating the
+    // column; watchdogs fall back to last_heartbeat_at when null.
+    lastProgressAt: timestamp("last_progress_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

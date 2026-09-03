@@ -137,6 +137,7 @@ export const CONTROL_REQUEST_ACTIONS = [
   "create_dispatch_request",
   "answer_clarification",
   "continue_quota",
+  "steer_message",
 ] as const;
 
 export type ControlRequestAction = (typeof CONTROL_REQUEST_ACTIONS)[number];
