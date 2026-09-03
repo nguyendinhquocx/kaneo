@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { createId } from "@paralleldrive/cuid2";
-import { and, asc, desc, eq, gt, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import {
   agentPrincipalTable,
+  activityTable,
   columnTable,
   executionControlRequestTable,
   executionIdempotencyTable,
@@ -3439,6 +3440,11 @@ export async function maybeSteerActiveRunFromComment(input: {
 }): Promise<{ steered: boolean; reason?: string }> {
   const message = input.content.trim().slice(0, 2_000);
   if (!message) return { steered: false, reason: "empty_comment" };
+  // System markers (T9 [⭕ DOING] / T9b [✅ DONE] / bot replies) never steer
+  // and never trigger the bot fallback reply, which would otherwise loop.
+  if (message.startsWith("[")) {
+    return { steered: false, reason: "system_marker" };
+  }
   const [activeRun] = await db
     .select({
       id: taskRunTable.id,
@@ -3454,7 +3460,27 @@ export async function maybeSteerActiveRunFromComment(input: {
       ),
     )
     .limit(1);
-  if (!activeRun) return { steered: false, reason: "no_active_run" };
+  if (!activeRun) {
+    // SPEC-kaneo-wavefix-v0-2 (#19b): no live run to receive the comment —
+    // the bot answers in the worker's place so the human is not left talking
+    // to nobody. Direct insert: going through create-comment would re-enter
+    // this hook (the guard above also breaks that loop).
+    const [latestRun] = await db
+      .select({ state: taskRunTable.state, leaseEpoch: taskRunTable.leaseEpoch })
+      .from(taskRunTable)
+      .where(eq(taskRunTable.taskId, input.taskId))
+      .orderBy(desc(taskRunTable.createdAt))
+      .limit(1);
+    if (latestRun) {
+      await db.insert(activityTable).values({
+        taskId: input.taskId,
+        type: "comment",
+        userId: input.userId,
+        content: `[🤖] No active worker run on this task (last run state: ${latestRun.state}). Your comment was not delivered to any worker. Schedule the task again to start a new run.`,
+      });
+    }
+    return { steered: false, reason: "no_active_run" };
+  }
   try {
     await createControlRequest({
       taskId: input.taskId,
@@ -3934,6 +3960,34 @@ export async function reclaimStaleTaskRuns(input?: {
     // (claim/heartbeat/report/checkpoint), falling back to the heartbeat for
     // rows created before last_progress_at existed.
     const lastLive = sql`COALESCE(${taskRunTable.lastProgressAt}, ${taskRunTable.lastHeartbeatAt})`;
+    // SPEC-kaneo-wavefix-v0-2 (#10): two stale-run classes. Class 1 — lease
+    // gone quiet (below). Class 2 — the run still heartbeats (zombie worker
+    // loop) but never made a commit/checkpoint within 2x the stale window,
+    // so the lease watchdog above can never catch it. The client-side
+    // no-progress sweep only scans its own workspace dir, which skips runs
+    // spawned by other lanes (TelePi, env workspace); this server pass
+    // covers every lane.
+    const zombieCutoff = new Date(now.getTime() - staleAfterSeconds * 2_000);
+    const zombieCandidates = await tx
+      .select({
+        id: taskRunTable.id,
+        taskId: taskRunTable.taskId,
+        agentPrincipalId: taskRunTable.agentPrincipalId,
+        leaseEpoch: taskRunTable.leaseEpoch,
+        createdAt: taskRunTable.createdAt,
+      })
+      .from(taskRunTable)
+      .where(
+        and(
+          eq(taskRunTable.state, "in_progress"),
+          eq(taskRunTable.leaseActive, true),
+          lte(taskRunTable.createdAt, zombieCutoff),
+          isNull(taskRunTable.commitSha),
+          isNull(taskRunTable.lastCheckpointSha),
+        ),
+      )
+      .limit(100)
+      .for("update");
     const candidates = await tx
       .select({
         id: taskRunTable.id,
@@ -3996,6 +4050,49 @@ export async function reclaimStaleTaskRuns(input?: {
           reclaimedAt: now.toISOString(),
           leaseEpoch: candidate.leaseEpoch,
           blocker: "watchdog_stale_lease",
+        },
+      });
+      results.push(updated);
+    }
+    // Class 2: zombie heartbeat, zero progress. Terminalize identically but
+    // with its own blocker/evidence so parent review can tell them apart.
+    for (const candidate of zombieCandidates) {
+      const [updated] = await tx
+        .update(taskRunTable)
+        .set({
+          state: "orphaned",
+          leaseActive: false,
+          leaseExpiresAt: now,
+          blocker: "watchdog_no_progress",
+          nextAction:
+            "Run made no commit/checkpoint within the no-progress window; parent must inspect before resuming",
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(taskRunTable.id, candidate.id),
+            eq(taskRunTable.leaseEpoch, candidate.leaseEpoch),
+            eq(taskRunTable.leaseActive, true),
+            eq(taskRunTable.state, "in_progress"),
+          ),
+        )
+        .returning({
+          id: taskRunTable.id,
+          taskId: taskRunTable.taskId,
+          leaseEpoch: taskRunTable.leaseEpoch,
+          lastHeartbeatAt: taskRunTable.lastHeartbeatAt,
+        });
+      if (!updated) continue;
+      await tx.insert(taskRunEvidenceTable).values({
+        runId: updated.id,
+        agentPrincipalId: candidate.agentPrincipalId,
+        kind: "watchdog_no_progress",
+        payload: {
+          staleAfterSeconds: staleAfterSeconds * 2,
+          createdAt: candidate.createdAt.toISOString(),
+          reclaimedAt: now.toISOString(),
+          leaseEpoch: candidate.leaseEpoch,
+          blocker: "watchdog_no_progress",
         },
       });
       results.push(updated);

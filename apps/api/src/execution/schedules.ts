@@ -1707,6 +1707,7 @@ export interface UpdateScheduleInput {
   notificationRoute?: unknown;
   telegramQuotaResume?: unknown;
   planHash?: unknown;
+  enabled?: boolean;
 }
 
 export async function updateExecutionSchedule(input: UpdateScheduleInput) {
@@ -1741,6 +1742,20 @@ export async function updateExecutionSchedule(input: UpdateScheduleInput) {
       scheduleRevision: schedule.scheduleRevision + 1,
       updatedAt: now,
     };
+    // SPEC-kaneo-wavefix-v0-2 (#15): pause/resume a pending chain node.
+    // Pause parks the schedule without cancelling it (revisions intact);
+    // resume re-arms it at the later of its notBefore and now.
+    if (input.enabled !== undefined) {
+      if (input.enabled) {
+        updates.enabled = true;
+        const resumeAt =
+          schedule.notBefore && schedule.notBefore > now ? schedule.notBefore : now;
+        updates.nextDispatchAt = resumeAt;
+      } else {
+        updates.enabled = false;
+        updates.nextDispatchAt = null;
+      }
+    }
     if (input.notBefore !== undefined) {
       assertScheduleShape({ notBefore: input.notBefore, cronExpr: undefined });
       updates.notBefore = input.notBefore;

@@ -13,6 +13,7 @@ type WorkspaceIdSource =
       resource:
         | "project"
         | "task"
+        | "schedule"
         | "label"
         | "timeEntry"
         | "activity"
@@ -124,6 +125,7 @@ async function lookupWorkspaceId(
   resource:
     | "project"
     | "task"
+    | "schedule"
     | "label"
     | "timeEntry"
     | "activity"
@@ -156,6 +158,25 @@ async function lookupWorkspaceId(
           .where(eq(schema.taskTable.id, id))
           .limit(1);
         return task?.workspaceId || null;
+      }
+
+      case "schedule": {
+        // SPEC-kaneo-wavefix-v0-2 (T4 fix): PATCH /schedules/:id resolves the
+        // workspace through schedule -> task -> project -> workspace.
+        const [row] = await db
+          .select({ workspaceId: schema.projectTable.workspaceId })
+          .from(schema.executionScheduleTable)
+          .innerJoin(
+            schema.taskTable,
+            eq(schema.executionScheduleTable.taskId, schema.taskTable.id),
+          )
+          .innerJoin(
+            schema.projectTable,
+            eq(schema.taskTable.projectId, schema.projectTable.id),
+          )
+          .where(eq(schema.executionScheduleTable.id, id))
+          .limit(1);
+        return row?.workspaceId || null;
       }
 
       case "label": {
@@ -281,6 +302,13 @@ export const workspaceAccess = {
   fromProject: (idKey = "id") =>
     workspaceAccessMiddleware({
       sources: [{ type: "lookup", resource: "project", idKey }],
+    }),
+
+  // SPEC-kaneo-wavefix-v0-2 (T4 fix): PATCH /execution/schedules/:id —
+  // workspace resolved through schedule -> task -> project.
+  fromSchedule: (idKey = "id") =>
+    workspaceAccessMiddleware({
+      sources: [{ type: "lookup", resource: "schedule", idKey }],
     }),
 
   fromTask: (idKey = "id") =>

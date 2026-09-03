@@ -983,6 +983,7 @@ const execution = new Hono<{
       },
     }),
     validator("param", v.object({ scheduleId: v.string() })),
+    workspaceAccess.fromSchedule("scheduleId"),
     validator(
       "json",
       v.object({
@@ -998,6 +999,7 @@ const execution = new Hono<{
         notificationRoute: v.optional(v.string()),
         telegramQuotaResume: v.optional(v.string()),
         planHash: v.optional(v.string()),
+        enabled: v.optional(v.boolean()),
       }),
     ),
     requireWorkspacePermission({ execution: ["review"] }),
@@ -1014,6 +1016,7 @@ const execution = new Hono<{
         notificationRoute: body.notificationRoute,
         telegramQuotaResume: body.telegramQuotaResume,
         planHash: body.planHash,
+        enabled: body.enabled,
       });
       return c.json({
         id: updated.id,
