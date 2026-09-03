@@ -3455,7 +3455,11 @@ export async function maybeSteerActiveRunFromComment(input: {
     .where(
       and(
         eq(taskRunTable.taskId, input.taskId),
-        eq(taskRunTable.state, "in_progress"),
+        // in_progress OR checkpointed — a checkpointed run still holds its
+        // lease and its session; only the commit marker differs. Without
+        // this, mid-run comments between checkpoints fall to the bot
+        // fallback even though the worker is alive and steerable.
+        inArray(taskRunTable.state, ["in_progress", "checkpointed"]),
         eq(taskRunTable.leaseActive, true),
       ),
     )
