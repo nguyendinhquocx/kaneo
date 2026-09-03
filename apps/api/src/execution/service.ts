@@ -4382,9 +4382,16 @@ export async function reviewTaskRun({
         }
         if (
           normalizedAction === "merge" &&
-          (!run.prNumber ||
-            normalizedPrResult.prNumber !== run.prNumber ||
-            (run.prUrl && normalizedPrResult.prUrl !== run.prUrl))
+          // SPEC-kaneo-wavefix-v0-2 (T13): a merge may carry a PR created in
+          // the same parent-review operation (run.prNumber was null and the
+          // guard auto-created it). Only reject when the run ALREADY had a PR
+          // and the evidence points at a different one.
+          (run.prNumber
+            ? normalizedPrResult.prNumber !== run.prNumber ||
+              (run.prUrl && normalizedPrResult.prUrl !== run.prUrl)
+            : !normalizedPrResult.prNumber ||
+              !normalizedPrResult.prUrl ||
+              normalizedPrResult.status !== "PASS")
         ) {
           await recordExecutionMetric("merge_gate_blocked", {
             taskId,
