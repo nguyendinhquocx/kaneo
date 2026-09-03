@@ -28,7 +28,6 @@ function makeFakeWs() {
 describe("broadcastToProject", () => {
   beforeEach(async () => {
     // Ensure no REDIS_URL so InMemoryBroadcastAdapter is used
-    // biome-ignore lint/suspicious/noUndeclaredEnvVars: the test deliberately disables Redis
     delete process.env.REDIS_URL;
     await initializeWebSocketAdapter();
   });

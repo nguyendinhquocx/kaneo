@@ -876,7 +876,7 @@ async function assertDependencyGatesForDispatch(
       .from(taskTable)
       .where(eq(taskTable.id, sourceId))
       .limit(1);
-    if (!source || source.executionState !== "done") {
+    if (source?.executionState !== "done") {
       throw new DependencyGateError(
         `requires_task_done: blocking task ${sourceId} is not done`,
       );
@@ -893,7 +893,7 @@ async function assertDependencyGatesForDispatch(
     if (
       sourceRun &&
       sourceRun.state === "finalized" &&
-      !(sourceRun.finalizationReceipt ?? {}).receiptHash
+      !sourceRun.finalizationReceipt?.receiptHash
     ) {
       throw new DependencyGateError(
         `requires_merge_receipt: finalized run of ${sourceId} has no verified merge receipt`,
@@ -1709,10 +1709,11 @@ export interface UpdateScheduleInput {
   planHash?: unknown;
 }
 
-export async function updateExecutionSchedule(
-  input: UpdateScheduleInput,
-) {
-  if (!Number.isInteger(input.expectedScheduleRevision) || input.expectedScheduleRevision < 1) {
+export async function updateExecutionSchedule(input: UpdateScheduleInput) {
+  if (
+    !Number.isInteger(input.expectedScheduleRevision) ||
+    input.expectedScheduleRevision < 1
+  ) {
     throw new HTTPException(400, {
       message: "expectedScheduleRevision must be a positive integer",
     });
@@ -1831,7 +1832,10 @@ export async function cancelExecutionSchedule(input: {
   userId: string;
   expectedScheduleRevision: number;
 }) {
-  if (!Number.isInteger(input.expectedScheduleRevision) || input.expectedScheduleRevision < 1) {
+  if (
+    !Number.isInteger(input.expectedScheduleRevision) ||
+    input.expectedScheduleRevision < 1
+  ) {
     throw new HTTPException(400, {
       message: "expectedScheduleRevision must be a positive integer",
     });
@@ -1946,9 +1950,7 @@ export async function advanceChainAfterFinalize(input: {
             eq(taskRelationTable.relationType, "blocks"),
           ),
         );
-      const sourceIds = [
-        ...new Set(blockers.map((row) => row.sourceTaskId)),
-      ];
+      const sourceIds = [...new Set(blockers.map((row) => row.sourceTaskId))];
       let allDone = true;
       for (const sourceId of sourceIds) {
         const [source] = await db
@@ -1956,7 +1958,7 @@ export async function advanceChainAfterFinalize(input: {
           .from(taskTable)
           .where(eq(taskTable.id, sourceId))
           .limit(1);
-        if (!source || source.executionState !== "done") {
+        if (source?.executionState !== "done") {
           allDone = false;
           break;
         }
@@ -2018,7 +2020,8 @@ export async function advanceChainAfterFinalize(input: {
       kind: "failed",
       payload: {
         outcome: "chain_advance_failed",
-        reason: error instanceof Error ? error.message.slice(0, 300) : "unknown",
+        reason:
+          error instanceof Error ? error.message.slice(0, 300) : "unknown",
       },
     });
   }

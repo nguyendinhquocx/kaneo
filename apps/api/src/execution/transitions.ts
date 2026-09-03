@@ -27,7 +27,10 @@ const BLOCKED_STATES = [
   "blocked_branch_drift",
 ] as const satisfies TaskRunState[];
 
-const ACTIVE_WORKFLOW_STATES = ["in_progress", "checkpointed"] as const satisfies TaskRunState[];
+const ACTIVE_WORKFLOW_STATES = [
+  "in_progress",
+  "checkpointed",
+] as const satisfies TaskRunState[];
 
 function buildRunTransitions(): Record<TaskRunState, TaskRunState[]> {
   const map = {} as Record<TaskRunState, TaskRunState[]>;
@@ -52,8 +55,23 @@ function buildRunTransitions(): Record<TaskRunState, TaskRunState[]> {
   };
 
   // Spawn lifecycle: a fresh run is created, leased, then goes live.
-  allow("created", "leased", "in_progress", "orphaned", "failed", "cancelled", "superseded");
-  allow("leased", "in_progress", "orphaned", "failed", "cancelled", "superseded");
+  allow(
+    "created",
+    "leased",
+    "in_progress",
+    "orphaned",
+    "failed",
+    "cancelled",
+    "superseded",
+  );
+  allow(
+    "leased",
+    "in_progress",
+    "orphaned",
+    "failed",
+    "cancelled",
+    "superseded",
+  );
 
   // Active work: progress states may report completion, block, fail, or be
   // reclaimed. Self-transitions handled below.
@@ -72,7 +90,14 @@ function buildRunTransitions(): Record<TaskRunState, TaskRunState[]> {
 
   // Blocked states are recoverable: resume/adopt re-enters active work.
   for (const blocked of BLOCKED_STATES) {
-    allow(blocked, ...ACTIVE_WORKFLOW_STATES, "orphaned", "failed", "cancelled", "superseded");
+    allow(
+      blocked,
+      ...ACTIVE_WORKFLOW_STATES,
+      "orphaned",
+      "failed",
+      "cancelled",
+      "superseded",
+    );
   }
 
   // Worker-terminal: only the parent review gate may finish the run.
@@ -82,33 +107,51 @@ function buildRunTransitions(): Record<TaskRunState, TaskRunState[]> {
   allow("orphaned", ...ACTIVE_WORKFLOW_STATES, "cancelled", "superseded");
 
   // Terminal states have no outgoing transitions. Attempts create new runs.
-  for (const terminal of ["finalized", "rejected", "failed", "cancelled", "superseded"] as TaskRunState[]) {
+  for (const terminal of [
+    "finalized",
+    "rejected",
+    "failed",
+    "cancelled",
+    "superseded",
+  ] as TaskRunState[]) {
     map[terminal] = [];
   }
 
   return map;
 }
 
-export const RUN_TRANSITIONS: Readonly<Record<TaskRunState, readonly TaskRunState[]>> =
-  buildRunTransitions();
+export const RUN_TRANSITIONS: Readonly<
+  Record<TaskRunState, readonly TaskRunState[]>
+> = buildRunTransitions();
 
 /** Idempotent self-reports are allowed for active workflow states. */
 export function isRunTransitionAllowed(
   current: TaskRunState,
   next: TaskRunState,
 ): boolean {
-  if (current === next && ACTIVE_WORKFLOW_STATES.includes(next as (typeof ACTIVE_WORKFLOW_STATES)[number])) {
+  if (
+    current === next &&
+    ACTIVE_WORKFLOW_STATES.includes(
+      next as (typeof ACTIVE_WORKFLOW_STATES)[number],
+    )
+  ) {
     return true;
   }
   return RUN_TRANSITIONS[current]?.includes(next) ?? false;
 }
 
-export function assertRunTransition(current: TaskRunState, next: TaskRunState): void {
+export function assertRunTransition(
+  current: TaskRunState,
+  next: TaskRunState,
+): void {
   if (isRunTransitionAllowed(current, next)) return;
   throw transitionsRejectedError(current, next);
 }
 
-function transitionsRejectedError(current: TaskRunState, next: TaskRunState): Error {
+function transitionsRejectedError(
+  current: TaskRunState,
+  next: TaskRunState,
+): Error {
   const error = new Error(
     `run_transition_rejected: ${current} -> ${next} is not an allowed transition`,
   );

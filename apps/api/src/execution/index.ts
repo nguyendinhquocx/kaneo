@@ -973,7 +973,11 @@ const execution = new Hono<{
         200: {
           description: "Schedule updated",
           content: {
-            "application/json": { schema: resolver(v.object({ id: v.string(), scheduleRevision: v.number() })) },
+            "application/json": {
+              schema: resolver(
+                v.object({ id: v.string(), scheduleRevision: v.number() }),
+              ),
+            },
           },
         },
       },
@@ -983,7 +987,12 @@ const execution = new Hono<{
       "json",
       v.object({
         expectedScheduleRevision: v.number(),
-        notBefore: v.optional(v.pipe(v.string(), v.transform((value) => new Date(value)))),
+        notBefore: v.optional(
+          v.pipe(
+            v.string(),
+            v.transform((value) => new Date(value)),
+          ),
+        ),
         preferredModel: v.optional(v.nullable(v.string())),
         maxRuntimeSeconds: v.optional(v.number()),
         notificationRoute: v.optional(v.string()),
@@ -1006,7 +1015,10 @@ const execution = new Hono<{
         telegramQuotaResume: body.telegramQuotaResume,
         planHash: body.planHash,
       });
-      return c.json({ id: updated.id, scheduleRevision: updated.scheduleRevision });
+      return c.json({
+        id: updated.id,
+        scheduleRevision: updated.scheduleRevision,
+      });
     },
   )
   .post(
@@ -1020,16 +1032,17 @@ const execution = new Hono<{
         200: {
           description: "Schedule cancelled",
           content: {
-            "application/json": { schema: resolver(v.object({ id: v.string(), scheduleRevision: v.number() })) },
+            "application/json": {
+              schema: resolver(
+                v.object({ id: v.string(), scheduleRevision: v.number() }),
+              ),
+            },
           },
         },
       },
     }),
     validator("param", v.object({ scheduleId: v.string() })),
-    validator(
-      "json",
-      v.object({ expectedScheduleRevision: v.number() }),
-    ),
+    validator("json", v.object({ expectedScheduleRevision: v.number() })),
     requireWorkspacePermission({ execution: ["review"] }),
     async (c) => {
       const { scheduleId } = c.req.valid("param");
@@ -1039,7 +1052,10 @@ const execution = new Hono<{
         userId: c.get("userId"),
         expectedScheduleRevision: body.expectedScheduleRevision,
       });
-      return c.json({ id: cancelled.id, scheduleRevision: cancelled.scheduleRevision });
+      return c.json({
+        id: cancelled.id,
+        scheduleRevision: cancelled.scheduleRevision,
+      });
     },
   )
   .get(

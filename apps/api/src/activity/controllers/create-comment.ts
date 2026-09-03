@@ -8,8 +8,8 @@ import {
   userTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
-import createNotification from "../../notification/controllers/create-notification";
 import { maybeSteerActiveRunFromComment } from "../../execution/service";
+import createNotification from "../../notification/controllers/create-notification";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
 async function createComment(taskId: string, userId: string, content: string) {

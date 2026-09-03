@@ -1812,10 +1812,7 @@ export async function resumeTaskRun(input: {
       .from(executionScheduleTable)
       .where(eq(executionScheduleTable.id, source.scheduleId))
       .limit(1);
-    if (
-      !schedule ||
-      schedule.telegramQuotaResume !== "allowed_same_model_after_reset"
-    ) {
+    if (schedule?.telegramQuotaResume !== "allowed_same_model_after_reset") {
       throw new HTTPException(403, {
         message: "Telegram quota resume is disabled for this schedule",
       });
@@ -3299,8 +3296,7 @@ export async function supervisorReportTaskRun({
       .where(eq(executionScheduleOccurrenceTable.runId, runId))
       .limit(1);
     if (
-      !occurrence ||
-      !occurrence.supervisorFenceHash ||
+      !occurrence?.supervisorFenceHash ||
       occurrence.state !== "dispatched" ||
       stableHash(normalizedFence) !== occurrence.supervisorFenceHash
     ) {
@@ -3545,11 +3541,21 @@ export async function createControlRequest({
         message: "steer_message payload requires a non-empty message string",
       });
     }
-    if (Object.keys(boundedPayload).some((key) =>
-      ["model", "scope", "contract", "preferredModel", "files", "writes"].includes(key),
-    )) {
+    if (
+      Object.keys(boundedPayload).some((key) =>
+        [
+          "model",
+          "scope",
+          "contract",
+          "preferredModel",
+          "files",
+          "writes",
+        ].includes(key),
+      )
+    ) {
       throw new HTTPException(400, {
-        message: "steer_message payload must not contain scope/contract overrides",
+        message:
+          "steer_message payload must not contain scope/contract overrides",
       });
     }
   }
@@ -4498,6 +4504,7 @@ export async function reviewTaskRun({
     void advanceChainAfterFinalize({
       // taskStatusChanged is always set on the finalized path (it carries the
       // project id for the done transition).
+      // biome-ignore lint/style/noNonNullAssertion: always set on the finalized path
       projectId: result.taskStatusChanged!.projectId,
       finalizedTaskId: taskId,
       finalizedRequestKey: normalizedKey,

@@ -7,7 +7,6 @@ import {
   RUN_TRANSITIONS,
 } from "../../../apps/api/src/execution/transitions";
 import {
-  FULLY_TERMINAL_RUN_STATES,
   TASK_RUN_STATES,
   WORKER_REPORTABLE_STATES,
 } from "../../../apps/api/src/execution/validation";
@@ -25,7 +24,13 @@ describe("RUN_TRANSITIONS coverage", () => {
     // resume into active work (T5). Lifecycle-terminal states here are the
     // ones history never leaves: finalized, rejected, failed, cancelled,
     // superseded.
-    for (const terminal of ["finalized", "rejected", "failed", "cancelled", "superseded"] as const) {
+    for (const terminal of [
+      "finalized",
+      "rejected",
+      "failed",
+      "cancelled",
+      "superseded",
+    ] as const) {
       expect(RUN_TRANSITIONS[terminal]).toEqual([]);
     }
   });
@@ -41,7 +46,12 @@ describe("RUN_TRANSITIONS coverage", () => {
   it("lets active workflow states reach worker-reportable outcomes", () => {
     for (const active of ["in_progress", "checkpointed"] as const) {
       expect(isRunTransitionAllowed(active, "in_review")).toBe(true);
-      for (const blocked of ["blocked_quota", "blocked_input", "blocked_clarification", "blocked_branch_drift"] as const) {
+      for (const blocked of [
+        "blocked_quota",
+        "blocked_input",
+        "blocked_clarification",
+        "blocked_branch_drift",
+      ] as const) {
         expect(isRunTransitionAllowed(active, blocked)).toBe(true);
       }
       expect(isRunTransitionAllowed(active, "failed")).toBe(true);
@@ -50,7 +60,12 @@ describe("RUN_TRANSITIONS coverage", () => {
   });
 
   it("lets blocked states recover into active work or be reclaimed", () => {
-    for (const blocked of ["blocked_quota", "blocked_input", "blocked_clarification", "blocked_branch_drift"] as const) {
+    for (const blocked of [
+      "blocked_quota",
+      "blocked_input",
+      "blocked_clarification",
+      "blocked_branch_drift",
+    ] as const) {
       expect(isRunTransitionAllowed(blocked, "in_progress")).toBe(true);
       expect(isRunTransitionAllowed(blocked, "orphaned")).toBe(true);
       // Only the review gate may finalize.

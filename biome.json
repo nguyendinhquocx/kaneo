@@ -30,6 +30,18 @@
 			"!**/i18n/schema.json"
 		]
 	},
+	"overrides": [
+		{
+			"includes": ["apps/site/**"],
+			"linter": {
+				"rules": {
+					"performance": {
+						"noImgElement": "off"
+					}
+				}
+			}
+		}
+	],
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab"
