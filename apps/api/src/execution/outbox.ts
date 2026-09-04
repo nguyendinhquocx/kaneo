@@ -212,13 +212,31 @@ export async function listDueNotificationEvents({
   limit?: number;
 } = {}): Promise<NotificationEventWithDelivery[]> {
   const boundedLimit = Math.min(Math.max(limit, 1), 200);
-  const events = await db
-    .select()
+  // Filter the delivery state in SQL before LIMIT. Event rows stay pending
+  // while their route-specific delivery moves through its own lifecycle; if
+  // sent deliveries are filtered only after LIMIT, old sent rows can starve
+  // newer pending notifications forever.
+  const rows = await db
+    .select({
+      event: executionNotificationEventTable,
+      delivery: executionNotificationDeliveryTable,
+    })
     .from(executionNotificationEventTable)
+    .innerJoin(
+      executionNotificationDeliveryTable,
+      and(
+        eq(
+          executionNotificationDeliveryTable.eventId,
+          executionNotificationEventTable.id,
+        ),
+        eq(executionNotificationDeliveryTable.route, route),
+      ),
+    )
     .where(
       and(
         eq(executionNotificationEventTable.route, route),
         inArray(executionNotificationEventTable.state, ["pending", "sending"]),
+        inArray(executionNotificationDeliveryTable.state, ["pending", "sending"]),
       ),
     )
     .orderBy(
@@ -226,24 +244,6 @@ export async function listDueNotificationEvents({
       asc(executionNotificationEventTable.sequence),
     )
     .limit(boundedLimit);
-  if (events.length === 0) return [];
 
-  const deliveries = await db
-    .select()
-    .from(executionNotificationDeliveryTable)
-    .where(
-      inArray(
-        executionNotificationDeliveryTable.eventId,
-        events.map((event) => event.id),
-      ),
-    );
-  const byEventId = new Map(
-    deliveries.map((delivery) => [delivery.eventId, delivery]),
-  );
-  return events
-    .map((event) => {
-      const delivery = byEventId.get(event.id);
-      return delivery ? { event, delivery } : null;
-    })
-    .filter((row): row is NotificationEventWithDelivery => row !== null);
+  return rows;
 }

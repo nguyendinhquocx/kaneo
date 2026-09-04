@@ -1,6 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
+import {
+  enqueueNotificationEvent,
+} from "../../apps/api/src/execution/outbox";
 import { stableHash } from "../../apps/api/src/execution/validation";
 import { createApp } from "../../apps/api/src/index";
 import { handleExecutionRunUpdated } from "../../apps/api/src/plugins/telegram/events";
@@ -111,6 +114,46 @@ async function createSchedule(
 describe("API integration: execution schedules (T6)", () => {
   beforeEach(async () => {
     await resetTestDatabase();
+  });
+
+  it("filters sent deliveries before the due limit so pending rows cannot starve", async () => {
+    const fixture = await createScheduleFixture();
+    const events: Array<{ eventId: string; sequence: number }> = [];
+    for (let sequence = 0; sequence < 11; sequence += 1) {
+      events.push(
+        await enqueueNotificationEvent(db, {
+          taskId: fixture.task.id,
+          kind: "checkpoint",
+          payload: { sequence },
+        }),
+      );
+    }
+
+    const deliveries = await db
+      .select()
+      .from(schema.executionNotificationDeliveryTable);
+    expect(deliveries).toHaveLength(11);
+    await db
+      .update(schema.executionNotificationDeliveryTable)
+      .set({ state: "sent" })
+      .where(
+        inArray(
+          schema.executionNotificationDeliveryTable.eventId,
+          deliveries.slice(0, 10).map((delivery) => delivery.eventId),
+        ),
+      );
+
+    const due = await fixture.app.request(
+      "/api/execution/notification-events/due?route=prodesk-telegram&limit=10",
+    );
+    expect(due.status).toBe(200);
+    const rows = (await due.json()) as Array<{
+      event: { id: string };
+      delivery: { eventId: string; state: string };
+    }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.event.id).toBe(events[10]?.eventId);
+    expect(rows[0]?.delivery.state).toBe("pending");
   });
 
   it("creates one durable schedule and one occurrence/run across retries", async () => {
