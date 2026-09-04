@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createId } from "@paralleldrive/cuid2";
-import { and, asc, desc, eq, gt, inArray, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import {
@@ -3974,8 +3974,11 @@ export async function reclaimStaleTaskRuns(input?: {
     // so the lease watchdog above can never catch it. The client-side
     // no-progress sweep only scans its own workspace dir, which skips runs
     // spawned by other lanes (TelePi, env workspace); this server pass
-    // covers every lane.
+    // covers every lane. Both classes also cover `checkpointed` runs: a
+    // worker that dies after a checkpoint otherwise pins the lease forever
+    // because the sweep used to match only `in_progress`.
     const zombieCutoff = new Date(now.getTime() - staleAfterSeconds * 2_000);
+    const liveStates = ["in_progress", "checkpointed"] as const;
     const zombieCandidates = await tx
       .select({
         id: taskRunTable.id,
@@ -3987,11 +3990,21 @@ export async function reclaimStaleTaskRuns(input?: {
       .from(taskRunTable)
       .where(
         and(
-          eq(taskRunTable.state, "in_progress"),
+          inArray(taskRunTable.state, [...liveStates]),
           eq(taskRunTable.leaseActive, true),
           lte(taskRunTable.createdAt, zombieCutoff),
-          isNull(taskRunTable.commitSha),
-          isNull(taskRunTable.lastCheckpointSha),
+          or(
+            and(
+              eq(taskRunTable.state, "in_progress"),
+              isNull(taskRunTable.commitSha),
+              isNull(taskRunTable.lastCheckpointSha),
+            ),
+            and(
+              eq(taskRunTable.state, "checkpointed"),
+              isNotNull(taskRunTable.lastProgressAt),
+              lte(taskRunTable.lastProgressAt, zombieCutoff),
+            ),
+          ),
         ),
       )
       .limit(100)
@@ -4007,7 +4020,7 @@ export async function reclaimStaleTaskRuns(input?: {
       .from(taskRunTable)
       .where(
         and(
-          eq(taskRunTable.state, "in_progress"),
+          inArray(taskRunTable.state, [...liveStates]),
           eq(taskRunTable.leaseActive, true),
           lte(lastLive, cutoff),
           lte(taskRunTable.leaseExpiresAt, now),
@@ -4038,7 +4051,7 @@ export async function reclaimStaleTaskRuns(input?: {
             eq(taskRunTable.id, candidate.id),
             eq(taskRunTable.leaseEpoch, candidate.leaseEpoch),
             eq(taskRunTable.leaseActive, true),
-            eq(taskRunTable.state, "in_progress"),
+            inArray(taskRunTable.state, [...liveStates]),
           ),
         )
         .returning({
@@ -4081,7 +4094,7 @@ export async function reclaimStaleTaskRuns(input?: {
             eq(taskRunTable.id, candidate.id),
             eq(taskRunTable.leaseEpoch, candidate.leaseEpoch),
             eq(taskRunTable.leaseActive, true),
-            eq(taskRunTable.state, "in_progress"),
+            inArray(taskRunTable.state, [...liveStates]),
           ),
         )
         .returning({
