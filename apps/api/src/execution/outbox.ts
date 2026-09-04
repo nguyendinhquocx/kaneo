@@ -3,7 +3,7 @@
 // same DB transaction as the state mutation they announce. Delivery is
 // at-least-once: Telegram sends happen outside the transaction, so a crash
 // after send yields `send_unknown` and must be reconciled, never hidden.
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import db from "../database";
 import {
@@ -236,7 +236,13 @@ export async function listDueNotificationEvents({
       and(
         eq(executionNotificationEventTable.route, route),
         inArray(executionNotificationEventTable.state, ["pending", "sending"]),
-        inArray(executionNotificationDeliveryTable.state, ["pending", "sending"]),
+        // sent/acked are terminal-healthy; everything else (pending,
+        // sending, send_unknown, dead_letter) stays visible so the observer
+        // and operators can reconcile it — never hidden behind the LIMIT.
+        notInArray(executionNotificationDeliveryTable.state, [
+          "sent",
+          "acked",
+        ]),
       ),
     )
     .orderBy(

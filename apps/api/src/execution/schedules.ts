@@ -2131,11 +2131,11 @@ export async function resumeChainSchedules(input: {
       and(
         eq(taskRelationTable.relationType, "blocks"),
         // Both endpoints must live in this project; relations are global rows.
+        // inArray (not per-id or()) keeps bind params bounded for large
+        // projects.
         or(
-          ...taskIds.flatMap((id) => [
-            eq(taskRelationTable.sourceTaskId, id),
-            eq(taskRelationTable.targetTaskId, id),
-          ]),
+          inArray(taskRelationTable.sourceTaskId, taskIds),
+          inArray(taskRelationTable.targetTaskId, taskIds),
         ),
       ),
     );
@@ -2151,12 +2151,33 @@ export async function resumeChainSchedules(input: {
   const enabledSchedules = await db
     .select({ taskId: executionScheduleTable.taskId })
     .from(executionScheduleTable)
-    .where(eq(executionScheduleTable.enabled, true));
+    .where(
+      and(
+        eq(executionScheduleTable.enabled, true),
+        inArray(executionScheduleTable.taskId, taskIds),
+      ),
+    );
   const hasEnabledSchedule = new Set(enabledSchedules.map((row) => row.taskId));
+
+  // A target with a non-terminal run (in progress or awaiting parent review)
+  // must not get a second schedule: the dispatch guard only blocks ACTIVE
+  // leases, so re-kicking would duplicate work once the old run ends.
+  const liveRunStates = ["in_progress", "checkpointed", "in_review"] as const;
+  const liveRuns = await db
+    .select({ taskId: taskRunTable.taskId })
+    .from(taskRunTable)
+    .where(
+      and(
+        inArray(taskRunTable.taskId, taskIds),
+        inArray(taskRunTable.state, [...liveRunStates]),
+      ),
+    );
+  const hasLiveRun = new Set(liveRuns.map((row) => row.taskId));
 
   const scheduledTaskIds: string[] = [];
   for (const [targetTaskId, sourceIds] of blockersByTarget) {
     if (hasEnabledSchedule.has(targetTaskId)) continue;
+    if (hasLiveRun.has(targetTaskId)) continue;
     if (stateById.get(targetTaskId) === "done") continue;
     const uniqueSourceIds = [...new Set(sourceIds)];
     if (
@@ -2172,27 +2193,48 @@ export async function resumeChainSchedules(input: {
       .orderBy(desc(executionScheduleTable.createdAt))
       .limit(1);
 
-    const requestKey = `chain-resume:${targetTaskId}:${[...uniqueSourceIds]
+    // The nonce keeps repeat re-kicks working: notBefore is part of the
+    // idempotency hash, so a deterministic key 409s the moment the previous
+    // resume schedule was dispatched (one-shot) and disabled. A fresh re-kick
+    // is a deliberate new action, not a retried one.
+    const requestKey = `chain-resume:${Date.now()}:${targetTaskId}:${[
+      ...uniqueSourceIds,
+    ]
       .sort()
       .join(":")}`;
-    await createExecutionSchedule({
-      taskId: targetTaskId,
-      projectId: input.projectId,
-      userId: input.userId,
-      requestKey,
-      notBefore: new Date(),
-      host: sourceSchedule?.host ?? "pi-prodesk",
-      preferredModel: sourceSchedule?.preferredModel ?? null,
-      fallbackMode: sourceSchedule?.fallbackMode ?? undefined,
-      fallbackModels: sourceSchedule?.fallbackModels ?? undefined,
-      maxRuntimeSeconds: sourceSchedule?.maxRuntimeSeconds ?? 3_600,
-      concurrencyKey: sourceSchedule?.concurrencyKey ?? undefined,
-      retryPolicy: sourceSchedule?.retryPolicy ?? undefined,
-      dependencyPolicy: "reject",
-      notificationRoute: sourceSchedule?.notificationRoute ?? undefined,
-      telegramQuotaResume: sourceSchedule?.telegramQuotaResume ?? undefined,
-      planHash: sourceSchedule?.planHash ?? undefined,
-    });
+    try {
+      await createExecutionSchedule({
+        taskId: targetTaskId,
+        projectId: input.projectId,
+        userId: input.userId,
+        requestKey,
+        notBefore: new Date(),
+        host: sourceSchedule?.host ?? "pi-prodesk",
+        preferredModel: sourceSchedule?.preferredModel ?? null,
+        fallbackMode: sourceSchedule?.fallbackMode ?? undefined,
+        fallbackModels: sourceSchedule?.fallbackModels ?? undefined,
+        maxRuntimeSeconds: sourceSchedule?.maxRuntimeSeconds ?? 3_600,
+        concurrencyKey: sourceSchedule?.concurrencyKey ?? undefined,
+        retryPolicy: sourceSchedule?.retryPolicy ?? undefined,
+        dependencyPolicy: "reject",
+        notificationRoute: sourceSchedule?.notificationRoute ?? undefined,
+        telegramQuotaResume: sourceSchedule?.telegramQuotaResume ?? undefined,
+        planHash: sourceSchedule?.planHash ?? undefined,
+      });
+    } catch (error) {
+      // Per-target isolation: one poisoned target must not abort the sweep
+      // and leave the rest of the chain partial.
+      await enqueueNotificationEvent(db, {
+        taskId: targetTaskId,
+        kind: "failed",
+        payload: {
+          outcome: "chain_resume_failed",
+          reason:
+            error instanceof Error ? error.message.slice(0, 300) : "unknown",
+        },
+      });
+      continue;
+    }
     scheduledTaskIds.push(targetTaskId);
   }
   return { scheduledTaskIds };

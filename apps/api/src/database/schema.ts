@@ -918,6 +918,13 @@ export const executionNotificationDeliveryTable = pgTable(
       table.state,
       table.claimExpiresAt,
     ),
+    // Mirrors the UNIQUE(event_id, route) constraint created by migration
+    // 0045. Declared here so drizzle-kit push/regen cannot silently drop the
+    // dedupe boundary the outbox ON CONFLICT depends on.
+    uniqueIndex("execution_notification_delivery_event_id_route_uidx").on(
+      table.eventId,
+      table.route,
+    ),
   ],
 );
 
