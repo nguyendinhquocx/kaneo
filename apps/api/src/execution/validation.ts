@@ -160,6 +160,7 @@ export const NOTIFICATION_EVENT_KINDS = [
   "in_review",
   "failed",
   "done",
+  "chain_paused",
 ] as const;
 
 export type NotificationEventKind = (typeof NOTIFICATION_EVENT_KINDS)[number];

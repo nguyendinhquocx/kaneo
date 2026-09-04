@@ -22,6 +22,7 @@ import {
 } from "../database/schema";
 import { publishEvent } from "../events";
 import { enqueueNotificationEvent } from "./outbox";
+import { EXECUTION_FLAGS, isExecutionFlagEnabled } from "./gates";
 import {
   claimTaskRun,
   type ExecutionTransaction,
@@ -1929,6 +1930,20 @@ export async function advanceChainAfterFinalize(input: {
   finalizedRequestKey: string;
 }): Promise<void> {
   try {
+    // SPEC #15 pause/re-kick: the global chain kill-switch stops NEW chain
+    // schedules. Already-scheduled nodes still dispatch; the operator re-kicks
+    // via resumeChainSchedules after unpausing.
+    if (await isExecutionFlagEnabled(EXECUTION_FLAGS.chainPaused)) {
+      await enqueueNotificationEvent(db, {
+        taskId: input.finalizedTaskId,
+        kind: "chain_paused",
+        payload: {
+          after: input.finalizedTaskId,
+          reason: "chain_paused_flag",
+        },
+      });
+      return;
+    }
     const relations = await db
       .select({ targetTaskId: taskRelationTable.targetTaskId })
       .from(taskRelationTable)
@@ -2040,4 +2055,110 @@ export async function advanceChainAfterFinalize(input: {
       },
     });
   }
+}
+
+// SPEC #15 re-kick: after the operator unpauses the chain, sweep one project
+// for dependants whose blockers are all done but which have no enabled
+// schedule yet, and create those schedules idempotently. Runs synchronously
+// with a bounded task scan; safe to call repeatedly (requestKey dedup +
+// existing-enabled check make repeat calls no-ops).
+export async function resumeChainSchedules(input: {
+  projectId: string;
+  userId: string;
+}): Promise<{ scheduledTaskIds: string[] }> {
+  if (await isExecutionFlagEnabled(EXECUTION_FLAGS.chainPaused)) {
+    throw new HTTPException(409, {
+      message: "Chain is paused; clear the chain_paused flag before re-kicking",
+    });
+  }
+
+  const projectTasks = await db
+    .select({
+      id: taskTable.id,
+      executionState: taskTable.executionState,
+    })
+    .from(taskTable)
+    .where(eq(taskTable.projectId, input.projectId));
+  if (projectTasks.length === 0) return { scheduledTaskIds: [] };
+
+  const stateById = new Map(
+    projectTasks.map((task) => [task.id, task.executionState]),
+  );
+  const taskIds = [...stateById.keys()];
+
+  const relations = await db
+    .select({
+      sourceTaskId: taskRelationTable.sourceTaskId,
+      targetTaskId: taskRelationTable.targetTaskId,
+    })
+    .from(taskRelationTable)
+    .where(
+      and(
+        eq(taskRelationTable.relationType, "blocks"),
+        // Both endpoints must live in this project; relations are global rows.
+        or(
+          ...taskIds.flatMap((id) => [
+            eq(taskRelationTable.sourceTaskId, id),
+            eq(taskRelationTable.targetTaskId, id),
+          ]),
+        ),
+      ),
+    );
+
+  const blockersByTarget = new Map<string, string[]>();
+  for (const relation of relations) {
+    if (!stateById.has(relation.targetTaskId)) continue;
+    const list = blockersByTarget.get(relation.targetTaskId) ?? [];
+    list.push(relation.sourceTaskId);
+    blockersByTarget.set(relation.targetTaskId, list);
+  }
+
+  const enabledSchedules = await db
+    .select({ taskId: executionScheduleTable.taskId })
+    .from(executionScheduleTable)
+    .where(eq(executionScheduleTable.enabled, true));
+  const hasEnabledSchedule = new Set(enabledSchedules.map((row) => row.taskId));
+
+  const scheduledTaskIds: string[] = [];
+  for (const [targetTaskId, sourceIds] of blockersByTarget) {
+    if (hasEnabledSchedule.has(targetTaskId)) continue;
+    if (stateById.get(targetTaskId) === "done") continue;
+    const uniqueSourceIds = [...new Set(sourceIds)];
+    if (
+      !uniqueSourceIds.every((sourceId) => stateById.get(sourceId) === "done")
+    ) {
+      continue;
+    }
+
+    const [sourceSchedule] = await db
+      .select()
+      .from(executionScheduleTable)
+      .where(eq(executionScheduleTable.taskId, uniqueSourceIds[0]))
+      .orderBy(desc(executionScheduleTable.createdAt))
+      .limit(1);
+
+    const requestKey = `chain-resume:${targetTaskId}:${[...uniqueSourceIds]
+      .sort()
+      .join(":")}`;
+    await createExecutionSchedule({
+      taskId: targetTaskId,
+      projectId: input.projectId,
+      userId: input.userId,
+      requestKey,
+      notBefore: new Date(),
+      host: sourceSchedule?.host ?? "pi-prodesk",
+      preferredModel: sourceSchedule?.preferredModel ?? null,
+      fallbackMode: sourceSchedule?.fallbackMode ?? undefined,
+      fallbackModels: sourceSchedule?.fallbackModels ?? undefined,
+      maxRuntimeSeconds: sourceSchedule?.maxRuntimeSeconds ?? 3_600,
+      concurrencyKey: sourceSchedule?.concurrencyKey ?? undefined,
+      retryPolicy: sourceSchedule?.retryPolicy ?? undefined,
+      dependencyPolicy: "reject",
+      notificationRoute: sourceSchedule?.notificationRoute ?? undefined,
+      telegramQuotaResume: sourceSchedule?.telegramQuotaResume ?? undefined,
+      planHash: sourceSchedule?.planHash ?? undefined,
+    });
+    scheduledTaskIds.push(targetTaskId);
+  }
+  return { scheduledTaskIds };
 }

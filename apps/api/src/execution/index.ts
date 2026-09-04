@@ -29,6 +29,7 @@ import {
   getScheduleById,
   getTaskProjectId,
   listDueSchedules,
+  resumeChainSchedules,
   updateExecutionSchedule,
 } from "./schedules";
 import {
@@ -314,6 +315,38 @@ const execution = new Hono<{
         c.req.valid("json"),
       );
       return c.json(manifest);
+    },
+  )
+  .post(
+    "/project/:projectId/chain/resume",
+    describeRoute({
+      operationId: "resumeChainSchedules",
+      tags: ["Execution"],
+      description:
+        "Re-kick the auto-chain: create enabled schedules for every dependant whose blockers are all done (no-op when the chain_paused flag is set)",
+      responses: {
+        200: {
+          description: "Chain resume result",
+          content: {
+            "application/json": {
+              schema: resolver(
+                v.object({ scheduledTaskIds: v.array(v.string()) }),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ projectId: v.string() })),
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ project: ["update"] }),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const result = await resumeChainSchedules({
+        projectId,
+        userId: c.get("userId"),
+      });
+      return c.json(result);
     },
   )
   .get(

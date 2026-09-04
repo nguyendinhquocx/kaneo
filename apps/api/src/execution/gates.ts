@@ -12,12 +12,16 @@ export const EXECUTION_FLAGS = {
   gitPush: "git_push_enabled",
   prCreation: "pr_creation_enabled",
   merge: "merge_enabled",
+  chainPaused: "chain_paused",
 } as const;
 
 const MVP_A_EXECUTION_FLAGS = new Set<ExecutionFlagName>([
   EXECUTION_FLAGS.gitPush,
   EXECUTION_FLAGS.prCreation,
   EXECUTION_FLAGS.merge,
+  // chain_paused is operator-facing by design: pausing the auto-chain is the
+  // documented kill-switch for the pipeline (SPEC #15 pause/re-kick).
+  EXECUTION_FLAGS.chainPaused,
 ]);
 const NON_MVP_EXECUTION_FLAGS = [
   EXECUTION_FLAGS.agentInboxDispatch,
