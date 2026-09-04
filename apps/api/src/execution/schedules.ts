@@ -16,9 +16,11 @@ import {
   agentPrincipalTable,
   executionScheduleOccurrenceTable,
   executionScheduleTable,
+  projectTable,
   taskRelationTable,
   taskRunTable,
   taskTable,
+  workspaceUserTable,
 } from "../database/schema";
 import { publishEvent } from "../events";
 import { enqueueNotificationEvent } from "./outbox";
@@ -2016,11 +2018,44 @@ export async function advanceChainAfterFinalize(input: {
         .orderBy(desc(executionScheduleTable.createdAt))
         .limit(1);
 
+      // created_by_user_id has a user FK: when the finalized task has no
+      // schedule (or it was cancelled), fall back to the task owner and then
+      // any workspace member so the chain cannot die on an empty userId.
+      let chainUserId = sourceSchedule?.createdByUserId ?? "";
+      if (!chainUserId) {
+        const [finalizedTask] = await db
+          .select({ userId: taskTable.userId })
+          .from(taskTable)
+          .where(eq(taskTable.id, input.finalizedTaskId))
+          .limit(1);
+        chainUserId = finalizedTask?.userId ?? "";
+      }
+      if (!chainUserId) {
+        const [project] = await db
+          .select({ workspaceId: projectTable.workspaceId })
+          .from(projectTable)
+          .where(eq(projectTable.id, input.projectId))
+          .limit(1);
+        if (project) {
+          const [member] = await db
+            .select({ userId: workspaceUserTable.userId })
+            .from(workspaceUserTable)
+            .where(eq(workspaceUserTable.workspaceId, project.workspaceId))
+            .limit(1);
+          chainUserId = member?.userId ?? "";
+        }
+      }
+      if (!chainUserId) {
+        throw new Error(
+          "chain advance found no user to own the next schedule",
+        );
+      }
+
       const requestKey = `chain:${targetTaskId}:${input.finalizedTaskId}:${input.finalizedRequestKey}`;
       await createExecutionSchedule({
         taskId: targetTaskId,
         projectId: input.projectId,
-        userId: sourceSchedule?.createdByUserId ?? "",
+        userId: chainUserId,
         requestKey,
         notBefore: new Date(),
         host: sourceSchedule?.host ?? "pi-prodesk",

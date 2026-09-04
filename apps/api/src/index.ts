@@ -177,6 +177,7 @@ export function createApp() {
     }
 
     Sentry.captureException(err);
+    console.error("unhandled api error", err);
     return c.json({ message: "Internal Server Error" }, 500);
   });
   const nodeWs = createNodeWebSocket({ app });

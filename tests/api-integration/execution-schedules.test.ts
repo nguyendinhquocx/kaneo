@@ -1128,6 +1128,7 @@ describe("API integration: execution schedules (T6)", () => {
       .update(schema.taskRunTable)
       .set({
         lastHeartbeatAt: new Date(Date.now() - 3_600_000),
+        lastProgressAt: new Date(Date.now() - 3_600_000),
         leaseExpiresAt: new Date(Date.now() - 3_599_000),
       })
       .where(eq(schema.taskRunTable.id, dispatchBody.runId ?? ""));

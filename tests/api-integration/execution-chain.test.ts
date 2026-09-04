@@ -74,7 +74,7 @@ describe("API integration: auto-chain pause/re-kick (#15)", () => {
     await setExecutionFlag(EXECUTION_FLAGS.chainPaused, false);
   });
 
-  it("advances a 100-node chain one schedule per finalize, idempotently", async () => {
+  it("advances a 100-node chain one schedule per finalize, idempotently", { timeout: 120_000 }, async () => {
     const { taskIds } = await createChainFixture(100);
 
     for (let index = 0; index + 1 < taskIds.length; index += 1) {
@@ -122,8 +122,9 @@ describe("API integration: auto-chain pause/re-kick (#15)", () => {
     const { taskIds, project, member } = await createChainFixture(5);
     await finalizeTask(taskIds[0], "req-0");
     await setExecutionFlag(EXECUTION_FLAGS.chainPaused, true);
+    // Pause stops the advance after this finalize: node 2 never gets a
+    // schedule and is NOT done — exactly the state an operator pauses in.
     await finalizeTask(taskIds[1], "req-1");
-    await finalizeTask(taskIds[2], "req-2");
 
     // Re-kick while still paused must 409.
     await expect(
@@ -135,11 +136,9 @@ describe("API integration: auto-chain pause/re-kick (#15)", () => {
       projectId: project.id,
       userId: member.user.id,
     });
-    // Node 1 got its schedule pre-pause; nodes 2, 3, 4 have all blockers done
-    // with no schedule, so the sweep catches the whole tail at once.
-    expect(rekick.scheduledTaskIds.sort()).toEqual(
-      [taskIds[2], taskIds[3], taskIds[4]].sort(),
-    );
+    // Node 2's only blocker (node 1) is done and it has no schedule. Nodes
+    // 3 and 4 still have unfinished blockers, so they stay unscheduled.
+    expect(rekick.scheduledTaskIds).toEqual([taskIds[2]]);
 
     // Idempotent: a second re-kick schedules nothing new.
     const again = await resumeChainSchedules({

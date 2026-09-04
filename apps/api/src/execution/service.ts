@@ -4625,15 +4625,21 @@ export async function reviewTaskRun({
   // Post-commit, best-effort: a failed advance is a durable failed
   // notification, never a finalized-run rollback.
   if (result.response.state === "finalized") {
-    const { advanceChainAfterFinalize } = await import("./schedules");
-    void advanceChainAfterFinalize({
-      // taskStatusChanged is always set on the finalized path (it carries the
-      // project id for the done transition).
-      // biome-ignore lint/style/noNonNullAssertion: always set on the finalized path
-      projectId: result.taskStatusChanged!.projectId,
-      finalizedTaskId: taskId,
-      finalizedRequestKey: normalizedKey,
-    }).catch(() => {});
+    // SPEC-kaneo-wavefix-v0-2 (T14): the API is the single chain authority.
+    // Post-commit, best-effort: a failed advance is a durable failed
+    // notification, never a finalized-run rollback.
+    //
+    // Idempotent replays carry taskStatusChanged = null: the original request
+    // already advanced the chain (or was durably blocked by the pause flag),
+    // and re-advancing a replay would duplicate chain schedules.
+    if (result.taskStatusChanged) {
+      const { advanceChainAfterFinalize } = await import("./schedules");
+      void advanceChainAfterFinalize({
+        projectId: result.taskStatusChanged.projectId,
+        finalizedTaskId: taskId,
+        finalizedRequestKey: normalizedKey,
+      }).catch(() => {});
+    }
   }
   if (result.taskStatusChanged) {
     await publishEvent("task.status_changed", {
