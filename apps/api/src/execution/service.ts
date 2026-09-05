@@ -1,11 +1,24 @@
 import { randomBytes } from "node:crypto";
 import { createId } from "@paralleldrive/cuid2";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import {
-  agentPrincipalTable,
   activityTable,
+  agentPrincipalTable,
   columnTable,
   executionControlRequestTable,
   executionIdempotencyTable,
@@ -23,6 +36,7 @@ import {
 } from "../database/schema";
 import { publishEvent } from "../events";
 import {
+  assertFullRunFinalizationGate,
   assertTaskClaimable,
   getLatestTaskRunForGate,
 } from "./finalization-gate";
@@ -32,13 +46,17 @@ import {
   recordExecutionMetric,
 } from "./gates";
 import { enqueueNotificationEvent } from "./outbox";
+import {
+  assertFullRunReportGuard,
+  getPhaseCardContext,
+  resetPhaseLedgerForReject,
+} from "./phase-progress";
 import { bumpTaskRevision } from "./revisions";
 import { isRunTransitionAllowed } from "./transitions";
 import {
   createLeaseToken,
   EXECUTION_PROTOCOL_VERSION,
   extractWorkerContractScope,
-  extractWorkerContractState,
   FULLY_TERMINAL_RUN_STATES,
   getLeaseExpiry,
   hashLeaseToken,
@@ -822,6 +840,9 @@ async function getTaskContext(
       status: taskTable.status,
       projectId: taskTable.projectId,
       workspaceId: projectTable.workspaceId,
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: execution lifecycle
+      // authority read straight from the column (never the envelope).
+      executionState: taskTable.executionState,
     })
     .from(taskTable)
     .innerJoin(projectTable, eq(taskTable.projectId, projectTable.id))
@@ -1155,19 +1176,37 @@ function assertManifestModelPolicy(
   }
 }
 
+async function readTaskExecutionState(
+  tx: WriteExecutor,
+  taskId: string,
+): Promise<string> {
+  const [row] = await tx
+    .select({ executionState: taskTable.executionState })
+    .from(taskTable)
+    .where(eq(taskTable.id, taskId))
+    .limit(1);
+  return row?.executionState ?? "published";
+}
+
 async function assertScheduledTaskEligible(
   tx: WriteExecutor,
   input: {
     taskId: string;
     status: string;
+    executionState?: string;
     description: string | null;
     scope: string[];
     manifestPolicy: Record<string, unknown>;
     modelPolicy?: ScheduleRunModelPolicy;
   },
 ) {
+  // SPEC-kaneo-phase-cards-full-run-server-v0-1: eligibility CAS authority —
+  // `task.execution_state` is read from the database column. The legacy
+  // worker-contract envelope state in the description is display-only and is
+  // never consulted here, so a published FULL run stays dispatch-blocked
+  // until the parent ready-CAS flips the column.
   const executionState =
-    extractWorkerContractState(input.description) ?? input.status;
+    input.executionState ?? (await readTaskExecutionState(tx, input.taskId));
   if (executionState !== "ready" && executionState !== "queued") {
     throw new ScheduleEligibilityError(
       `Scheduled task must be ready or queued, got ${executionState}`,
@@ -1412,14 +1451,33 @@ export async function claimTaskRun(
     let taskContext: Awaited<ReturnType<typeof getTaskContext>>;
     try {
       taskContext = await getTaskContext(taskId, tx);
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: mapping-based claim
+      // guards. A phase child can never be claimed (normal or scheduled);
+      // a FULL task must be CAS-ready (ready/queued) before any claim.
+      const phaseContext = await getPhaseCardContext(tx, taskId);
+      if (phaseContext.isPhaseChild) {
+        throw new HTTPException(409, {
+          message:
+            "phase_card_guard: phase child cards cannot be claimed; only the FULL task carries the execution envelope",
+        });
+      }
       await assertTaskClaimable(tx, {
         projectId: taskContext.task.projectId,
         status: taskContext.task.status,
       });
+      if (phaseContext.isFullRun) {
+        const fullState = taskContext.task.executionState;
+        if (fullState !== "ready" && fullState !== "queued") {
+          throw new HTTPException(409, {
+            message: `full_run_not_ready: FULL task execution_state is ${fullState}; the parent ready-CAS must pass before claim`,
+          });
+        }
+      }
       if (scheduleDispatch) {
         await assertScheduledTaskEligible(tx, {
           taskId: taskContext.task.id,
           status: taskContext.task.status,
+          executionState: taskContext.task.executionState,
           description: taskContext.task.description,
           scope: normalizedScope,
           manifestPolicy: taskContext.manifest.policy ?? {},
@@ -1769,6 +1827,15 @@ export async function resumeTaskRun(input: {
   if (source.leaseActive) {
     throw new HTTPException(409, {
       message: "Cannot resume a run while its lease is active",
+    });
+  }
+  // SPEC-kaneo-phase-cards-full-run-server-v0-1: generic resume is denied on
+  // FULL mapped runs — blocked phases recover through a fresh scheduled claim
+  // and the fenced phase-progress begin (blocked → in_progress).
+  if ((await getPhaseCardContext(db, input.taskId)).isFullRun) {
+    throw new HTTPException(409, {
+      message:
+        "use_phase_progress: resume is denied on FULL mapped runs; recover through scheduled claim + fenced phase begin",
     });
   }
   const sourceEvidence = asEvidenceRecord(source.evidence);
@@ -2143,6 +2210,14 @@ export async function advancePreapprovedFallback(input: {
       .for("update");
     if (!source) {
       throw new HTTPException(404, { message: "Source task run not found" });
+    }
+    // SPEC-kaneo-phase-cards-full-run-server-v0-1: fallback chains are
+    // denied on FULL mapped runs (use fenced phase-progress instead).
+    if ((await getPhaseCardContext(tx, input.taskId)).isFullRun) {
+      throw new HTTPException(409, {
+        message:
+          "use_phase_progress: fallback is denied on FULL mapped runs; use the fenced phase-progress API",
+      });
     }
     if (
       !source.agentPrincipalId ||
@@ -2653,6 +2728,12 @@ export async function reportTaskRun({
     if (run.taskId !== taskId) {
       throw new HTTPException(404, { message: "Task run not found" });
     }
+    // SPEC-kaneo-phase-cards-full-run-server-v0-1: generic worker report
+    // paths are denied on FULL mapped runs. blocked_*/failed must go through
+    // fenced phase-progress block; in_review is only allowed once every
+    // required phase is done (otherwise 409 phase_progress_incomplete and the
+    // lease stays active).
+    await assertFullRunReportGuard(tx, taskId, nextState);
     // SPEC-kaneo-wavefix-v0-2 (T0): centralized lifecycle enforcement — a
     // worker report may never move a run through an unlisted transition
     // (e.g. finalized -> in_progress); resume paths must go through
@@ -2875,6 +2956,14 @@ export async function releaseTaskRun({
     if (run.taskId !== taskId) {
       throw new HTTPException(404, { message: "Task run not found" });
     }
+    // SPEC-kaneo-phase-cards-full-run-server-v0-1: generic release would
+    // break the phase fence; block_phase is the only sanctioned stop path.
+    if ((await getPhaseCardContext(tx, taskId)).isFullRun) {
+      throw new HTTPException(409, {
+        message:
+          "use_phase_progress: release is denied on FULL mapped runs; use the fenced phase-progress block action",
+      });
+    }
     const [updated] = await tx
       .update(taskRunTable)
       .set({
@@ -3042,6 +3131,14 @@ export async function createTaskRunCheckpoint({
     );
     if (run.taskId !== taskId) {
       throw new HTTPException(404, { message: "Task run not found" });
+    }
+    // SPEC-kaneo-phase-cards-full-run-server-v0-1: generic checkpoints are
+    // denied on FULL mapped runs — use the dedicated phase-checkpoint route.
+    if ((await getPhaseCardContext(tx, taskId)).isFullRun) {
+      throw new HTTPException(409, {
+        message:
+          "use_phase_checkpoint: generic checkpoints are denied on FULL mapped runs; use /phase-checkpoints",
+      });
     }
     // T0: checkpoint reports follow the same centralized lifecycle rules.
     if (!isRunTransitionAllowed(run.state as TaskRunState, "checkpointed")) {
@@ -3283,6 +3380,14 @@ export async function supervisorReportTaskRun({
       .limit(1)
       .for("update");
     if (!run) throw new HTTPException(404, { message: "Task run not found" });
+    // SPEC-kaneo-phase-cards-full-run-server-v0-1: the dispatcher cannot
+    // terminalize a FULL mapped run — phase lifecycle is fenced server-side.
+    if ((await getPhaseCardContext(tx, taskId)).isFullRun) {
+      throw new HTTPException(409, {
+        message:
+          "use_phase_progress: supervisor report is denied on FULL mapped runs; use the fenced phase-progress API",
+      });
+    }
     // Supervisor fence: the one-time token handed to the fixed runner through
     // the local 0600 handoff file at dispatch time. Without a matching fence
     // the report is rejected before any state change.
@@ -3471,7 +3576,10 @@ export async function maybeSteerActiveRunFromComment(input: {
     // to nobody. Direct insert: going through create-comment would re-enter
     // this hook (the guard above also breaks that loop).
     const [latestRun] = await db
-      .select({ state: taskRunTable.state, leaseEpoch: taskRunTable.leaseEpoch })
+      .select({
+        state: taskRunTable.state,
+        leaseEpoch: taskRunTable.leaseEpoch,
+      })
       .from(taskRunTable)
       .where(eq(taskRunTable.taskId, input.taskId))
       .orderBy(desc(taskRunTable.createdAt))
@@ -4434,6 +4542,10 @@ export async function reviewTaskRun({
           nextState = "in_review";
           nextAction = "Human merge gate is required before task finalization";
         } else {
+          // SPEC-kaneo-phase-cards-full-run-server-v0-1: finalization of a
+          // FULL mapped run cannot skip phases — exact required set, every
+          // phase done with checkpoint proof, projections repaired, or 409.
+          await assertFullRunFinalizationGate(tx, { taskId });
           nextState = "finalized";
           finalizationReceipt = {
             receiptId: `review-${normalizedKey}`,
@@ -4526,6 +4638,14 @@ export async function reviewTaskRun({
           updatedAt: new Date(),
         })
         .where(eq(taskTable.id, taskId));
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: parent reject resets the
+      // entire phase ledger to pending in the same transaction (fresh runs
+      // never skip phases via old status); the reset receipt rides the reason.
+      await resetPhaseLedgerForReject(
+        tx,
+        taskId,
+        normalizedReason ?? "parent rejected the run",
+      );
     }
 
     const parentReview = {

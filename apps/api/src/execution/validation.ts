@@ -65,6 +65,9 @@ export const WORKER_FAILURE_KINDS = [
   "provider_auth",
   "worker_crash",
   "test_failure",
+  // SPEC-kaneo-phase-cards-full-run-server-v0-1: canonical validation value
+  // for blocked_input — a phase map failed server validation.
+  "malformed_phase_map",
 ] as const;
 
 export type WorkerFailureKind = (typeof WORKER_FAILURE_KINDS)[number];
@@ -487,6 +490,401 @@ export function validateModelId(value: unknown, field = "model"): string {
 export interface WorkerContractScope {
   files: string[];
   laptopOnly: boolean;
+}
+
+// --- SPEC-kaneo-phase-cards-full-run-server-v0-1: canonical phase map -----
+// Canonicalization (master spec): UTF-8 without BOM, Unicode NFC, path `\\`
+// becomes `/`, trim + reject absolute/traversal/empty paths, object keys sort
+// by Unicode code point, phase entries sort by ordinal, Files/Verify sort
+// lexicographically, other arrays keep declaration order, compact JSON
+// (`,`/`:`), SHA-256 over the raw bytes. Child IDs, timestamps, request keys
+// and prose never enter the source hash; receiptSha256 excludes itself.
+
+export const PHASE_COUNT_LIMIT = 30;
+export const SPEC_SHA256_RE = /^[0-9a-f]{64}$/;
+
+/** Canonical phase entry as accepted from the parent graph request. */
+export type CanonicalPhaseInput = {
+  phaseId: string;
+  parserTaskId: string;
+  ordinal: number;
+  required: boolean;
+  title: string;
+  description?: string;
+  files: string[];
+  verify: string[];
+};
+
+export function normalizeRelativePath(value: unknown, field = "path"): string {
+  if (typeof value !== "string") {
+    throw new HTTPException(400, { message: `${field} must be a string` });
+  }
+  const path = value.normalize("NFC").trim().replace(/\\/g, "/");
+  if (
+    !path ||
+    path === "*" ||
+    path.startsWith("/") ||
+    /^[A-Za-z]:\//.test(path) ||
+    path.includes("\0") ||
+    path.split("/").some((segment) => segment === "..")
+  ) {
+    throw new HTTPException(400, { message: `Invalid ${field}: ${value}` });
+  }
+  return path;
+}
+
+function compareCodePoint(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Recursively normalize values for hashing (NFC strings, sorted keys). */
+function canonicalHashValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalHashValue);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record)
+        .sort(compareCodePoint)
+        .map((key) => [key, canonicalHashValue(record[key])]),
+    );
+  }
+  if (typeof value === "string") return value.normalize("NFC");
+  return value;
+}
+
+/** Compact canonical JSON text of a value (sorted keys, NFC strings). */
+export function canonicalJsonString(value: unknown): string {
+  return JSON.stringify(canonicalHashValue(value));
+}
+
+/** SHA-256 hex over the compact canonical JSON bytes of a value. */
+export function canonicalSha256(value: unknown): string {
+  return createHash("sha256")
+    .update(canonicalJsonString(value), "utf8")
+    .digest("hex");
+}
+
+/** Source-hash entry shape: no child IDs, no prose, normalized + sorted. */
+function canonicalSourcePhaseEntry(phase: CanonicalPhaseInput) {
+  return {
+    phase_id: phase.phaseId,
+    parser_task_id: phase.parserTaskId,
+    ordinal: phase.ordinal,
+    required: phase.required,
+    title: phase.title,
+    files: phase.files
+      .map((file) => normalizeRelativePath(file, "phase file"))
+      .sort(compareCodePoint),
+    verify: phase.verify
+      .map((command) => command.normalize("NFC").trim())
+      .sort(compareCodePoint),
+  };
+}
+
+/**
+ * Canonical source phase map bytes: sorted array of phase entries without
+ * child IDs. Must reproduce the master spec vector
+ * 571b8fc41098e9bd924e17e708ff0adc2b6148b8acad4ebf055201381de3b3ff.
+ */
+export function computeSourcePhaseMapHash(
+  phases: CanonicalPhaseInput[],
+): string {
+  const entries = [...phases]
+    .sort((left, right) => left.ordinal - right.ordinal)
+    .map(canonicalSourcePhaseEntry);
+  return canonicalSha256(entries);
+}
+
+/**
+ * Canonical graph map hash: source entries plus server-allocated child IDs
+ * and the FULL task id. Must reproduce the master spec graph vector
+ * 717d7cda68bae645ec0a92959fce00874253feffa9398fb332e1a8b3e51c46cf.
+ */
+export function computeGraphMapHash(
+  fullTaskId: string,
+  phases: Array<CanonicalPhaseInput & { childTaskId: string }>,
+): string {
+  const entries = [...phases]
+    .sort((left, right) => left.ordinal - right.ordinal)
+    .map((phase) => ({
+      ...canonicalSourcePhaseEntry(phase),
+      child_task_id: phase.childTaskId,
+    }));
+  return canonicalSha256({ full_task_id: fullTaskId, phases: entries });
+}
+
+/** Deterministic graph id from canonical {projectId, changeSetId, planHash}. */
+export function computeGraphId(input: {
+  projectId: string;
+  changeSetId: string;
+  planHash: string;
+}): string {
+  return `graph-${canonicalSha256({
+    projectId: input.projectId,
+    changeSetId: input.changeSetId,
+    planHash: input.planHash,
+  })}`;
+}
+
+/**
+ * Validate and canonicalize the parent-supplied phase list. Rejects more
+ * than PHASE_COUNT_LIMIT phases (`phase_count_exceeds_limit`), duplicate
+ * phase ids/ordinals/parser ids, and malformed file/command entries.
+ */
+export function validatePhaseMapInput(phases: unknown): CanonicalPhaseInput[] {
+  if (!Array.isArray(phases) || phases.length === 0) {
+    throw new HTTPException(400, {
+      message: "phases must be a non-empty array",
+    });
+  }
+  if (phases.length > PHASE_COUNT_LIMIT) {
+    throw new HTTPException(409, {
+      message: `phase_count_exceeds_limit: at most ${PHASE_COUNT_LIMIT} phases are allowed per FULL run`,
+    });
+  }
+  const seenPhaseIds = new Set<string>();
+  const seenParserTaskIds = new Set<string>();
+  const seenOrdinals = new Set<number>();
+  const canonical: CanonicalPhaseInput[] = phases.map((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new HTTPException(400, {
+        message: "phase entries must be objects",
+      });
+    }
+    const entry = raw as Record<string, unknown>;
+    const phaseId = entry.phaseId;
+    if (typeof phaseId !== "string" || !phaseId.trim() || phaseId.length > 64) {
+      throw new HTTPException(400, {
+        message: "phase phaseId must be a bounded non-empty string",
+      });
+    }
+    const parserTaskId = entry.parserTaskId;
+    if (
+      typeof parserTaskId !== "string" ||
+      !/^T[0-9]{1,4}$/.test(parserTaskId.trim())
+    ) {
+      throw new HTTPException(400, {
+        message: `phase ${phaseId} parserTaskId must match T<number>`,
+      });
+    }
+    const ordinal = entry.ordinal;
+    if (
+      typeof ordinal !== "number" ||
+      !Number.isInteger(ordinal) ||
+      ordinal < 1 ||
+      ordinal > PHASE_COUNT_LIMIT
+    ) {
+      throw new HTTPException(400, {
+        message: `phase ${phaseId} ordinal must be an integer between 1 and ${PHASE_COUNT_LIMIT}`,
+      });
+    }
+    if (entry.required !== undefined && typeof entry.required !== "boolean") {
+      throw new HTTPException(400, {
+        message: `phase ${phaseId} required must be a boolean`,
+      });
+    }
+    const title = entry.title;
+    if (typeof title !== "string" || !title.trim() || title.length > 300) {
+      throw new HTTPException(400, {
+        message: `phase ${phaseId} title must be a bounded non-empty string`,
+      });
+    }
+    const description = entry.description;
+    if (
+      description !== undefined &&
+      (typeof description !== "string" || description.length > 16_000)
+    ) {
+      throw new HTTPException(400, {
+        message: `phase ${phaseId} description must be a bounded string`,
+      });
+    }
+    const files = entry.files;
+    if (
+      !Array.isArray(files) ||
+      files.length === 0 ||
+      files.length > 200 ||
+      files.some((file) => typeof file !== "string")
+    ) {
+      throw new HTTPException(400, {
+        message: `phase ${phaseId} files must be a non-empty array of relative paths`,
+      });
+    }
+    const verify = entry.verify;
+    if (
+      !Array.isArray(verify) ||
+      verify.length === 0 ||
+      verify.length > 50 ||
+      verify.some((command) => typeof command !== "string")
+    ) {
+      throw new HTTPException(400, {
+        message: `phase ${phaseId} verify must be a non-empty array of commands`,
+      });
+    }
+    const normalizedFiles = files.map((file) =>
+      normalizeRelativePath(file, `phase ${phaseId} file`),
+    );
+    if (new Set(normalizedFiles).size !== normalizedFiles.length) {
+      throw new HTTPException(400, {
+        message: `phase ${phaseId} files must not contain duplicates`,
+      });
+    }
+    return {
+      phaseId: phaseId.trim(),
+      parserTaskId: parserTaskId.trim(),
+      ordinal,
+      required: entry.required === undefined ? true : entry.required,
+      title: title.trim(),
+      ...(description === undefined ? {} : { description }),
+      files: normalizedFiles,
+      verify: verify.map((command) => command.trim()),
+    };
+  });
+  for (const phase of canonical) {
+    if (seenPhaseIds.has(phase.phaseId)) {
+      throw new HTTPException(400, {
+        message: `duplicate phaseId: ${phase.phaseId}`,
+      });
+    }
+    seenPhaseIds.add(phase.phaseId);
+    if (seenParserTaskIds.has(phase.parserTaskId)) {
+      throw new HTTPException(400, {
+        message: `duplicate parserTaskId: ${phase.parserTaskId}`,
+      });
+    }
+    seenParserTaskIds.add(phase.parserTaskId);
+    if (seenOrdinals.has(phase.ordinal)) {
+      throw new HTTPException(400, {
+        message: `duplicate ordinal: ${phase.ordinal}`,
+      });
+    }
+    seenOrdinals.add(phase.ordinal);
+  }
+  return canonical.sort((left, right) => left.ordinal - right.ordinal);
+}
+
+/**
+ * Validate the legacy worker-contract JSON block that must start the FULL
+ * task description: schema 1, agent pi-prodesk, repo, path '.', state ready,
+ * spec id, task_id FULL, and files/scope/writes equal to the sorted union of
+ * all phase files.
+ */
+export function parseFullRunWorkerContract(
+  description: unknown,
+  expected: { specId: string; sortedUnionFiles: string[] },
+): Record<string, unknown> {
+  if (typeof description !== "string" || description.length > 128 * 1024) {
+    throw new HTTPException(400, {
+      message: "full.description must be a bounded string",
+    });
+  }
+  if (!description.startsWith("{")) {
+    throw new HTTPException(400, {
+      message:
+        "full.description must start with the legacy worker-contract JSON block",
+    });
+  }
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let end = -1;
+  for (let index = 0; index < description.length; index += 1) {
+    const character = description[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+    if (character === "{") depth += 1;
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        end = index;
+        break;
+      }
+    }
+  }
+  if (end === -1) {
+    throw new HTTPException(400, {
+      message: "full.description worker-contract JSON block is unterminated",
+    });
+  }
+  let contract: unknown;
+  try {
+    contract = JSON.parse(description.slice(0, end + 1));
+  } catch {
+    throw new HTTPException(400, {
+      message: "full.description worker-contract JSON block is invalid",
+    });
+  }
+  if (!contract || typeof contract !== "object" || Array.isArray(contract)) {
+    throw new HTTPException(400, {
+      message: "full.description must start with a JSON object",
+    });
+  }
+  const record = contract as Record<string, unknown>;
+  if (record.schema !== 1) {
+    throw new HTTPException(400, {
+      message: "worker contract schema must be 1",
+    });
+  }
+  if (record.agent !== "pi-prodesk") {
+    throw new HTTPException(400, {
+      message: "worker contract agent must be pi-prodesk",
+    });
+  }
+  if (typeof record.repo !== "string" || !record.repo.trim()) {
+    throw new HTTPException(400, {
+      message: "worker contract repo is required",
+    });
+  }
+  if (record.path !== ".") {
+    throw new HTTPException(400, {
+      message: 'worker contract path must be "."',
+    });
+  }
+  if (record.state !== "ready") {
+    throw new HTTPException(400, {
+      message: "worker contract state must be ready",
+    });
+  }
+  if (record.spec_id !== expected.specId) {
+    throw new HTTPException(400, {
+      message: "worker contract spec_id must match the published specId",
+    });
+  }
+  if (record.task_id !== "FULL") {
+    throw new HTTPException(400, {
+      message: 'worker contract task_id must be "FULL"',
+    });
+  }
+  const unionJson = JSON.stringify(expected.sortedUnionFiles);
+  for (const field of ["files", "scope", "writes"]) {
+    const value = record[field];
+    if (!Array.isArray(value)) {
+      throw new HTTPException(400, {
+        message: `worker contract ${field} must be the sorted union of all phase files`,
+      });
+    }
+    let normalized: string[];
+    try {
+      normalized = value.map((file) => normalizeRelativePath(file, field));
+    } catch {
+      throw new HTTPException(400, {
+        message: `worker contract ${field} contains an invalid path`,
+      });
+    }
+    if (JSON.stringify(normalized) !== unionJson) {
+      throw new HTTPException(400, {
+        message: `worker contract ${field} must equal the sorted union of all phase files`,
+      });
+    }
+  }
+  return record;
 }
 
 function parseEmbeddedJsonObject(

@@ -1,6 +1,13 @@
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
+import db from "../database";
+import { labelTable } from "../database/schema";
+import {
+  assertLabelTaskGuard,
+  requestActorIsAgent,
+} from "../execution/phase-progress";
 import { labelSchema } from "../schemas";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
@@ -90,6 +97,14 @@ const label = new Hono<{
     ),
     workspaceAccess.fromBody(),
     requireWorkspacePermission({ label: ["create"] }),
+    async (c, next) => {
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: label mutation guard.
+      await assertLabelTaskGuard(db, {
+        taskId: c.req.valid("json").taskId ?? null,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { name, color, workspaceId, taskId } = c.req.valid("json");
       const userId = c.get("userId");
@@ -139,6 +154,13 @@ const label = new Hono<{
     validator("json", v.object({ taskId: v.string() })),
     workspaceAccess.fromLabel(),
     requireWorkspacePermission({ label: ["update"] }),
+    async (c, next) => {
+      await assertLabelTaskGuard(db, {
+        taskId: c.req.valid("json").taskId,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { id } = c.req.valid("param");
       const { taskId } = c.req.valid("json");
@@ -165,6 +187,18 @@ const label = new Hono<{
     validator("param", v.object({ id: v.string() })),
     workspaceAccess.fromLabel(),
     requireWorkspacePermission({ label: ["update"] }),
+    async (c, next) => {
+      const [row] = await db
+        .select({ taskId: labelTable.taskId })
+        .from(labelTable)
+        .where(eq(labelTable.id, c.req.valid("param").id))
+        .limit(1);
+      await assertLabelTaskGuard(db, {
+        taskId: row?.taskId ?? null,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { id } = c.req.valid("param");
       const userId = c.get("userId");
@@ -197,6 +231,18 @@ const label = new Hono<{
     ),
     workspaceAccess.fromLabel(),
     requireWorkspacePermission({ label: ["update"] }),
+    async (c, next) => {
+      const [row] = await db
+        .select({ taskId: labelTable.taskId })
+        .from(labelTable)
+        .where(eq(labelTable.id, c.req.valid("param").id))
+        .limit(1);
+      await assertLabelTaskGuard(db, {
+        taskId: row?.taskId ?? null,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { id } = c.req.valid("param");
       const { name, color } = c.req.valid("json");
@@ -222,6 +268,18 @@ const label = new Hono<{
     validator("param", v.object({ id: v.string() })),
     workspaceAccess.fromLabel(),
     requireWorkspacePermission({ label: ["delete"] }),
+    async (c, next) => {
+      const [row] = await db
+        .select({ taskId: labelTable.taskId })
+        .from(labelTable)
+        .where(eq(labelTable.id, c.req.valid("param").id))
+        .limit(1);
+      await assertLabelTaskGuard(db, {
+        taskId: row?.taskId ?? null,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { id } = c.req.valid("param");
       const userId = c.get("userId");

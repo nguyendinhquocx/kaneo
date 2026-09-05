@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
+import db from "../database";
 import {
   agentPrincipalSchema,
   executionManifestSchema,
@@ -17,10 +18,19 @@ import {
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import { listExecutionFlags, setExecutionFlag } from "./gates";
 import {
+  getFullRunGraphByGraphId,
+  getFullRunGraphByRequestKey,
+  publishFullRunGraph,
+  readyFullRunGraph,
+} from "./graph-publish";
+import {
   DEFAULT_NOTIFICATION_ROUTE,
   listDueNotificationEvents,
   updateNotificationDelivery,
 } from "./outbox";
+import { createPhaseCheckpoint } from "./phase-checkpoint";
+import { getPhaseProgressSnapshot, postPhaseProgress } from "./phase-progress";
+import { reconcilePhaseProjections } from "./phase-projection";
 import {
   acknowledgeScheduleDispatch,
   cancelExecutionSchedule,
@@ -318,6 +328,188 @@ const execution = new Hono<{
     },
   )
   .post(
+    "/project/:projectId/full-run-graphs",
+    describeRoute({
+      operationId: "publishFullRunGraph",
+      tags: ["Execution"],
+      description:
+        "SPEC-kaneo-phase-cards-full-run-server-v0-1: transactional, idempotent FULL-run graph publish (FULL task + phase cards + mapping + pending ledger + subtask relations)",
+      responses: {
+        200: {
+          description: "Graph receipt",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ projectId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        planHash: v.string(),
+        expectedProjectRevision: v.number(),
+        changeSetId: v.string(),
+        specId: v.string(),
+        specSha256: v.string(),
+        sourcePhaseMapSha256: v.string(),
+        baseBranch: v.string(),
+        full: v.object({
+          title: v.string(),
+          description: v.string(),
+          scope: v.optional(v.array(v.string())),
+          verify: v.optional(v.array(v.string())),
+          taskExecutionState: v.string(),
+        }),
+        phases: v.array(v.record(v.string(), v.unknown())),
+      }),
+    ),
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ execution: ["review"] }),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const receipt = await publishFullRunGraph({
+        projectId,
+        userId: c.get("userId"),
+        requestKey,
+        planHash: body.planHash,
+        expectedProjectRevision: body.expectedProjectRevision,
+        changeSetId: body.changeSetId,
+        headerChangeSetId: c.req.header("X-Kaneo-Change-Set"),
+        specId: body.specId,
+        specSha256: body.specSha256,
+        sourcePhaseMapSha256: body.sourcePhaseMapSha256,
+        baseBranch: body.baseBranch,
+        full: body.full,
+        phases: body.phases,
+      });
+      return c.json(receipt);
+    },
+  )
+  .get(
+    "/project/:projectId/full-run-graphs/by-request",
+    describeRoute({
+      operationId: "getFullRunGraphByRequest",
+      tags: ["Execution"],
+      description:
+        "Bounded graph receipt lookup by the original Idempotency-Key (response-loss reconcile)",
+      responses: {
+        200: {
+          description: "Graph receipt",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ projectId: v.string() })),
+    validator(
+      "query",
+      v.object({ requestKey: v.pipe(v.string(), v.minLength(1)) }),
+    ),
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ execution: ["review"] }),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const { requestKey } = c.req.valid("query");
+      return c.json(
+        await getFullRunGraphByRequestKey({
+          projectId,
+          requestKey,
+          userId: c.get("userId"),
+        }),
+      );
+    },
+  )
+  .get(
+    "/project/:projectId/full-run-graphs/:graphId",
+    describeRoute({
+      operationId: "getFullRunGraph",
+      tags: ["Execution"],
+      description: "Bounded graph receipt lookup by deterministic graphId",
+      responses: {
+        200: {
+          description: "Graph receipt",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator(
+      "param",
+      v.object({ projectId: v.string(), graphId: v.string() }),
+    ),
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ execution: ["review"] }),
+    async (c) => {
+      const { projectId, graphId } = c.req.valid("param");
+      return c.json(
+        await getFullRunGraphByGraphId({
+          projectId,
+          graphId,
+          userId: c.get("userId"),
+        }),
+      );
+    },
+  )
+  .post(
+    "/project/:projectId/full-run-graphs/:graphId/ready",
+    describeRoute({
+      operationId: "readyFullRunGraph",
+      tags: ["Execution"],
+      description:
+        "Parent-only CAS published → ready on the FULL task (planHash + project/task revision drift = 409)",
+      responses: {
+        200: {
+          description: "Ready receipt",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator(
+      "param",
+      v.object({ projectId: v.string(), graphId: v.string() }),
+    ),
+    validator(
+      "json",
+      v.object({
+        planHash: v.string(),
+        expectedProjectRevision: v.number(),
+        expectedTaskRevision: v.number(),
+      }),
+    ),
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ execution: ["review"] }),
+    async (c) => {
+      const { projectId, graphId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const receipt = await readyFullRunGraph({
+        projectId,
+        graphId,
+        userId: c.get("userId"),
+        requestKey,
+        planHash: body.planHash,
+        expectedProjectRevision: body.expectedProjectRevision,
+        expectedTaskRevision: body.expectedTaskRevision,
+      });
+      return c.json(receipt);
+    },
+  )
+  .post(
     "/project/:projectId/chain/resume",
     describeRoute({
       operationId: "resumeChainSchedules",
@@ -472,6 +664,179 @@ const execution = new Hono<{
     async (c) => {
       const { taskId, runId } = c.req.valid("param");
       return c.json(await listTaskRunEvidence(taskId, runId));
+    },
+  )
+  .get(
+    "/task/:taskId/runs/:runId/phase-progress",
+    describeRoute({
+      operationId: "getPhaseProgress",
+      tags: ["Execution"],
+      description:
+        "SPEC-kaneo-phase-cards-full-run-server-v0-1: phase map snapshot + ledger for a FULL run (bounded, no pagination — phase_count <= 30)",
+      responses: {
+        200: {
+          description: "Phase progress snapshot",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string(), runId: v.string() })),
+    workspaceAccess.fromTask("taskId"),
+    async (c) => {
+      const { taskId, runId } = c.req.valid("param");
+      return c.json(await getPhaseProgressSnapshot(db, taskId, runId));
+    },
+  )
+  .post(
+    "/task/:taskId/runs/:runId/phase-progress",
+    describeRoute({
+      operationId: "postPhaseProgress",
+      tags: ["Execution"],
+      description:
+        "Fenced phase-progress operations (get/begin/complete/block) with deterministic idempotency",
+      responses: {
+        200: {
+          description: "Phase progress applied",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string(), runId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        leaseEpoch: v.number(),
+        phaseId: v.string(),
+        action: v.picklist(["get", "begin", "complete", "block"]),
+        checkpointId: v.optional(v.string()),
+        failureKind: v.optional(v.string()),
+        reason: v.optional(v.string()),
+        retryAt: v.optional(v.string()),
+        expectedRunRevision: v.optional(v.number()),
+      }),
+    ),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c) => {
+      const { taskId, runId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const leaseToken = c.req.header("X-Kaneo-Lease-Token")?.trim();
+      if (!leaseToken) {
+        return c.json({ error: "Lease token is required" }, 401);
+      }
+      const result = await postPhaseProgress({
+        taskId,
+        runId,
+        userId: c.get("userId"),
+        leaseEpoch: body.leaseEpoch,
+        leaseToken,
+        action: body.action,
+        phaseId: body.phaseId,
+        checkpointId: body.checkpointId,
+        failureKind: body.failureKind,
+        reason: body.reason,
+        retryAt: body.retryAt,
+        expectedRunRevision: body.expectedRunRevision,
+        requestKey,
+      });
+      return c.json(result);
+    },
+  )
+  .post(
+    "/task/:taskId/runs/:runId/phase-checkpoints",
+    describeRoute({
+      operationId: "createPhaseCheckpoint",
+      tags: ["Execution"],
+      description:
+        "Dedicated FULL-run phase checkpoint with phase/spec/source-map provenance and receipt hash",
+      responses: {
+        200: {
+          description: "Phase checkpoint accepted",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string(), runId: v.string() })),
+    validator(
+      "json",
+      v.object({
+        leaseEpoch: v.number(),
+        phaseId: v.string(),
+        headSha: v.string(),
+        commitSha: v.string(),
+        baseSha: v.optional(v.string()),
+        guardReceipt: v.record(v.string(), v.unknown()),
+        commands: v.optional(v.array(v.string())),
+        artifactHashes: v.optional(v.record(v.string(), v.unknown())),
+        expectedRunRevision: v.optional(v.number()),
+      }),
+    ),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c) => {
+      const { taskId, runId } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const requestKey = c.req.header("Idempotency-Key")?.trim() || "";
+      const leaseToken = c.req.header("X-Kaneo-Lease-Token")?.trim();
+      if (!leaseToken) {
+        return c.json({ error: "Lease token is required" }, 401);
+      }
+      const result = await createPhaseCheckpoint({
+        taskId,
+        runId,
+        userId: c.get("userId"),
+        leaseEpoch: body.leaseEpoch,
+        leaseToken,
+        phaseId: body.phaseId,
+        headSha: body.headSha,
+        commitSha: body.commitSha,
+        baseSha: body.baseSha,
+        guardReceipt: body.guardReceipt,
+        commands: body.commands,
+        artifactHashes: body.artifactHashes,
+        expectedRunRevision: body.expectedRunRevision,
+        requestKey,
+      });
+      return c.json(result);
+    },
+  )
+  .post(
+    "/task/:taskId/phase-projections/reconcile",
+    describeRoute({
+      operationId: "reconcilePhaseProjections",
+      tags: ["Execution"],
+      description:
+        "Parent/dispatcher-only bounded reconcile of the phase projection outbox (Kanban columns + markers) for a FULL run",
+      responses: {
+        200: {
+          description: "Reconcile outcome",
+          content: {
+            "application/json": {
+              schema: resolver(v.record(v.string(), v.unknown())),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string() })),
+    workspaceAccess.fromTask("taskId"),
+    requireWorkspacePermission({ execution: ["review"] }),
+    async (c) => {
+      const { taskId } = c.req.valid("param");
+      return c.json(await reconcilePhaseProjections({ fullTaskId: taskId }));
     },
   )
   .post(

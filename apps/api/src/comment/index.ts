@@ -1,6 +1,12 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
+import db from "../database";
+import {
+  assertCommentMutationGuard,
+  phaseCardTaskGuard,
+  requestActorIsAgent,
+} from "../execution/phase-progress";
 import { commentSchema } from "../schemas";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
@@ -60,6 +66,7 @@ const comment = new Hono<{
       v.object({ content: v.pipe(v.string(), v.minLength(1)) }),
     ),
     workspaceAccess.fromTaskId(),
+    phaseCardTaskGuard("param", "taskId"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { taskId } = c.req.valid("param");
@@ -91,6 +98,15 @@ const comment = new Hono<{
     ),
     workspaceAccess.fromComment(),
     requireWorkspacePermission({ task: ["update"] }),
+    async (c, next) => {
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: comment mutation guard.
+      await assertCommentMutationGuard(db, {
+        commentId: c.req.valid("param").id,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
+    requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
       const { content } = c.req.valid("json");
@@ -116,6 +132,14 @@ const comment = new Hono<{
     }),
     validator("param", v.object({ id: v.string() })),
     workspaceAccess.fromComment(),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c, next) => {
+      await assertCommentMutationGuard(db, {
+        commentId: c.req.valid("param").id,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");

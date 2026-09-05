@@ -5,6 +5,10 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import db from "../database";
 import { projectTable, taskRelationTable, taskTable } from "../database/schema";
+import {
+  assertRelationTargetsGuard,
+  requestActorIsAgent,
+} from "../execution/phase-progress";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { validateWorkspaceAccess } from "../utils/validate-workspace-access";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
@@ -112,6 +116,12 @@ const taskRelation = new Hono<{
         });
       }
       c.set("workspaceId", task.workspaceId);
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: relation forge guard.
+      await assertRelationTargetsGuard(db, {
+        sourceTaskId: c.req.valid("json").sourceTaskId,
+        targetTaskId: c.req.valid("json").targetTaskId,
+        actorIsAgent: requestActorIsAgent(c),
+      });
       return next();
     },
     requireWorkspacePermission({ task: ["update"] }),
@@ -151,7 +161,10 @@ const taskRelation = new Hono<{
       }
       const { id } = c.req.valid("param");
       const [rel] = await db
-        .select({ sourceTaskId: taskRelationTable.sourceTaskId })
+        .select({
+          sourceTaskId: taskRelationTable.sourceTaskId,
+          targetTaskId: taskRelationTable.targetTaskId,
+        })
         .from(taskRelationTable)
         .where(eq(taskRelationTable.id, id))
         .limit(1);
@@ -178,6 +191,14 @@ const taskRelation = new Hono<{
         });
       }
       c.set("workspaceId", task.workspaceId);
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: relation delete guard —
+      // deny when the relation touches a phase child or, for agent callers,
+      // a FULL run task.
+      await assertRelationTargetsGuard(db, {
+        sourceTaskId: rel?.sourceTaskId,
+        targetTaskId: rel?.targetTaskId,
+        actorIsAgent: requestActorIsAgent(c),
+      });
       return next();
     },
     requireWorkspacePermission({ task: ["update"] }),
