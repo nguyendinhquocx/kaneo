@@ -48,6 +48,7 @@ async function createScheduleFixture(options?: {
         laptop_only: false,
       }),
       status: options?.taskStatus ?? "ready",
+      executionState: options?.taskStatus === "ready" || options?.taskStatus === undefined ? "ready" : options?.taskStatus,
       columnId: columns.todo.id,
       priority: "medium",
       number: 1,
@@ -610,6 +611,7 @@ describe("API integration: execution schedules (T6)", () => {
           laptop_only: false,
         }),
         status: "ready",
+        executionState: "ready",
         columnId: (
           await db
             .select({ id: schema.columnTable.id })

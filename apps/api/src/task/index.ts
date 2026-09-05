@@ -11,6 +11,12 @@ import {
   workspaceTable,
 } from "../database/schema";
 import { publishEvent } from "../events";
+import {
+  assertBulkTaskIdsGuard,
+  assertProjectTaskCreationGuard,
+  phaseCardTaskGuard,
+  requestActorIsAgent,
+} from "../execution/phase-progress";
 import { taskSchema } from "../schemas";
 import {
   assertTaskImageKeyMatchesContext,
@@ -146,6 +152,11 @@ const task = new Hono<{
     },
     async (c) => {
       const { taskIds, operation, value } = c.req.valid("json");
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: bulk write guard.
+      await assertBulkTaskIdsGuard(db, {
+        taskIds,
+        actorIsAgent: requestActorIsAgent(c),
+      });
       const userId = c.get("userId");
 
       if (!userId) {
@@ -201,6 +212,15 @@ const task = new Hono<{
     ),
     workspaceAccess.fromProject("projectId"),
     requireWorkspacePermission({ task: ["create"] }),
+    async (c, next) => {
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: agent create_task is
+      // denied while a FULL graph is active in this project.
+      await assertProjectTaskCreationGuard(db, {
+        projectId: c.req.param("projectId"),
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { projectId } = c.req.param();
       const {
@@ -286,6 +306,7 @@ const task = new Hono<{
       }),
     ),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -333,6 +354,7 @@ const task = new Hono<{
       }),
     ),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     async (c, next) => {
       const body = c.req.valid("json");
       const requiredPermission =
@@ -432,6 +454,15 @@ const task = new Hono<{
     ),
     workspaceAccess.fromProject("projectId"),
     requireWorkspacePermission({ task: ["create"] }),
+    async (c, next) => {
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: agent import is denied
+      // while a FULL graph is active in this project.
+      await assertProjectTaskCreationGuard(db, {
+        projectId: c.req.valid("param").projectId,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { projectId } = c.req.valid("param");
       const { tasks } = c.req.valid("json");
@@ -459,6 +490,7 @@ const task = new Hono<{
     }),
     validator("param", v.object({ id: v.string() })),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["delete"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -487,6 +519,7 @@ const task = new Hono<{
     validator("param", v.object({ id: v.string() })),
     validator("json", v.object({ status: v.string() })),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -516,6 +549,7 @@ const task = new Hono<{
     validator("param", v.object({ id: v.string() })),
     validator("json", v.object({ priority: v.picklist(VALID_PRIORITIES) })),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -545,6 +579,7 @@ const task = new Hono<{
     validator("param", v.object({ id: v.string() })),
     validator("json", v.object({ userId: v.nullable(v.string()) })),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["assign"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -574,6 +609,7 @@ const task = new Hono<{
     validator("param", v.object({ id: v.string() })),
     validator("json", v.object({ dueDate: v.optional(v.string()) })),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -608,6 +644,7 @@ const task = new Hono<{
     validator("param", v.object({ id: v.string() })),
     validator("json", v.object({ title: v.string() })),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -647,6 +684,7 @@ const task = new Hono<{
       }),
     ),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -731,6 +769,7 @@ const task = new Hono<{
       }),
     ),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -863,6 +902,7 @@ const task = new Hono<{
     validator("param", v.object({ id: v.string() })),
     validator("json", v.object({ description: v.string() })),
     workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");

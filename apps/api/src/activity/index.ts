@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
+import db from "../database";
 import { subscribeToEvent } from "../events";
+import {
+  assertCommentMutationGuard,
+  phaseCardTaskGuard,
+  requestActorIsAgent,
+} from "../execution/phase-progress";
 import { activitySchema } from "../schemas";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
@@ -101,6 +107,7 @@ const activity = new Hono<{
       }),
     ),
     workspaceAccess.fromTaskId(),
+    phaseCardTaskGuard("body", "taskId"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { taskId, comment } = c.req.valid("json");
@@ -133,6 +140,14 @@ const activity = new Hono<{
       }),
     ),
     workspaceAccess.fromActivity("activityId"),
+    async (c, next) => {
+      // SPEC-kaneo-phase-cards-full-run-server-v0-1: comment mutation guard.
+      await assertCommentMutationGuard(db, {
+        commentId: c.req.valid("json").activityId,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { activityId, comment } = c.req.valid("json");
       const userId = c.get("userId");
@@ -162,6 +177,13 @@ const activity = new Hono<{
       }),
     ),
     workspaceAccess.fromActivity("activityId"),
+    async (c, next) => {
+      await assertCommentMutationGuard(db, {
+        commentId: c.req.valid("json").activityId,
+        actorIsAgent: requestActorIsAgent(c),
+      });
+      return next();
+    },
     async (c) => {
       const { activityId } = c.req.valid("json");
       const userId = c.get("userId");

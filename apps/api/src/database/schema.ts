@@ -282,6 +282,9 @@ export const projectTable = pgTable(
     isPublic: boolean("is_public").default(false),
     archivedAt: timestamp("archived_at", { mode: "date" }),
     lastTaskNumber: integer("last_task_number").notNull().default(0),
+    // SPEC-kaneo-phase-cards-full-run-server-v0-1: server-owned revision for
+    // graph publish / ready CAS (WHERE project_revision = expected).
+    projectRevision: integer("project_revision").notNull().default(1),
   },
   (table) => [
     unique("project_workspace_id_id_unique").on(table.workspaceId, table.id),
@@ -739,6 +742,13 @@ export const taskRunCheckpointTable = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    // SPEC-kaneo-phase-cards-full-run-server-v0-1: phase provenance. Required
+    // for new FULL-run phase checkpoints; nullable for legacy rows which are
+    // never accepted as phase proof.
+    phaseId: text("phase_id"),
+    specSha256: text("spec_sha256"),
+    sourcePhaseMapSha256: text("source_phase_map_sha256"),
+    receiptHash: text("receipt_hash"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => [index("task_run_checkpoint_runId_idx").on(table.runId)],
@@ -957,6 +967,174 @@ export const executionIdempotencyTable = pgTable(
     unique("execution_idempotency_operation_key_unique").on(
       table.operation,
       table.requestKey,
+    ),
+  ],
+);
+
+// SPEC-kaneo-phase-cards-full-run-server-v0-1 (T1): server-side mapping of
+// FULL task phases to child Kanban cards. The mapping — never a missing
+// envelope — is the claim guard: a phase child cannot be claimed, scheduled
+// or generically mutated. Exactly one card per (full_task_id, phase_id) and
+// one mapping per child.
+export const executionPhaseCardTable = pgTable(
+  "execution_phase_card",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    fullTaskId: text("full_task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    childTaskId: text("child_task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    phaseId: text("phase_id").notNull(),
+    parserTaskId: text("parser_task_id").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    required: boolean("required").notNull().default(true),
+    graphId: text("graph_id").notNull(),
+    specSha256: text("spec_sha256").notNull(),
+    sourcePhaseMapSha256: text("source_phase_map_sha256").notNull(),
+    graphMapSha256: text("graph_map_sha256").notNull(),
+    planHash: text("plan_hash").notNull(),
+    changeSetId: text("change_set_id").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("execution_phase_card_full_ordinal_idx").on(
+      table.fullTaskId,
+      table.ordinal,
+    ),
+    index("execution_phase_card_projectId_idx").on(table.projectId),
+    unique("execution_phase_card_full_phase_unique").on(
+      table.fullTaskId,
+      table.phaseId,
+    ),
+    unique("execution_phase_card_child_task_unique").on(table.childTaskId),
+  ],
+);
+
+// Fenced progress ledger: the server authority for phase state and checkpoint
+// provenance. Kanban cards are projections of this ledger, never the reverse.
+export const executionPhaseProgressTable = pgTable(
+  "execution_phase_progress",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    fullTaskId: text("full_task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    phaseId: text("phase_id").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    // pending | in_progress | done | blocked
+    state: text("state").notNull().default("pending"),
+    runId: text("run_id").references(() => taskRunTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    parentRunId: text("parent_run_id").references(() => taskRunTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    leaseEpoch: integer("lease_epoch"),
+    ledgerVersion: integer("ledger_version").notNull().default(1),
+    checkpointId: text("checkpoint_id"),
+    commitSha: text("commit_sha"),
+    branchName: text("branch_name"),
+    baseSha: text("base_sha"),
+    reason: text("reason"),
+    failureKind: text("failure_kind"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("execution_phase_progress_full_ordinal_idx").on(
+      table.fullTaskId,
+      table.ordinal,
+    ),
+    index("execution_phase_progress_run_state_idx").on(
+      table.runId,
+      table.state,
+    ),
+    unique("execution_phase_progress_full_phase_unique").on(
+      table.fullTaskId,
+      table.phaseId,
+    ),
+  ],
+);
+
+// Durable projection outbox decoupling ledger commits from child card
+// status/comment writes. Reconcile is idempotent per
+// (fullTaskId, phaseId, projectionKind, ledgerVersion); a failed projection
+// is display_pending and never blocks the worker or rolls back the ledger.
+export const executionPhaseProjectionTable = pgTable(
+  "execution_phase_projection",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    fullTaskId: text("full_task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    phaseId: text("phase_id").notNull(),
+    projectionKind: text("projection_kind").notNull(),
+    ledgerVersion: integer("ledger_version").notNull(),
+    childTaskId: text("child_task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    desiredColumnSlug: text("desired_column_slug"),
+    markerPayload: jsonb("marker_payload")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    markerHash: text("marker_hash").notNull(),
+    // pending | applied | failed
+    state: text("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    appliedAt: timestamp("applied_at", { mode: "date", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("execution_phase_projection_state_idx").on(table.state),
+    unique("execution_phase_projection_unique").on(
+      table.fullTaskId,
+      table.phaseId,
+      table.projectionKind,
+      table.ledgerVersion,
     ),
   ],
 );

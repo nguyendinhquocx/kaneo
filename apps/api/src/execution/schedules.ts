@@ -14,6 +14,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import {
   agentPrincipalTable,
+  executionPhaseCardTable,
   executionScheduleOccurrenceTable,
   executionScheduleTable,
   projectTable,
@@ -23,8 +24,8 @@ import {
   workspaceUserTable,
 } from "../database/schema";
 import { publishEvent } from "../events";
-import { enqueueNotificationEvent } from "./outbox";
 import { EXECUTION_FLAGS, isExecutionFlagEnabled } from "./gates";
+import { enqueueNotificationEvent } from "./outbox";
 import {
   claimTaskRun,
   type ExecutionTransaction,
@@ -134,6 +135,19 @@ export async function createExecutionSchedule(input: CreateScheduleInput) {
     notBefore: input.notBefore,
     cronExpr: undefined,
   });
+  // SPEC-kaneo-phase-cards-full-run-server-v0-1: phase child cards can never
+  // be scheduled — only the FULL task carries the dispatch envelope.
+  const [phaseChild] = await db
+    .select({ id: executionPhaseCardTable.id })
+    .from(executionPhaseCardTable)
+    .where(eq(executionPhaseCardTable.childTaskId, input.taskId))
+    .limit(1);
+  if (phaseChild) {
+    throw new HTTPException(409, {
+      message:
+        "phase_card_guard: phase child cards cannot be scheduled; schedule the FULL task",
+    });
+  }
   if (!input.requestKey || input.requestKey.length > 200) {
     throw new HTTPException(400, {
       message: "Idempotency-Key is required and must be <= 200 characters",
@@ -1752,7 +1766,9 @@ export async function updateExecutionSchedule(input: UpdateScheduleInput) {
       if (input.enabled) {
         updates.enabled = true;
         const resumeAt =
-          schedule.notBefore && schedule.notBefore > now ? schedule.notBefore : now;
+          schedule.notBefore && schedule.notBefore > now
+            ? schedule.notBefore
+            : now;
         updates.nextDispatchAt = resumeAt;
       } else {
         updates.enabled = false;
@@ -2046,9 +2062,7 @@ export async function advanceChainAfterFinalize(input: {
         }
       }
       if (!chainUserId) {
-        throw new Error(
-          "chain advance found no user to own the next schedule",
-        );
+        throw new Error("chain advance found no user to own the next schedule");
       }
 
       const requestKey = `chain:${targetTaskId}:${input.finalizedTaskId}:${input.finalizedRequestKey}`;
@@ -2180,7 +2194,9 @@ export async function resumeChainSchedules(input: {
     if (hasLiveRun.has(targetTaskId)) continue;
     if (stateById.get(targetTaskId) === "done") continue;
     const uniqueSourceIds = [...new Set(sourceIds)];
+    const firstSourceId = uniqueSourceIds[0];
     if (
+      !firstSourceId ||
       !uniqueSourceIds.every((sourceId) => stateById.get(sourceId) === "done")
     ) {
       continue;
@@ -2189,7 +2205,7 @@ export async function resumeChainSchedules(input: {
     const [sourceSchedule] = await db
       .select()
       .from(executionScheduleTable)
-      .where(eq(executionScheduleTable.taskId, uniqueSourceIds[0]))
+      .where(eq(executionScheduleTable.taskId, firstSourceId))
       .orderBy(desc(executionScheduleTable.createdAt))
       .limit(1);
 
