@@ -139,6 +139,9 @@
 				"labelCreateError": "Không thể tạo nhãn",
 				"createMore": "Tạo thêm",
 				"createButton": "Tạo công việc",
+				"discardTitle": "Hủy công việc?",
+				"discardDescription": "Các chi tiết công việc chưa lưu sẽ bị mất.",
+				"discardButton": "Hủy công việc",
 				"untitledTask": "Công việc chưa đặt tên",
 				"labelColors": {
 					"stone": "Đá",
@@ -1553,6 +1556,7 @@
 		}
 	},
 	"tasks": {
+		"title": "Nhiệm vụ",
 		"status": {
 			"label": "Trạng thái",
 			"to-do": "Cần làm",
@@ -1860,7 +1864,8 @@
 			"updateDatesError": "Không thể cập nhật ngày của công việc",
 			"resizeStart": "Thay đổi kích thước ngày bắt đầu",
 			"resizeDue": "Thay đổi kích thước ngày đến hạn",
-			"taskAriaLabel": "{{title}}: mở hoặc kéo để di chuyển"
+			"taskAriaLabel": "{{title}}: mở hoặc kéo để di chuyển",
+			"jumpToToday": "Jump to today"
 		},
 		"delete": {
 			"title": "Xóa công việc?",
