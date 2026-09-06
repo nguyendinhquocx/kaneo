@@ -44,6 +44,46 @@ export async function getLatestTaskRunForGate(
 }
 
 /**
+ * SPEC-kaneo-r10c-description-guard-v0-1 (Fix 1): the FULL task description
+ * carries the worker contract JSON that the dispatcher parses before spawn.
+ * An outside writer (markdown editor, sync client, stray API call) escaping
+ * `\\[` once made the schedule a permanent no-op. Content mutations on a
+ * FULL mapped run are denied; identical writes stay idempotent.
+ */
+export async function assertFullRunFieldsImmutable(
+  tx: StatusGateExecutor,
+  {
+    taskId,
+    nextTitle,
+    nextDescription,
+    existingTitle,
+    existingDescription,
+  }: {
+    taskId: string;
+    nextTitle?: string;
+    nextDescription?: string;
+    existingTitle?: string;
+    existingDescription?: string;
+  },
+): Promise<void> {
+  const titleChanged =
+    nextTitle !== undefined && nextTitle !== existingTitle;
+  const descriptionChanged =
+    nextDescription !== undefined && nextDescription !== existingDescription;
+  if (!titleChanged && !descriptionChanged) return;
+  const [card] = await tx
+    .select({ id: executionPhaseCardTable.id })
+    .from(executionPhaseCardTable)
+    .where(eq(executionPhaseCardTable.fullTaskId, taskId))
+    .limit(1);
+  if (!card) return;
+  throw new HTTPException(409, {
+    message:
+      "use_phase_progress: FULL run task fields are immutable; use the graph publish API",
+  });
+}
+
+/**
  * Final task columns are a shared trust boundary. Every status writer must
  * check the same latest execution run while holding the task row lock; a
  * worker report, webhook, or bulk update must not turn an unreviewed run into

@@ -2758,6 +2758,16 @@ export async function reportTaskRun({
       });
     }
     const now = new Date();
+    // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 2): a model-driven worker
+    // routinely reports in_review without a commitSha, leaving run.commit_sha
+    // null and blocking the parent review gate ("Worker commit evidence
+    // missing"). last_commit_sha is set only by guarded checkpoint pushes, so
+    // it is safe evidence; only in_review derives it, other states keep the
+    // old semantics.
+    const resolvedCommitSha =
+      nextCommitSha ??
+      run.commitSha ??
+      (nextState === "in_review" ? (run.lastCommitSha ?? undefined) : undefined);
     const nextEvidence =
       evidence === undefined
         ? run.evidence
@@ -2770,7 +2780,7 @@ export async function reportTaskRun({
       .set({
         state: nextState,
         baseSha: nextBaseSha ?? run.baseSha,
-        commitSha: nextCommitSha ?? run.commitSha,
+        commitSha: resolvedCommitSha ?? run.commitSha,
         prNumber: prNumber ?? run.prNumber,
         prUrl: nextPrUrl ?? run.prUrl,
         prState: prState ?? run.prState,

@@ -22,6 +22,7 @@ import {
   taskTable,
 } from "../database/schema";
 import { enqueueNotificationEvent } from "./outbox";
+import { reconcilePhaseProjections } from "./phase-projection";
 import {
   type CanonicalPhaseInput,
   canonicalSha256,
@@ -893,12 +894,26 @@ async function executePhaseMutation(
         marker: "⭕ DOING",
         title: cardTitle(titles, phaseId),
       });
+      // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 3): apply the outbox
+      // inline so the card moves in the same transaction as the ledger.
+      // Per-row failures are absorbed by reconcile (display_pending); they
+      // never roll the ledger back and the parent reconcile route remains
+      // the bounded repair path.
+      let displayPending = false;
+      try {
+        displayPending = (
+          await reconcilePhaseProjections({ fullTaskId: taskId, executor: tx })
+        ).displayPending;
+      } catch {
+        displayPending = true;
+      }
       const response = {
         phaseId,
         state: "in_progress",
         ordinal: phase.ordinal,
         ledgerVersion: nextVersion,
         noop: false,
+        displayPending,
       };
       await savePhaseIdempotency({
         tx,
@@ -1023,12 +1038,22 @@ async function executePhaseMutation(
         commitSha: checkpoint.commitSha,
         checkpointId,
       });
+      // Fix 3 (see begin action): inline projection apply per transition.
+      let displayPending = false;
+      try {
+        displayPending = (
+          await reconcilePhaseProjections({ fullTaskId: taskId, executor: tx })
+        ).displayPending;
+      } catch {
+        displayPending = true;
+      }
       const response = {
         phaseId,
         state: "done",
         ordinal: phase.ordinal,
         ledgerVersion: nextVersion,
         checkpointId,
+        displayPending,
       };
       await savePhaseIdempotency({
         tx,

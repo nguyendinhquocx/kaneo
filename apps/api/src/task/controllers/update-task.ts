@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
-import { assertFinalTaskStatusGate } from "../../execution/finalization-gate";
+import { assertFinalTaskStatusGate, assertFullRunFieldsImmutable } from "../../execution/finalization-gate";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import { assertValidTaskStatus } from "../validate-task-fields";
@@ -39,6 +39,15 @@ async function updateTask(
         message: "Use the task move endpoint to move tasks between projects",
       });
     }
+
+    // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 1)
+    await assertFullRunFieldsImmutable(tx, {
+      taskId: id,
+      nextTitle: title,
+      nextDescription: description,
+      existingTitle: lockedTask.title,
+      existingDescription: lockedTask.description,
+    });
 
     await assertValidTaskStatus(status, projectId);
     await assertTaskAssigneeInWorkspace(tx, userId, workspaceId);

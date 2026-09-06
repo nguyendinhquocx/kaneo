@@ -1462,7 +1462,9 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
     );
     expect(complete1.status).toBe(200);
 
-    // Outbox rows pending before reconcile.
+    // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 3): the outbox is applied
+    // inline inside the complete transition, so nothing stays pending and
+    // the child card is already done without a parent reconcile call.
     const pending = await db
       .select()
       .from(schema.executionPhaseProjectionTable)
@@ -1475,7 +1477,7 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
           eq(schema.executionPhaseProjectionTable.state, "pending"),
         ),
       );
-    expect(pending.length).toBeGreaterThan(0);
+    expect(pending.length).toBe(0);
 
     const reconcile = await fixture.app.request(
       `/api/execution/task/${fixture.receipt.fullTaskId}/phase-projections/reconcile`,
@@ -1486,7 +1488,7 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
     );
     expect(reconcile.status).toBe(200);
     const reconcileBody = (await reconcile.json()) as { applied: number };
-    expect(reconcileBody.applied).toBeGreaterThan(0);
+    expect(reconcileBody.applied).toBe(0);
 
     // Child card now done + marker comment exists.
     const [child] = await db
@@ -1812,5 +1814,229 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
       .from(schema.executionPhaseProgressTable)
       .where(eq(schema.executionPhaseProgressTable.fullTaskId, fullTaskId));
     expect(ledger.every((row) => row.state === "done")).toBe(true);
+  });
+
+  // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 1): outside writers (markdown
+  // editors, sync clients, stray API calls) must never rewrite the FULL task
+  // title/description — the dispatcher parses the contract JSON from it.
+  it("r10c: FULL mapped task title/description are immutable while identical writes stay idempotent", async () => {
+    const fixture = await buildFullRunFixture();
+    const fullId = fixture.receipt.fullTaskId;
+    const [full] = await db
+      .select()
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, fullId));
+    expect(full).toBeTruthy();
+
+    const putTask = (body: Record<string, unknown>, key: string) =>
+      fixture.app.request(`/api/task/${fullId}`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          Authorization: "Bearer worker-owner-token",
+          "Idempotency-Key": key,
+        },
+        body: JSON.stringify(body),
+      });
+
+    const base = {
+      title: full?.title,
+      description: full?.description,
+      priority: full?.priority,
+      projectId: full?.projectId,
+      position: full?.position,
+      status: full?.status,
+    };
+
+    const titleChange = await putTask(
+      { ...base, title: "hijacked title" },
+      `r10c-title-${randomUUID()}`,
+    );
+    expect(titleChange.status).toBe(409);
+    expect(await titleChange.text()).toContain(
+      "FULL run task fields are immutable",
+    );
+
+    const descChange = await putTask(
+      { ...base, description: "hijacked description" },
+      `r10c-desc-${randomUUID()}`,
+    );
+    expect(descChange.status).toBe(409);
+
+    const identical = await putTask(base, `r10c-same-${randomUUID()}`);
+    expect(identical.status).toBe(200);
+
+    // A non-FULL task keeps the old behaviour: freely mutable.
+    const plain = await fixture.app.request(`/api/task/${fixture.project.id}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: "Bearer worker-owner-token",
+        "Idempotency-Key": `r10c-plain-${randomUUID()}`,
+      },
+      body: JSON.stringify({
+        title: "plain task",
+        description: "plain",
+        priority: "low",
+        status: "to-do",
+      }),
+    });
+    expect(plain.status).toBe(200);
+    const plainTask = (await plain.json()) as { id: string };
+    const plainEdit = await fixture.app.request(`/api/task/${plainTask.id}`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        Authorization: "Bearer worker-owner-token",
+        "Idempotency-Key": `r10c-plain-edit-${randomUUID()}`,
+      },
+      body: JSON.stringify({
+        title: "plain task edited",
+        description: "plain",
+        priority: "low",
+        status: "to-do",
+        projectId: fixture.project.id,
+        position: plainTask.position ?? 0,
+      }),
+    });
+    expect(plainEdit.status).toBe(200);
+  });
+
+  // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 3 + Fix 2): projections apply
+  // inline per transition, and an in_review report without commitSha derives
+  // it from the last guarded push so the parent review gate can verify.
+  it("r10c: begin/complete move cards inline and in_review derives commitSha from the last guarded push", async () => {
+    const fixture = await buildFullRunFixture();
+    const fullId = fixture.receipt.fullTaskId;
+    const p1Child = fixture.receipt.phaseCards.find((c) => c.phaseId === "P1")
+      ?.childTaskId as string;
+
+    const begin1 = await postPhaseProgress(
+      fixture,
+      { phaseId: "P1", action: "begin" },
+      "r10c-begin:p1",
+    );
+    expect(begin1.status).toBe(200);
+    expect(await begin1.json()).toMatchObject({
+      phaseId: "P1",
+      state: "in_progress",
+      displayPending: false,
+    });
+    const [p1Doing] = await db
+      .select()
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, p1Child));
+    expect(p1Doing?.status).toBe("in-progress");
+
+    const ck1 = await createPhaseCheckpointApi(
+      fixture,
+      "P1",
+      sha40("c1"),
+      SHA_A,
+      "r10c-checkpoint:p1",
+    );
+    expect(ck1.status).toBe(200);
+    const ck1Body = (await ck1.json()) as { checkpointId: string };
+
+    const complete1 = await postPhaseProgress(
+      fixture,
+      {
+        phaseId: "P1",
+        action: "complete",
+        checkpointId: ck1Body.checkpointId,
+      },
+      "r10c-complete:p1",
+    );
+    expect(complete1.status).toBe(200);
+    expect(await complete1.json()).toMatchObject({
+      phaseId: "P1",
+      state: "done",
+      displayPending: false,
+    });
+    const [p1Done] = await db
+      .select()
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, p1Child));
+    expect(p1Done?.status).toBe("done");
+
+    // Finish P2 and P3 (checkpoint ancestry chains P1 -> P2 -> P3).
+    const ck2 = await createPhaseCheckpointApi(
+      fixture,
+      "P2",
+      sha40("c2"),
+      sha40("c1"),
+      "r10c-checkpoint:p2",
+    );
+    expect(ck2.status).toBe(200);
+    const ck2Body = (await ck2.json()) as { checkpointId: string };
+    const begin2 = await postPhaseProgress(
+      fixture,
+      { phaseId: "P2", action: "begin" },
+      "r10c-begin:p2",
+    );
+    expect(begin2.status).toBe(200);
+    const complete2 = await postPhaseProgress(
+      fixture,
+      {
+        phaseId: "P2",
+        action: "complete",
+        checkpointId: ck2Body.checkpointId,
+      },
+      "r10c-complete:p2",
+    );
+    expect(complete2.status).toBe(200);
+
+    const ck3 = await createPhaseCheckpointApi(
+      fixture,
+      "P3",
+      sha40("c3"),
+      sha40("c2"),
+      "r10c-checkpoint:p3",
+    );
+    expect(ck3.status).toBe(200);
+    const ck3Body = (await ck3.json()) as { checkpointId: string };
+    const begin3 = await postPhaseProgress(
+      fixture,
+      { phaseId: "P3", action: "begin" },
+      "r10c-begin:p3",
+    );
+    expect(begin3.status).toBe(200);
+    const complete3 = await postPhaseProgress(
+      fixture,
+      {
+        phaseId: "P3",
+        action: "complete",
+        checkpointId: ck3Body.checkpointId,
+      },
+      "r10c-complete:p3",
+    );
+    expect(complete3.status).toBe(200);
+
+    // Fix 2: report in_review WITHOUT commitSha derives it from
+    // last_commit_sha (set by guarded checkpoint pushes only).
+    await db
+      .update(schema.taskRunTable)
+      .set({ lastCommitSha: sha40("c3") })
+      .where(eq(schema.taskRunTable.id, fixture.run.id));
+    const reportPath = `/api/execution/task/${fullId}/runs/${fixture.run.id}/report`;
+    const report = await fixture.app.request(reportPath, {
+      method: "POST",
+      headers: baseHeaders(
+        fixture,
+        `r10c-report-${randomUUID()}`,
+        fixture.run.leaseToken,
+      ),
+      body: JSON.stringify({
+        leaseEpoch: fixture.run.leaseEpoch,
+        state: "in_review",
+      }),
+    });
+    expect(report.status).toBe(200);
+    const [runAfterReport] = await db
+      .select()
+      .from(schema.taskRunTable)
+      .where(eq(schema.taskRunTable.id, fixture.run.id));
+    expect(runAfterReport?.state).toBe("in_review");
+    expect(runAfterReport?.commitSha).toBe(sha40("c3"));
   });
 });

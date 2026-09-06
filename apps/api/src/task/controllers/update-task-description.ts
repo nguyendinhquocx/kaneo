@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { assertFullRunFieldsImmutable } from "../../execution/finalization-gate";
 import createNotification from "../../notification/controllers/create-notification";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
@@ -25,6 +26,13 @@ async function updateTaskDescription({
       message: "Task not found",
     });
   }
+
+  // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 1)
+  await assertFullRunFieldsImmutable(db, {
+    taskId: id,
+    nextDescription: description,
+    existingDescription: existingTask.description,
+  });
 
   const [updatedTask] = await db
     .update(taskTable)
