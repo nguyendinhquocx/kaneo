@@ -17,34 +17,45 @@ async function updateTaskDescription({
   description: string;
   currentUserId: string;
 }) {
-  const existingTask = await db.query.taskTable.findFirst({
-    where: eq(taskTable.id, id),
-  });
+  // Keep the FULL mapping check and description write under the same task
+  // lock. A check-then-update against the global db executor would leave a
+  // race where a concurrent mapping change could still overwrite the worker
+  // contract after the guard passed.
+  const { existingTask, updatedTask } = await db.transaction(async (tx) => {
+    const [lockedTask] = await tx
+      .select()
+      .from(taskTable)
+      .where(eq(taskTable.id, id))
+      .limit(1)
+      .for("update");
 
-  if (!existingTask) {
-    throw new HTTPException(404, {
-      message: "Task not found",
+    if (!lockedTask) {
+      throw new HTTPException(404, {
+        message: "Task not found",
+      });
+    }
+
+    // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 1)
+    await assertFullRunFieldsImmutable(tx, {
+      taskId: id,
+      nextDescription: description,
+      existingDescription: lockedTask.description,
     });
-  }
 
-  // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 1)
-  await assertFullRunFieldsImmutable(db, {
-    taskId: id,
-    nextDescription: description,
-    existingDescription: existingTask.description,
+    const [updated] = await tx
+      .update(taskTable)
+      .set({ description })
+      .where(eq(taskTable.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new HTTPException(500, {
+        message: "Failed to update task description",
+      });
+    }
+
+    return { existingTask: lockedTask, updatedTask: updated };
   });
-
-  const [updatedTask] = await db
-    .update(taskTable)
-    .set({ description })
-    .where(eq(taskTable.id, id))
-    .returning();
-
-  if (!updatedTask) {
-    throw new HTTPException(500, {
-      message: "Failed to update task description",
-    });
-  }
 
   await publishEvent("task.description_changed", {
     taskId: updatedTask.id,

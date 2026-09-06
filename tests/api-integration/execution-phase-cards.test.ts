@@ -1833,7 +1833,9 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
         method: "PUT",
         headers: {
           "content-type": "application/json",
-          Authorization: "Bearer worker-owner-token",
+          // Use a normal parent user so the regression reaches the
+          // controller guard, not the earlier agent-principal middleware.
+          Authorization: "Bearer parent-token",
           "Idempotency-Key": key,
         },
         body: JSON.stringify(body),
@@ -1863,6 +1865,22 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
     );
     expect(descChange.status).toBe(409);
 
+    const patchDescription = await fixture.app.request(
+      `/api/task/description/${fullId}`,
+      {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          Authorization: "Bearer parent-token",
+        },
+        body: JSON.stringify({ description: "hijacked via PATCH surface" }),
+      },
+    );
+    expect(patchDescription.status).toBe(409);
+    expect(await patchDescription.text()).toContain(
+      "FULL run task fields are immutable",
+    );
+
     const identical = await putTask(base, `r10c-same-${randomUUID()}`);
     expect(identical.status).toBe(200);
 
@@ -1882,7 +1900,10 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
       }),
     });
     expect(plain.status).toBe(200);
-    const plainTask = (await plain.json()) as { id: string };
+    const plainTask = (await plain.json()) as {
+      id: string;
+      position: number;
+    };
     const plainEdit = await fixture.app.request(`/api/task/${plainTask.id}`, {
       method: "PUT",
       headers: {
@@ -2012,12 +2033,13 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
     );
     expect(complete3.status).toBe(200);
 
-    // Fix 2: report in_review WITHOUT commitSha derives it from
-    // last_commit_sha (set by guarded checkpoint pushes only).
-    await db
-      .update(schema.taskRunTable)
-      .set({ lastCommitSha: sha40("c3") })
+    // Fix 2: report in_review WITHOUT commitSha derives it from the latest
+    // durable checkpoint (set by the guarded phase-checkpoint route only).
+    const [runBeforeReport] = await db
+      .select()
+      .from(schema.taskRunTable)
       .where(eq(schema.taskRunTable.id, fixture.run.id));
+    expect(runBeforeReport?.lastCommitSha).toBe(sha40("c3"));
     const reportPath = `/api/execution/task/${fullId}/runs/${fixture.run.id}/report`;
     const report = await fixture.app.request(reportPath, {
       method: "POST",
@@ -2038,5 +2060,6 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
       .where(eq(schema.taskRunTable.id, fixture.run.id));
     expect(runAfterReport?.state).toBe("in_review");
     expect(runAfterReport?.commitSha).toBe(sha40("c3"));
+    expect(runAfterReport?.lastCommitSha).toBe(sha40("c3"));
   });
 });

@@ -2761,13 +2761,22 @@ export async function reportTaskRun({
     // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 2): a model-driven worker
     // routinely reports in_review without a commitSha, leaving run.commit_sha
     // null and blocking the parent review gate ("Worker commit evidence
-    // missing"). last_commit_sha is set only by guarded checkpoint pushes, so
-    // it is safe evidence; only in_review derives it, other states keep the
-    // old semantics.
+    // missing"). Derive only from the latest durable checkpoint row: its
+    // commitSha was accepted together with a validated Git guard receipt.
+    // Never trust a free-form commitSha from an earlier generic report as the
+    // fallback evidence.
+    const [latestCheckpoint] = await tx
+      .select({ commitSha: taskRunCheckpointTable.commitSha })
+      .from(taskRunCheckpointTable)
+      .where(eq(taskRunCheckpointTable.runId, runId))
+      .orderBy(desc(taskRunCheckpointTable.createdAt), desc(taskRunCheckpointTable.id))
+      .limit(1);
     const resolvedCommitSha =
       nextCommitSha ??
       run.commitSha ??
-      (nextState === "in_review" ? (run.lastCommitSha ?? undefined) : undefined);
+      (nextState === "in_review"
+        ? (latestCheckpoint?.commitSha ?? undefined)
+        : undefined);
     const nextEvidence =
       evidence === undefined
         ? run.evidence
@@ -2790,7 +2799,10 @@ export async function reportTaskRun({
         failureKind: nextFailureKind ?? run.failureKind,
         modelFailed: nextModelFailed ?? run.modelFailed,
         retryAt: nextRetryAt ?? run.retryAt,
-        lastCommitSha: nextCommitSha ?? run.lastCommitSha,
+        // lastCommitSha is checkpoint provenance, not a free-form report
+        // field. Generic reports may set commitSha for their own evidence,
+        // but cannot promote it into the trusted checkpoint fallback.
+        lastCommitSha: run.lastCommitSha,
         manualRecoveryRequired:
           nextState === "failed" || nextState.startsWith("blocked_")
             ? true
