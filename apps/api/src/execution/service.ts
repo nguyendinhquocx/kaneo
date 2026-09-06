@@ -23,6 +23,7 @@ import {
   executionControlRequestTable,
   executionIdempotencyTable,
   executionManifestTable,
+  executionPhaseProgressTable,
   executionScheduleOccurrenceTable,
   executionScheduleTable,
   githubIntegrationTable,
@@ -1744,6 +1745,19 @@ export async function claimTaskRun(
     if (!run) {
       throw new HTTPException(500, { message: "Task run was not created" });
     }
+    // Full-run recovery: a new run for a FULL task with a phase ledger must
+    // re-claim `in_progress` rows still owned by earlier runs, or the new
+    // worker can never begin/complete them (phase_progress_active_elsewhere).
+    await tx
+      .update(executionPhaseProgressTable)
+      .set({ runId: runId, leaseEpoch: nextLeaseEpoch, updatedAt: new Date() })
+      .where(
+        and(
+          eq(executionPhaseProgressTable.fullTaskId, taskId),
+          eq(executionPhaseProgressTable.state, "in_progress"),
+          ne(executionPhaseProgressTable.runId, runId),
+        ),
+      );
 
     return { run, leaseToken: leaseToken.raw };
   };
