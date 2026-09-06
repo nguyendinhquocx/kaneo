@@ -2062,4 +2062,46 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
     expect(runAfterReport?.commitSha).toBe(sha40("c3"));
     expect(runAfterReport?.lastCommitSha).toBe(sha40("c3"));
   });
+
+  it("r10c: a generic report cannot promote its commitSha into checkpoint provenance", async () => {
+    const fixture = await buildFullRunFixture();
+    const begin = await postPhaseProgress(
+      fixture,
+      { phaseId: "P1", action: "begin" },
+      "r10c-trust-begin:p1",
+    );
+    expect(begin.status).toBe(200);
+    const checkpoint = await createPhaseCheckpointApi(
+      fixture,
+      "P1",
+      sha40("d"),
+      SHA_A,
+      "r10c-trust-checkpoint:p1",
+    );
+    expect(checkpoint.status).toBe(200);
+
+    const report = await fixture.app.request(
+      `/api/execution/task/${fixture.receipt.fullTaskId}/runs/${fixture.run.id}/report`,
+      {
+        method: "POST",
+        headers: baseHeaders(
+          fixture,
+          "r10c-trust-report",
+          fixture.run.leaseToken,
+        ),
+        body: JSON.stringify({
+          leaseEpoch: fixture.run.leaseEpoch,
+          state: "in_progress",
+          commitSha: sha40("e"),
+        }),
+      },
+    );
+    expect(report.status).toBe(200);
+    const [run] = await db
+      .select()
+      .from(schema.taskRunTable)
+      .where(eq(schema.taskRunTable.id, fixture.run.id));
+    expect(run?.commitSha).toBe(sha40("e"));
+    expect(run?.lastCommitSha).toBe(sha40("d"));
+  });
 });

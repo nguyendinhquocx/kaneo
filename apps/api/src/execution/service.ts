@@ -2799,10 +2799,10 @@ export async function reportTaskRun({
         failureKind: nextFailureKind ?? run.failureKind,
         modelFailed: nextModelFailed ?? run.modelFailed,
         retryAt: nextRetryAt ?? run.retryAt,
-        // lastCommitSha is checkpoint provenance, not a free-form report
-        // field. Generic reports may set commitSha for their own evidence,
-        // but cannot promote it into the trusted checkpoint fallback.
-        lastCommitSha: run.lastCommitSha,
+        // Deliberately omit lastCommitSha: it is checkpoint provenance and
+        // must not be written from a report snapshot. Omitting the column also
+        // prevents a concurrent checkpoint from being clobbered by this
+        // report transaction.
         manualRecoveryRequired:
           nextState === "failed" || nextState.startsWith("blocked_")
             ? true
