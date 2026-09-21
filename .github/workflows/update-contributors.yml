@@ -12,7 +12,6 @@ on:
 
 jobs:
   update-contributors:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -23,7 +22,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Generate Contributors Images
-        uses: jaywcjlove/github-action-contributors@86707f6d4c2469ce6b46bc3367253ebd41ee242c # main
+        uses: jaywcjlove/github-action-contributors@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           filter-author: (renovate\[bot\]|renovate-bot|dependabot\[bot\])
@@ -32,7 +31,7 @@ jobs:
 
       - name: Generate Sponsors Section
         if: ${{ github.repository_owner == 'usekaneo' }}
-        uses: JamesIves/github-sponsors-readme-action@02650b8cd445fc16dfef73195f9c406dce041623 # v1
+        uses: JamesIves/github-sponsors-readme-action@v1
         with:
           token: ${{ secrets.GH_ANDREJ }}
           file: 'README.md'

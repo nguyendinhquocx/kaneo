@@ -4,12 +4,9 @@ on:
   release:
     types: [published]
 
-permissions: {}
-
 jobs:
   notify:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    runs-on: ubuntu-latest
     steps:
       - name: Post to Discord
         env:
@@ -38,4 +35,4 @@ jobs:
                 footer: {text: "usekaneo/kaneo"}
               }]
             }')
-          curl --connect-timeout 5 --max-time 30 -fsS -H "Content-Type: application/json" -d "$payload" "$WEBHOOK"
+          curl -fsS -H "Content-Type: application/json" -d "$payload" "$WEBHOOK"
