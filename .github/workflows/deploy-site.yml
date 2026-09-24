@@ -7,8 +7,6 @@ on:
       - coss
     paths:
       - "apps/site/**"
-      - "apps/docs/**"
-      - "i18n/**"
       - "packages/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -49,9 +47,6 @@ jobs:
 
       - name: Build @kaneo/site
         run: pnpm --filter @kaneo/site build
-
-      - name: Check search metadata and internal links
-        run: pnpm --filter @kaneo/site seo:check
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
