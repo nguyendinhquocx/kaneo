@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - "charts/kaneo/**"
-      - "scripts/security/check-helm-secrets.rb"
       - ".github/workflows/helm-chart.yml"
   push:
     tags:
