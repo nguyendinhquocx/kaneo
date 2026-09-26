@@ -598,7 +598,8 @@
 			"toastPreferencesSaved": "Notification preferences saved",
 			"toastPreferencesSaveFailed": "Failed to save notification preferences",
 			"toastRuleSavedGeneric": "Workspace notification rule saved",
-			"toastRuleRemovedGeneric": "Workspace notification rule removed"
+			"toastRuleRemovedGeneric": "Workspace notification rule removed",
+			"recipientHint": "Comments and status changes notify you about tasks assigned to you. Mentions notify the selected member. Your own comments, mentions, and status changes do not notify you."
 		},
 		"preferencesPage": {
 			"title": "Preferences",
@@ -639,7 +640,9 @@
 			"labels": "Labels",
 			"labelsDescription": "Show task labels and tags",
 			"priority": "Priority",
-			"priorityDescription": "Display priority indicators"
+			"priorityDescription": "Display priority indicators",
+			"projectBackgrounds": "Project backgrounds",
+			"projectBackgroundsDescription": "Show project background images on boards"
 		},
 		"developerPage": {
 			"pageTitle": "Developer Settings",
@@ -1004,6 +1007,15 @@
 			"descriptionLabel": "Description",
 			"descriptionHint": "A brief description of your project",
 			"descriptionPlaceholder": "Enter project description",
+			"backgroundLabel": "Board background",
+			"backgroundHint": "Choose an image shown behind this project's board.",
+			"backgroundUpload": "Upload image",
+			"backgroundReplace": "Replace image",
+			"backgroundRemove": "Remove image",
+			"backgroundUploadSuccess": "Project background updated",
+			"backgroundUploadError": "Failed to update project background",
+			"backgroundRemoveSuccess": "Project background removed",
+			"backgroundRemoveError": "Failed to remove project background",
 			"dangerZone": "Danger zone",
 			"dangerZoneSubtitle": "Irreversible and destructive actions.",
 			"deleteProject": "Delete project",
@@ -1043,6 +1055,8 @@
 			"githubSectionSubtitle": "Synchronize tasks with GitHub issues and enable two-way sync.",
 			"giteaSectionTitle": "Gitea Integration",
 			"giteaSectionSubtitle": "Synchronize tasks with a self-hosted Gitea instance (issues, PRs, webhooks).",
+			"gitlabSectionTitle": "GitLab Integration",
+			"gitlabSectionSubtitle": "Synchronize tasks with GitLab.com or a self-managed instance (issues, merge requests, webhooks).",
 			"discordSectionTitle": "Discord Integration",
 			"discordSectionSubtitle": "Send project task updates into a Discord channel with a webhook.",
 			"genericWebhookSectionTitle": "Generic Webhooks",
@@ -1112,6 +1126,8 @@
 			"noOptionsPlaceholder": "No options",
 			"defaultValuePlaceholder": "Default value",
 			"optionsPlaceholder": "Options separated by commas",
+			"selectPlaceholder": "Select option(s)",
+			"defaultValues": "{{count}} default(s)",
 			"required": "Required",
 			"addButton": "Add",
 			"creating": "Creating...",
@@ -1124,13 +1140,20 @@
 			"deleting": "Deleting...",
 			"deleteSuccess": "Custom field deleted.",
 			"deleteError": "Failed to delete custom field.",
+			"reorderError": "Failed to reorder fields",
+			"moreOptions": "+{{hiddenCount}} more",
+			"clearDefault": "Clear",
+			"options": "{{count}} option(s)",
+			"availableOptions": "Available options",
 			"types": {
 				"text": "Text",
 				"number": "Number",
 				"date": "Date",
 				"dropdown": "Dropdown",
-				"boolean": "Boolean"
-			}
+				"boolean": "Boolean",
+				"multiselect": "Multi-Select"
+			},
+			"multiple": "Multiple"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -1274,6 +1297,85 @@
 			"browseNeedsCredentials": "Enter Gitea URL and token to browse",
 			"loadingRepos": "Loading repositories…",
 			"retry": "Retry"
+		},
+		"gitlabIntegration": {
+			"validation": {
+				"baseUrlRequired": "GitLab base URL is required",
+				"baseUrlInvalid": "Enter a valid URL (e.g. https://gitlab.com)",
+				"pathRequired": "Project path is required",
+				"pathInvalid": "Enter the full path, e.g. group/project"
+			},
+			"toast": {
+				"verifyOk": "GitLab token can access this project",
+				"verifyWarning": "Check token permissions or project access",
+				"projectNotFound": "Project not found or not accessible",
+				"redirected": "GitLab URL redirected (usually to HTTPS). Use the final URL directly.",
+				"notGitlabInstance": "The URL does not point to a GitLab instance",
+				"verifyError": "Failed to verify GitLab access",
+				"tokenRequired": "Access token is required",
+				"tokenRequiredVerify": "Enter a token to verify",
+				"verifyFirst": "Verify access failed. Check URL, token, and project path",
+				"updated": "GitLab integration saved",
+				"updateError": "Failed to save GitLab integration",
+				"removed": "GitLab integration removed",
+				"removeError": "Failed to remove GitLab integration",
+				"issuesImported": "Issues imported successfully",
+				"importError": "Failed to import issues",
+				"commentOnEnabled": "Kaneo will comment with a task link on issues opened in GitLab",
+				"commentOnDisabled": "Task link comments on issues opened in GitLab are turned off",
+				"settingsUpdateError": "Failed to update GitLab integration",
+				"secretCopied": "Copied",
+				"unableToCopySecret": "Unable to copy secret"
+			},
+			"webhookShow": "Show",
+			"webhookHide": "Hide",
+			"webhookCopy": "Copy",
+			"connectionStatus": "Connection status",
+			"connectedActive": "Project connected and active",
+			"notConnectedHint": "No GitLab project connected",
+			"badgeConnected": "Connected",
+			"badgeNotConnected": "Not connected",
+			"project": "Project",
+			"projectHint": "Linked GitLab project",
+			"commentTaskLinkTitle": "Comment a Kaneo link on issues opened in GitLab",
+			"commentTaskLinkHint": "When enabled, Kaneo comments with a link to the task on each issue opened in GitLab.",
+			"webhookTitle": "Webhook",
+			"webhookHint": "In your GitLab project, add a webhook with this URL and secret token. Enable push, issues, comments, and merge request events.",
+			"webhookSecretLabel": "Secret token (must match the one set on the webhook in GitLab)",
+			"baseUrlLabel": "GitLab URL",
+			"baseUrlHint": "https://gitlab.com, or the root URL of your instance",
+			"tokenTypeLabel": "Token type",
+			"tokenTypeHint": "How the token is sent. Access tokens use PRIVATE-TOKEN; an OAuth2 token uses Authorization.",
+			"tokenTypePrivate": "Personal, project or group access token",
+			"tokenTypeBearer": "OAuth2 token",
+			"tokenLabel": "Access token",
+			"tokenHint": "Token with api scope and at least Developer on the project",
+			"tokenPlaceholder": "Paste token",
+			"tokenPlaceholderUpdate": "Paste new token to rotate",
+			"currentToken": "stored",
+			"projectPathLabel": "Project path",
+			"projectPathHint": "Full path including any groups, e.g. group/subgroup/project",
+			"actionsTitle": "Actions",
+			"actionsHint": "Verify access and connect",
+			"browse": "Browse",
+			"verify": "Verify",
+			"update": "Update",
+			"connect": "Connect",
+			"disconnect": "Disconnect",
+			"importSectionTitle": "Import GitLab issues",
+			"importSectionHint": "Import open issues and merge requests from the project",
+			"importing": "Importing…",
+			"importIssues": "Import issues",
+			"importDisabledHint": "Verify the project above to enable importing",
+			"browseModalTitle": "Your projects",
+			"browseModalHint": "Projects your token is a member of",
+			"searchProjects": "Search…",
+			"browseNeedsCredentials": "Enter GitLab URL and token to browse",
+			"loadingProjects": "Loading projects…",
+			"loadProjectsError": "Failed to load projects",
+			"openInGitlab": "Open {{project}} in GitLab",
+			"retry": "Retry",
+			"importPermissionHint": "Importing requires permission to create and update tasks."
 		},
 		"slackIntegration": {
 			"validation": {
@@ -1525,6 +1627,8 @@
 			"githubHint": "When a GitHub event occurs, move the linked task to a column.",
 			"giteaHeading": "Gitea",
 			"giteaHint": "When a Gitea webhook event occurs, move the linked task to a column.",
+			"gitlabHeading": "GitLab",
+			"gitlabHint": "When a GitLab webhook event occurs, move the linked task to a column.",
 			"selectColumnPlaceholder": "Select column...",
 			"toastUpdated": "Workflow rule updated",
 			"toastError": "Failed to update rule",
@@ -1580,7 +1684,36 @@
 				"mismatch": "Passwords do not match.",
 				"sameAsCurrent": "New password must be different from your current password."
 			}
-		}
+		},
+		"calendarFeeds": {
+			"title": "Calendar feeds",
+			"subtitle": "Subscribe to scheduled project tasks in your calendar app.",
+			"createTitle": "Create a calendar feed",
+			"filterHint": "Include tasks with a start or due date and at least one of the selected labels.",
+			"labels": "Labels",
+			"selectLabels": "Search and select labels…",
+			"noLabels": "No labels found.",
+			"timeZoneHint": "All-day dates use {{timeZone}}.",
+			"accessHint": "Anyone with a feed link can read the matching task titles, descriptions, and dates. Revoke a link to stop future access.",
+			"create": "Create feed",
+			"creating": "Creating…",
+			"created": "Calendar feed created.",
+			"createError": "Could not create the calendar feed.",
+			"activeFeeds": "Active feeds",
+			"subscribeHint": "Copy a link and add it as a calendar subscription. Updates appear when your calendar app refreshes the feed.",
+			"empty": "No calendar feeds yet.",
+			"feedUrl": "Calendar feed URL",
+			"copy": "Copy link",
+			"copied": "Calendar feed link copied.",
+			"copyError": "Could not copy the link. Select the URL and copy it manually.",
+			"revoke": "Revoke",
+			"revoked": "Calendar feed revoked.",
+			"revokeError": "Could not revoke the calendar feed.",
+			"loadError": "Could not load calendar feeds or labels. Please try again.",
+			"deletedLabel": "Deleted label",
+			"permissionRequired": "You need project-sharing permission to manage calendar feeds."
+		},
+		"invitationEmailFailed": "Invitation saved, but email delivery failed. Check SMTP settings and resend the invitation."
 	},
 	"navigation": {
 		"commandPalette": {
@@ -1769,9 +1902,8 @@
 		"created": "created this task",
 		"githubUser": "GitHub User",
 		"comment": {
-			"github": "GitHub",
 			"viewGithubProfile": "View GitHub Profile",
-			"commentedOnGithub": "commented on GitHub",
+			"commentedOnForge": "commented on {{forge}}",
 			"cannotBeEmpty": "Comment cannot be empty",
 			"mustBeLoggedInToEdit": "You must be logged in to edit comments",
 			"updated": "Comment updated",
@@ -1871,6 +2003,7 @@
 		}
 	},
 	"tasks": {
+		"checklistProgress": "{{completed}} of {{total}} checklist items completed",
 		"title": "Tasks",
 		"status": {
 			"label": "Status",
@@ -2038,6 +2171,8 @@
 			}
 		},
 		"subtasks": {
+			"progress": "{{completed}} of {{total}} subtasks completed",
+			"noCompletionColumn": "This project has no matching column for completing or reopening this subtask.",
 			"title": "Sub-tasks",
 			"inputPlaceholder": "Subtask title...",
 			"addAction": "Add",
@@ -2316,6 +2451,9 @@
 				"deleteRow": "Delete row",
 				"deleteTable": "Delete table"
 			}
+		},
+		"customFields": {
+			"ariaLabel": "Custom fields"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",
