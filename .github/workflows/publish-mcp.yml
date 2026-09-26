@@ -9,7 +9,8 @@ on:
       - packages/mcp/package.json
 
 permissions:
-  contents: read
+  contents: write
+  id-token: write
 
 concurrency:
   group: publish-mcp
@@ -19,10 +20,6 @@ jobs:
   publish:
     runs-on: ubuntu-24.04
     if: ${{ github.event_name == 'push' || startsWith(github.event.release.tag_name, 'mcp-v') }}
-    permissions:
-      # gh release create needs contents: write; npm publish --provenance needs id-token: write.
-      contents: write
-      id-token: write
 
     steps:
       - name: Checkout repository

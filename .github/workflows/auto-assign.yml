@@ -2,9 +2,7 @@ name: Auto Assign
 on:
   issues:
     types: [opened]
-  # zizmor: ignore[dangerous-triggers] Assigns pull requests via the API
-  # only; never checks out or executes untrusted code.
-  pull_request_target:
+  pull_request_target: 
     types: [opened]
 jobs:
   run:
