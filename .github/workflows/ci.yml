@@ -28,8 +28,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run Biome
-        run: pnpm exec biome ci .
+      - name: Run Vite+ checks
+        run: pnpm lint
 
   unit:
     runs-on: ubuntu-24.04

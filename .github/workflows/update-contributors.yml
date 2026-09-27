@@ -1,4 +1,4 @@
-name: Update Contributors
+name: Update Sponsors
 
 on:
   workflow_dispatch:
