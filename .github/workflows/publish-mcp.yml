@@ -6,7 +6,6 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/workflows/publish-mcp.yml
       - packages/mcp/package.json
 
 permissions:
