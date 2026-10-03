@@ -153,7 +153,8 @@
 					"terracotta": "Merah Bata",
 					"rose": "Merah Mawar",
 					"crimson": "Merah Tua"
-				}
+				},
+				"statusLoadError": "Project statuses couldn’t be loaded."
 			}
 		},
 		"boolean": {
@@ -802,7 +803,14 @@
 			"mattermostSectionSubtitle": "Send project task updates into a Mattermost channel with an incoming webhook.",
 			"mattermostSectionTitle": "Mattermost Integration",
 			"gitlabSectionSubtitle": "Synchronize tasks with GitLab.com or a self-managed instance (issues, merge requests, webhooks).",
-			"gitlabSectionTitle": "GitLab Integration"
+			"gitlabSectionTitle": "GitLab Integration",
+			"codeHostingTitle": "Hosting kode",
+			"chatTitle": "Chat & webhook",
+			"statusConnected": "Terhubung",
+			"statusPaused": "Dijeda",
+			"connect": "Hubungkan",
+			"configure": "Konfigurasi",
+			"done": "Selesai"
 		},
 		"projectVisibility": {
 			"pageTitle": "Visibilitas Proyek",
@@ -1881,14 +1889,16 @@
 				"close": "Tutup"
 			}
 		},
-		"notifications": "Notifikasi",
 		"sidebar": {
-			"overview": "Ringkasan",
 			"projects": "Proyek",
 			"members": "Anggota",
 			"invitations": "Undangan",
 			"more": "Lainnya",
-			"backToBoard": "Kembali ke papan"
+			"backToBoard": "Kembali ke papan",
+			"home": "Home",
+			"inbox": "Inbox",
+			"invitePeople": "Invite people",
+			"myTasks": "My tasks"
 		},
 		"projectList": {
 			"viewProject": "Lihat Proyek",
@@ -1973,16 +1983,12 @@
 		}
 	},
 	"notifications": {
-		"title": "Notifikasi",
 		"newCount_other": "{{count}} baru",
 		"emptyTitle": "Belum ada notifikasi",
 		"emptySubtitle": "Pembaruan dan aktivitas akan muncul di sini.",
 		"clearAll": "Hapus semua notifikasi",
 		"clearDialogTitle": "Hapus semua notifikasi?",
 		"clearDialogDescription": "Ini akan menghapus semua notifikasi secara permanen. Anda tidak dapat membatalkan tindakan ini.",
-		"shortcuts": {
-			"open": "Buka notifikasi"
-		},
 		"events": {
 			"task_created": {
 				"title": "Tugas Baru Dibuat",
@@ -2026,6 +2032,26 @@
 			"minutes_other": "{{count}} menit",
 			"hours_other": "{{count}} jam",
 			"days_other": "{{count}} hari"
+		},
+		"inbox": {
+			"back": "Inbox",
+			"earlier": "Earlier",
+			"emptyFilter": "Nothing here",
+			"filters": {
+				"all": "All",
+				"label": "Filter notifications",
+				"mentions": "Mentions",
+				"unread": "Unread"
+			},
+			"openTask": "Open task",
+			"pageTitle": "Inbox",
+			"recentActivity": "Recent activity",
+			"selectPrompt": "Select a notification to read it",
+			"taskUnavailable": "This task is no longer available.",
+			"today": "Today",
+			"unread": "Unread",
+			"loadError": "Notifications couldn't be loaded.",
+			"taskLoadError": "This task couldn’t be loaded."
 		}
 	},
 	"activity": {
@@ -2171,6 +2197,9 @@
 			"loadingTask": "Memuat tugas...",
 			"taskNotFound": "Tugas tidak ditemukan",
 			"taskNotFoundDescription": "Tugas yang Anda cari tidak ada atau telah dihapus.",
+			"ticketAmbiguous": "ID tugas cocok dengan lebih dari satu tugas",
+			"ticketAmbiguousDescription": "{{ticketId}} cocok dengan tugas di lebih dari satu proyek di ruang kerja ini. Berikan kunci yang berbeda ke salah satu proyek tersebut agar tautan berfungsi.",
+			"ticketNotFoundDescription": "Tidak ada tugas dengan ID {{ticketId}} di ruang kerja ini, atau Anda tidak memiliki akses ke tugas tersebut.",
 			"customFields": "Custom Fields"
 		},
 		"detail": {
@@ -2691,6 +2720,59 @@
 			"submit": "Buat ruang kerja",
 			"success": "Ruang kerja berhasil dibuat",
 			"error": "Gagal membuat ruang kerja"
+		},
+		"home": {
+			"activity": {
+				"commented": "commented",
+				"empty": "Nothing has happened in the last 30 days.",
+				"loadError": "Activity couldn't be loaded.",
+				"title": "Activity",
+				"updated": "updated the task"
+			},
+			"greeting": {
+				"afternoon": "Good afternoon",
+				"evening": "Good evening",
+				"morning": "Good morning"
+			},
+			"newTask": "New task",
+			"pageTitle": "Home",
+			"projects": {
+				"all": "All projects",
+				"tasks_other": "{{count}} tasks",
+				"title": "Your projects",
+				"loadError": "Projects couldn't be loaded."
+			},
+			"upNext": {
+				"assigned_other": "{{count}} assigned to you",
+				"title": "Up next",
+				"viewAll": "View all"
+			},
+			"week": {
+				"more_other": "+{{count}} more",
+				"truncated": "The week preview includes only the first {{shown}} of {{total}} assigned tasks."
+			}
+		},
+		"myTasks": {
+			"emptyDescription": "Tasks assigned to you across this workspace show up here.",
+			"groupBy": {
+				"dueDate": "Due date",
+				"label": "Group by",
+				"project": "Project"
+			},
+			"pageTitle": "My tasks",
+			"truncated": "Showing the first {{shown}} of {{total}} tasks."
+		},
+		"myWork": {
+			"due": {
+				"later": "Later",
+				"noDueDate": "No due date",
+				"overdue": "Overdue",
+				"thisWeek": "This week",
+				"today": "Today",
+				"tomorrow": "Tomorrow"
+			},
+			"empty": "Nothing assigned to you",
+			"loadError": "Your tasks couldn't be loaded."
 		}
 	},
 	"team": {
@@ -2859,6 +2941,7 @@
 			"guides": "Guides",
 			"comparisons": "Compare tools",
 			"roadmap": "Roadmap",
+			"community": "Komunitas",
 			"menu": "Menu",
 			"closeMenu": "Close menu",
 			"home": "Kaneo home",

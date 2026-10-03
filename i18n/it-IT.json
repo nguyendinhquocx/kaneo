@@ -153,7 +153,8 @@
 					"terracotta": "Terracotta",
 					"rose": "Rosa",
 					"crimson": "Cremisi"
-				}
+				},
+				"statusLoadError": "Project statuses couldn’t be loaded."
 			}
 		},
 		"boolean": {
@@ -1040,7 +1041,14 @@
 			"mattermostSectionSubtitle": "Send project task updates into a Mattermost channel with an incoming webhook.",
 			"mattermostSectionTitle": "Mattermost Integration",
 			"gitlabSectionSubtitle": "Synchronize tasks with GitLab.com or a self-managed instance (issues, merge requests, webhooks).",
-			"gitlabSectionTitle": "GitLab Integration"
+			"gitlabSectionTitle": "GitLab Integration",
+			"codeHostingTitle": "Hosting del codice",
+			"chatTitle": "Chat e webhook",
+			"statusConnected": "Connesso",
+			"statusPaused": "In pausa",
+			"connect": "Connetti",
+			"configure": "Configura",
+			"done": "Fatto"
 		},
 		"projectVisibility": {
 			"pageTitle": "Visibilità Progetto",
@@ -1895,14 +1903,16 @@
 				"close": "Chiudi"
 			}
 		},
-		"notifications": "Notifiche",
 		"sidebar": {
-			"overview": "Panoramica",
 			"projects": "Progetti",
 			"members": "Membri",
 			"invitations": "Inviti",
 			"more": "Altro",
-			"backToBoard": "Torna alla board"
+			"backToBoard": "Torna alla board",
+			"home": "Home",
+			"inbox": "Inbox",
+			"invitePeople": "Invite people",
+			"myTasks": "My tasks"
 		},
 		"projectList": {
 			"viewProject": "Vedi Progetto",
@@ -1987,7 +1997,6 @@
 		}
 	},
 	"notifications": {
-		"title": "Notifiche",
 		"newCount_one": "{{count}} nuova",
 		"newCount_other": "{{count}} nuove",
 		"emptyTitle": "Nessuna notifica ancora",
@@ -1995,9 +2004,6 @@
 		"clearAll": "Cancella tutte le notifiche",
 		"clearDialogTitle": "Cancellare tutte le notifiche?",
 		"clearDialogDescription": "Questo rimuoverà permanentemente tutte le notifiche. Non puoi annullare questa azione.",
-		"shortcuts": {
-			"open": "Apri notifiche"
-		},
 		"reminderLeadTime": {
 			"minutes_one": "{{count}} minuto",
 			"minutes_other": "{{count}} minuti",
@@ -2048,7 +2054,27 @@
 				"contentWithoutTask": "Tracciamento tempo iniziato su un'attività"
 			}
 		},
-		"newCount_many": "{{count}} nuove"
+		"newCount_many": "{{count}} nuove",
+		"inbox": {
+			"back": "Inbox",
+			"earlier": "Earlier",
+			"emptyFilter": "Nothing here",
+			"filters": {
+				"all": "All",
+				"label": "Filter notifications",
+				"mentions": "Mentions",
+				"unread": "Unread"
+			},
+			"openTask": "Open task",
+			"pageTitle": "Inbox",
+			"recentActivity": "Recent activity",
+			"selectPrompt": "Select a notification to read it",
+			"taskUnavailable": "This task is no longer available.",
+			"today": "Today",
+			"unread": "Unread",
+			"loadError": "Notifications couldn't be loaded.",
+			"taskLoadError": "This task couldn’t be loaded."
+		}
 	},
 	"activity": {
 		"assignedToSelf": "ha assegnato l'attività a sé stesso",
@@ -2193,6 +2219,9 @@
 			"loadingTask": "Caricamento attività...",
 			"taskNotFound": "Attività non trovata",
 			"taskNotFoundDescription": "L'attività che stai cercando non esiste o è stata eliminata.",
+			"ticketAmbiguous": "L'ID corrisponde a più attività",
+			"ticketAmbiguousDescription": "{{ticketId}} corrisponde ad attività in più progetti di questo workspace. Assegna una chiave diversa a uno di questi progetti per far funzionare il link.",
+			"ticketNotFoundDescription": "In questo workspace non esiste un'attività con ID {{ticketId}}, oppure non hai accesso a essa.",
 			"customFields": "Custom Fields"
 		},
 		"detail": {
@@ -2717,6 +2746,65 @@
 			"submit": "Crea workspace",
 			"success": "Workspace creato con successo",
 			"error": "Creazione workspace fallita"
+		},
+		"home": {
+			"activity": {
+				"commented": "commented",
+				"empty": "Nothing has happened in the last 30 days.",
+				"loadError": "Activity couldn't be loaded.",
+				"title": "Activity",
+				"updated": "updated the task"
+			},
+			"greeting": {
+				"afternoon": "Good afternoon",
+				"evening": "Good evening",
+				"morning": "Good morning"
+			},
+			"newTask": "New task",
+			"pageTitle": "Home",
+			"projects": {
+				"all": "All projects",
+				"tasks_many": "{{count}} tasks",
+				"tasks_one": "{{count}} task",
+				"tasks_other": "{{count}} tasks",
+				"title": "Your projects",
+				"loadError": "Projects couldn't be loaded."
+			},
+			"upNext": {
+				"assigned_many": "{{count}} assigned to you",
+				"assigned_one": "{{count}} assigned to you",
+				"assigned_other": "{{count}} assigned to you",
+				"title": "Up next",
+				"viewAll": "View all"
+			},
+			"week": {
+				"more_many": "+{{count}} more",
+				"more_one": "+{{count}} more",
+				"more_other": "+{{count}} more",
+				"truncated": "The week preview includes only the first {{shown}} of {{total}} assigned tasks."
+			}
+		},
+		"myTasks": {
+			"emptyDescription": "Tasks assigned to you across this workspace show up here.",
+			"groupBy": {
+				"dueDate": "Due date",
+				"label": "Group by",
+				"project": "Project"
+			},
+			"pageTitle": "My tasks",
+			"truncated": "Showing the first {{shown}} of {{total}} tasks."
+		},
+		"myWork": {
+			"due": {
+				"later": "Later",
+				"noDueDate": "No due date",
+				"overdue": "Overdue",
+				"thisWeek": "This week",
+				"today": "Today",
+				"tomorrow": "Tomorrow"
+			},
+			"empty": "Nothing assigned to you",
+			"loadError": "Your tasks couldn't be loaded."
 		}
 	},
 	"team": {
@@ -2885,6 +2973,7 @@
 			"guides": "Guides",
 			"comparisons": "Compare tools",
 			"roadmap": "Roadmap",
+			"community": "Community",
 			"menu": "Menu",
 			"closeMenu": "Close menu",
 			"home": "Kaneo home",

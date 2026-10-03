@@ -153,7 +153,8 @@
 					"terracotta": "Терракота",
 					"rose": "Роза",
 					"crimson": "Малиновый"
-				}
+				},
+				"statusLoadError": "Project statuses couldn’t be loaded."
 			}
 		},
 		"boolean": {
@@ -805,7 +806,14 @@
 			"mattermostSectionSubtitle": "Send project task updates into a Mattermost channel with an incoming webhook.",
 			"mattermostSectionTitle": "Mattermost Integration",
 			"gitlabSectionSubtitle": "Синхронизация задач с GitLab.com или self-managed экземпляром (issues, merge requests, вебхуки).",
-			"gitlabSectionTitle": "Интеграция с GitLab"
+			"gitlabSectionTitle": "Интеграция с GitLab",
+			"codeHostingTitle": "Хостинг кода",
+			"chatTitle": "Чаты и вебхуки",
+			"statusConnected": "Подключено",
+			"statusPaused": "Приостановлено",
+			"connect": "Подключить",
+			"configure": "Настроить",
+			"done": "Готово"
 		},
 		"projectVisibility": {
 			"pageTitle": "Видимость проекта",
@@ -1910,14 +1918,16 @@
 				"close": "Закрыть"
 			}
 		},
-		"notifications": "Уведомления",
 		"sidebar": {
-			"overview": "Обзор",
 			"projects": "Проекты",
 			"members": "Участники",
 			"invitations": "Приглашения",
 			"more": "Ещё",
-			"backToBoard": "Назад к доске"
+			"backToBoard": "Назад к доске",
+			"home": "Home",
+			"inbox": "Inbox",
+			"invitePeople": "Invite people",
+			"myTasks": "My tasks"
 		},
 		"projectList": {
 			"viewProject": "Открыть проект",
@@ -2002,7 +2012,6 @@
 		}
 	},
 	"notifications": {
-		"title": "Уведомления",
 		"newCount_one": "{{count}} новое",
 		"newCount_few": "{{count}} новых",
 		"newCount_many": "{{count}} новых",
@@ -2012,9 +2021,6 @@
 		"clearAll": "Очистить все уведомления",
 		"clearDialogTitle": "Очистить все уведомления?",
 		"clearDialogDescription": "Все уведомления будут безвозвратно удалены. Это действие нельзя отменить.",
-		"shortcuts": {
-			"open": "Открыть уведомления"
-		},
 		"events": {
 			"task_created": {
 				"title": "Создана новая задача",
@@ -2067,6 +2073,26 @@
 			"days_few": "{{count}} дня",
 			"days_many": "{{count}} дней",
 			"days_other": "{{count}} дней"
+		},
+		"inbox": {
+			"back": "Inbox",
+			"earlier": "Earlier",
+			"emptyFilter": "Nothing here",
+			"filters": {
+				"all": "All",
+				"label": "Filter notifications",
+				"mentions": "Mentions",
+				"unread": "Unread"
+			},
+			"openTask": "Open task",
+			"pageTitle": "Inbox",
+			"recentActivity": "Recent activity",
+			"selectPrompt": "Select a notification to read it",
+			"taskUnavailable": "This task is no longer available.",
+			"today": "Today",
+			"unread": "Unread",
+			"loadError": "Notifications couldn't be loaded.",
+			"taskLoadError": "This task couldn’t be loaded."
 		}
 	},
 	"activity": {
@@ -2212,6 +2238,9 @@
 			"loadingTask": "Загрузка задачи...",
 			"taskNotFound": "Задача не найдена",
 			"taskNotFoundDescription": "Задача, которую вы ищете, не существует или была удалена.",
+			"ticketAmbiguous": "Идентификатор соответствует нескольким задачам",
+			"ticketAmbiguousDescription": "{{ticketId}} соответствует задачам в нескольких проектах этой рабочей области. Задайте одному из этих проектов другой ключ, чтобы ссылка заработала.",
+			"ticketNotFoundDescription": "В этой рабочей области нет задачи с идентификатором {{ticketId}}, или у вас нет к ней доступа.",
 			"customFields": "Custom Fields"
 		},
 		"detail": {
@@ -2786,6 +2815,68 @@
 			"submit": "Создать рабочую область",
 			"success": "Рабочая область успешно создана",
 			"error": "Не удалось создать рабочую область"
+		},
+		"home": {
+			"activity": {
+				"commented": "commented",
+				"empty": "Nothing has happened in the last 30 days.",
+				"loadError": "Activity couldn't be loaded.",
+				"title": "Activity",
+				"updated": "updated the task"
+			},
+			"greeting": {
+				"afternoon": "Good afternoon",
+				"evening": "Good evening",
+				"morning": "Good morning"
+			},
+			"newTask": "New task",
+			"pageTitle": "Home",
+			"projects": {
+				"all": "All projects",
+				"tasks_few": "{{count}} tasks",
+				"tasks_many": "{{count}} tasks",
+				"tasks_one": "{{count}} task",
+				"tasks_other": "{{count}} tasks",
+				"title": "Your projects",
+				"loadError": "Projects couldn't be loaded."
+			},
+			"upNext": {
+				"assigned_few": "{{count}} assigned to you",
+				"assigned_many": "{{count}} assigned to you",
+				"assigned_one": "{{count}} assigned to you",
+				"assigned_other": "{{count}} assigned to you",
+				"title": "Up next",
+				"viewAll": "View all"
+			},
+			"week": {
+				"more_few": "+{{count}} more",
+				"more_many": "+{{count}} more",
+				"more_one": "+{{count}} more",
+				"more_other": "+{{count}} more",
+				"truncated": "The week preview includes only the first {{shown}} of {{total}} assigned tasks."
+			}
+		},
+		"myTasks": {
+			"emptyDescription": "Tasks assigned to you across this workspace show up here.",
+			"groupBy": {
+				"dueDate": "Due date",
+				"label": "Group by",
+				"project": "Project"
+			},
+			"pageTitle": "My tasks",
+			"truncated": "Showing the first {{shown}} of {{total}} tasks."
+		},
+		"myWork": {
+			"due": {
+				"later": "Later",
+				"noDueDate": "No due date",
+				"overdue": "Overdue",
+				"thisWeek": "This week",
+				"today": "Today",
+				"tomorrow": "Tomorrow"
+			},
+			"empty": "Nothing assigned to you",
+			"loadError": "Your tasks couldn't be loaded."
 		}
 	},
 	"team": {
@@ -2954,6 +3045,7 @@
 			"guides": "Guides",
 			"comparisons": "Compare tools",
 			"roadmap": "Roadmap",
+			"community": "Сообщество",
 			"menu": "Menu",
 			"closeMenu": "Close menu",
 			"home": "Kaneo home",

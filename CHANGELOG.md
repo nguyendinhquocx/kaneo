@@ -1,3 +1,26 @@
+### Features
+
+- **web:** redesign settings: #1905
+- **site:** link community projects from resources: [69ba99d](https://github.com/usekaneo/kaneo/commit/69ba99da501627977d57597457d04d23966796da)
+- **site:** add a community projects page: [961c309](https://github.com/usekaneo/kaneo/commit/961c309cbf383e07c5f9026ad654b2dc77ade6f2)
+- **site:** sync product preview with home, inbox and my tasks: [30ba825](https://github.com/usekaneo/kaneo/commit/30ba82531a0d60a0679fbf8bbbe5703cf915059f)
+- missing french translation: #1903
+
+### Credits
+
+Huge thanks to @tinsever and @MonsPropre for helping!
+
+### Features
+
+- add short task links like /acme/task/KAN-12: #1891
+- **web:** add home, inbox and my tasks pages: #1898
+- **web:** wire the task copy shortcuts: #1897
+- **web:** move task delete into the action group: #1896
+
+### Credits
+
+Huge thanks to @andrejsshell and @tinsever for helping!
+
 ### Bug Fixes
 
 - **web:** send subscription revenue as a property: [445b735](https://github.com/usekaneo/kaneo/commit/445b735188ea01c832ec1406a03c5ec50edd9b60)
