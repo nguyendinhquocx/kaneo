@@ -338,7 +338,8 @@
 				"createFailed": "ワークスペースの作成に失敗しました"
 			},
 			"validation": {
-				"workspaceNameRequired": "ワークスペース名を入力してください"
+				"workspaceNameRequired": "ワークスペース名を入力してください",
+				"projectNameRequired": "最初のプロジェクトに名前を付けてください"
 			},
 			"restrictedSubtitle": "このインスタンスでワークスペースを作成できるのは管理者だけです。招待を依頼してから、このページを再読み込みしてください。",
 			"restrictedCheckInvitations": "招待を確認",
@@ -375,6 +376,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "最初のプロジェクト",
+			"projectNameDefault": "はじめてのプロジェクト",
+			"projectNameHint": "使い方がわかるように、いくつかのスタータータスクを追加します。",
+			"starterTasks": {
+				"drag": {
+					"title": "このカードを次の列へドラッグする",
+					"description": "作業が進むにつれて、カードは列から列へ移動します。このカードを次の列へドラッグするか、開いてステータスを変更してください。"
+				},
+				"details": {
+					"title": "このタスクを開いてサブタスクを追加する",
+					"description": "タスクには説明、サブタスク、ラベル、担当者、期日を設定できます。試しにこのタスクにサブタスクを追加してみましょう。"
+				},
+				"invite": {
+					"title": "チームを招待する",
+					"description": "Kaneo は全員がそろうと一番役立ちます。サイドバーの **メンバー** を開いて、メールでメンバーを招待しましょう。"
+				},
+				"integrations": {
+					"title": "GitHub、GitLab、Gitea を連携する",
+					"description": "Issue を同期し、プルリクエストの作成やマージに合わせてタスクを自動で移動できます。**プロジェクト設定** から設定してください。"
+				},
+				"create": {
+					"title": "自分のタスクを作成する",
+					"description": "列名の横にある **+** を使うか、**T** を押してから **C** を押します。準備ができたら、これらのスタータータスクは削除してください。"
+				}
 			}
 		},
 		"profileSetup": {
@@ -1097,7 +1123,9 @@
 			"on": "オン",
 			"off": "オフ",
 			"newColumnPlaceholder": "新しいカラム名...",
-			"add": "追加"
+			"add": "追加",
+			"deleteAria": "{{name}} 列を削除",
+			"renameAria": "{{name}} 列の名前を変更"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2055,7 +2083,8 @@
 			"deleteConfirmTitle": "プロジェクトを削除しますか？",
 			"deleteConfirmDescription": "これにより、プロジェクトとそのすべてのデータが完全に削除されます。この操作は取り消せません。",
 			"deletedToast": "プロジェクトを削除しました",
-			"deleteProject": "プロジェクトを削除"
+			"deleteProject": "プロジェクトを削除",
+			"switcherLabel": "プロジェクトまたはビューを切り替え"
 		},
 		"search": {
 			"inputPlaceholder": "タスク、プロジェクト、コメントを検索...",
@@ -2337,7 +2366,10 @@
 		"boardSearchPlaceholder": "チケットを検索...",
 		"view": {
 			"board": "ボード",
-			"list": "リスト"
+			"list": "リスト",
+			"backlog": "バックログ",
+			"gantt": "ガント",
+			"heading": "ビュー"
 		},
 		"common": {
 			"selectTask": "タスクを選択",
@@ -2567,7 +2599,8 @@
 					"terracotta": "テラコッタ",
 					"rose": "ローズ",
 					"crimson": "クリムゾン"
-				}
+				},
+				"editLabels": "ラベルを編集"
 			}
 		},
 		"backlog": {
@@ -2646,7 +2679,8 @@
 			"moreTasks": "+{{count}} 件",
 			"loadError": "タスクの読み込みに失敗しました。",
 			"dayTasksAriaLabel": "{{date}}のすべてのタスクを表示",
-			"taskAriaLabel": "{{title}}、{{range}}: タスクを開く"
+			"taskAriaLabel": "{{title}}、{{range}}: タスクを開く",
+			"noTasksThisMonth": "今月の予定はありません"
 		},
 		"gantt": {
 			"pageTitle": "{{name}} – ガントチャート",

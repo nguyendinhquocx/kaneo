@@ -338,7 +338,8 @@
 				"createFailed": "Неуспешно креирање на работен простор"
 			},
 			"validation": {
-				"workspaceNameRequired": "Името на работниот простор е задолжително"
+				"workspaceNameRequired": "Името на работниот простор е задолжително",
+				"projectNameRequired": "Дај име на твојот прв проект"
 			},
 			"restrictedSubtitle": "Овде само администратор на инстанцата може да создава работни простори. Побарајте покана и освежете ја страницата.",
 			"restrictedCheckInvitations": "Провери покани",
@@ -376,6 +377,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "Твојот прв проект",
+			"projectNameDefault": "Мој прв проект",
+			"projectNameHint": "Ќе додадеме неколку почетни задачи за полесно да се снајдеш.",
+			"starterTasks": {
+				"drag": {
+					"title": "Повлечи ја оваа картичка во следната колона",
+					"description": "Картичките се движат од колона во колона како што напредува работата. Повлечи ја оваа во следната колона, или отвори ја и смени ѝ го статусот."
+				},
+				"details": {
+					"title": "Отвори ја оваа задача и додај подзадача",
+					"description": "Задачата може да има опис, подзадачи, ознаки, задолжено лице и рок. Додај подзадача на оваа за да пробаш."
+				},
+				"invite": {
+					"title": "Покани го твојот тим",
+					"description": "Kaneo најдобро функционира кога сите се внатре. Отвори **Членови** во страничната лента за да поканиш луѓе преку е-пошта."
+				},
+				"integrations": {
+					"title": "Поврзи GitHub, GitLab или Gitea",
+					"description": "Синхронизирај issues и автоматски преместувај задачи кога pull requests се отвораат и спојуваат. Постави го тоа во **Поставки на проектот**."
+				},
+				"create": {
+					"title": "Создај своја задача",
+					"description": "Користи го **+** до името на колоната или притисни **T**, па **C**. Избриши ги овие почетни задачи кога ќе бидеш подготвен."
+				}
 			}
 		},
 		"profileSetup": {
@@ -864,7 +890,9 @@
 			"on": "Вклучено",
 			"off": "Исклучено",
 			"newColumnPlaceholder": "Име на нова колона...",
-			"add": "Додади"
+			"add": "Додади",
+			"deleteAria": "Избриши ја колоната {{name}}",
+			"renameAria": "Преименувај ја колоната {{name}}"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2066,7 +2094,8 @@
 			"deleteConfirmTitle": "Избриши проект?",
 			"deleteConfirmDescription": "Ова трајно ќе го отстрани проектот и сите негови податоци. Не можеш да ја вратиш оваа акција.",
 			"deletedToast": "Проектот е избришан",
-			"deleteProject": "Избриши проект"
+			"deleteProject": "Избриши проект",
+			"switcherLabel": "Промени проект или приказ"
 		},
 		"search": {
 			"inputPlaceholder": "Пребарај задачи, проекти, коментари...",
@@ -2352,7 +2381,10 @@
 		"boardSearchPlaceholder": "Пребарај тикети...",
 		"view": {
 			"board": "Табла",
-			"list": "Листа"
+			"list": "Листа",
+			"backlog": "Заостанати",
+			"gantt": "Gantt",
+			"heading": "Приказ"
 		},
 		"common": {
 			"selectTask": "Избери задача",
@@ -2582,7 +2614,8 @@
 					"terracotta": "Теракота",
 					"rose": "Роза",
 					"crimson": "Гримизна"
-				}
+				},
+				"editLabels": "Уреди етикети"
 			}
 		},
 		"backlog": {
@@ -2787,7 +2820,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: отвори задача",
 			"title": "Календар",
 			"today": "Денес",
-			"loadError": "Неуспешно вчитување на задачите."
+			"loadError": "Неуспешно вчитување на задачите.",
+			"noTasksThisMonth": "Ништо не е закажано овој месец"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

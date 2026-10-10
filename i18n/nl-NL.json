@@ -338,7 +338,8 @@
 				"createFailed": "Aanmaken werkruimte mislukt"
 			},
 			"validation": {
-				"workspaceNameRequired": "Werkruimtenaam is verplicht"
+				"workspaceNameRequired": "Werkruimtenaam is verplicht",
+				"projectNameRequired": "Geef je eerste project een naam"
 			},
 			"restrictedSubtitle": "Alleen een instantiebeheerder kan hier workspaces aanmaken. Vraag om een uitnodiging en laad deze pagina opnieuw.",
 			"restrictedCheckInvitations": "Uitnodigingen bekijken",
@@ -376,6 +377,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "Je eerste project",
+			"projectNameDefault": "Mijn eerste project",
+			"projectNameHint": "We voegen een paar starttaken toe om je op weg te helpen.",
+			"starterTasks": {
+				"drag": {
+					"title": "Sleep deze kaart naar de volgende kolom",
+					"description": "Kaarten schuiven van kolom naar kolom naarmate het werk vordert. Sleep deze naar de volgende kolom, of open hem en wijzig de status."
+				},
+				"details": {
+					"title": "Open deze taak en voeg een subtaak toe",
+					"description": "Een taak kan een beschrijving, subtaken, labels, een toegewezen persoon en een deadline hebben. Voeg een subtaak toe aan deze taak om het te proberen."
+				},
+				"invite": {
+					"title": "Nodig je team uit",
+					"description": "Kaneo werkt het best als iedereen meedoet. Open **Leden** in de zijbalk om mensen per e-mail uit te nodigen."
+				},
+				"integrations": {
+					"title": "Koppel GitHub, GitLab of Gitea",
+					"description": "Synchroniseer issues en verplaats taken automatisch wanneer pull requests worden geopend en gemerged. Stel het in onder **Projectinstellingen**."
+				},
+				"create": {
+					"title": "Maak je eigen taak",
+					"description": "Gebruik de **+** naast een kolomnaam, of druk op **T** en dan **C**. Verwijder deze starttaken wanneer je er klaar voor bent."
+				}
 			}
 		},
 		"profileSetup": {
@@ -760,7 +786,9 @@
 			"on": "Aan",
 			"off": "Uit",
 			"newColumnPlaceholder": "Nieuwe kolomnaam...",
-			"add": "Toevoegen"
+			"add": "Toevoegen",
+			"deleteAria": "Kolom {{name}} verwijderen",
+			"renameAria": "Kolom {{name}} hernoemen"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2066,7 +2094,8 @@
 			"deleteConfirmTitle": "Project verwijderen?",
 			"deleteConfirmDescription": "Dit zal het project en alle data permanent verwijderen. Dit kan niet ongedaan worden gemaakt.",
 			"deletedToast": "Project verwijderd",
-			"deleteProject": "Project verwijderen"
+			"deleteProject": "Project verwijderen",
+			"switcherLabel": "Project of weergave wisselen"
 		},
 		"search": {
 			"inputPlaceholder": "Zoek taken, projecten, reacties...",
@@ -2352,7 +2381,10 @@
 		"boardSearchPlaceholder": "Tickets zoeken...",
 		"view": {
 			"board": "Bord",
-			"list": "Lijst"
+			"list": "Lijst",
+			"backlog": "Backlog",
+			"gantt": "Gantt",
+			"heading": "Weergave"
 		},
 		"common": {
 			"selectTask": "Selecteer taak",
@@ -2571,7 +2603,8 @@
 					"terracotta": "Terracotta",
 					"rose": "Roos",
 					"crimson": "Karmozijn"
-				}
+				},
+				"editLabels": "Labels bewerken"
 			}
 		},
 		"backlog": {
@@ -2787,7 +2820,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: taak openen",
 			"title": "Kalender",
 			"today": "Vandaag",
-			"loadError": "Taken konden niet worden geladen."
+			"loadError": "Taken konden niet worden geladen.",
+			"noTasksThisMonth": "Niets gepland deze maand"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

@@ -338,7 +338,8 @@
 				"createFailed": "Không thể tạo không gian làm việc"
 			},
 			"validation": {
-				"workspaceNameRequired": "Cần có tên không gian làm việc"
+				"workspaceNameRequired": "Cần có tên không gian làm việc",
+				"projectNameRequired": "Hãy đặt tên cho dự án đầu tiên của bạn"
 			},
 			"restrictedSubtitle": "Tại đây chỉ quản trị viên hệ thống mới có thể tạo không gian làm việc. Hãy xin lời mời rồi tải lại trang này.",
 			"restrictedCheckInvitations": "Xem lời mời",
@@ -375,6 +376,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "Dự án đầu tiên của bạn",
+			"projectNameDefault": "Dự án đầu tiên của tôi",
+			"projectNameHint": "Chúng tôi sẽ thêm vài nhiệm vụ khởi đầu để giúp bạn làm quen.",
+			"starterTasks": {
+				"drag": {
+					"title": "Kéo thẻ này sang cột tiếp theo",
+					"description": "Các thẻ chuyển từ cột này sang cột khác khi công việc tiến triển. Kéo thẻ này sang cột tiếp theo, hoặc mở nó và đổi trạng thái."
+				},
+				"details": {
+					"title": "Mở nhiệm vụ này và thêm một nhiệm vụ con",
+					"description": "Một nhiệm vụ có thể có mô tả, nhiệm vụ con, nhãn, người phụ trách và hạn chót. Hãy thử thêm một nhiệm vụ con vào nhiệm vụ này."
+				},
+				"invite": {
+					"title": "Mời nhóm của bạn",
+					"description": "Kaneo hoạt động tốt nhất khi mọi người cùng tham gia. Mở **Thành viên** ở thanh bên để mời mọi người qua email."
+				},
+				"integrations": {
+					"title": "Kết nối GitHub, GitLab hoặc Gitea",
+					"description": "Đồng bộ issue và tự động chuyển nhiệm vụ khi pull request được mở và hợp nhất. Thiết lập trong **Cài đặt dự án**."
+				},
+				"create": {
+					"title": "Tạo nhiệm vụ của riêng bạn",
+					"description": "Dùng nút **+** cạnh tên cột, hoặc nhấn **T** rồi **C**. Xóa các nhiệm vụ khởi đầu này khi bạn đã sẵn sàng."
+				}
 			}
 		},
 		"profileSetup": {
@@ -1097,7 +1123,9 @@
 			"on": "Bật",
 			"off": "Tắt",
 			"newColumnPlaceholder": "Tên cột mới...",
-			"add": "Thêm"
+			"add": "Thêm",
+			"deleteAria": "Xóa cột {{name}}",
+			"renameAria": "Đổi tên cột {{name}}"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2055,7 +2083,8 @@
 			"deleteConfirmTitle": "Xóa dự án?",
 			"deleteConfirmDescription": "Thao tác này sẽ xóa vĩnh viễn dự án và toàn bộ dữ liệu của nó. Bạn không thể hoàn tác hành động này.",
 			"deletedToast": "Đã xóa dự án",
-			"deleteProject": "Xóa dự án"
+			"deleteProject": "Xóa dự án",
+			"switcherLabel": "Chuyển dự án hoặc chế độ xem"
 		},
 		"search": {
 			"inputPlaceholder": "Tìm công việc, dự án, bình luận...",
@@ -2337,7 +2366,10 @@
 		"boardSearchPlaceholder": "Tìm phiếu...",
 		"view": {
 			"board": "Bảng",
-			"list": "Danh sách"
+			"list": "Danh sách",
+			"backlog": "Backlog",
+			"gantt": "Gantt",
+			"heading": "Chế độ xem"
 		},
 		"common": {
 			"selectTask": "Chọn công việc",
@@ -2567,7 +2599,8 @@
 					"terracotta": "Đất nung",
 					"rose": "Hồng",
 					"crimson": "Đỏ thẫm"
-				}
+				},
+				"editLabels": "Chỉnh sửa nhãn"
 			}
 		},
 		"backlog": {
@@ -2771,7 +2804,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: mở công việc",
 			"title": "Lịch",
 			"today": "Hôm nay",
-			"loadError": "Không thể tải công việc."
+			"loadError": "Không thể tải công việc.",
+			"noTasksThisMonth": "Không có gì được lên lịch trong tháng này"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

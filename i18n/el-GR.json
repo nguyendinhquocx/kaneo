@@ -338,7 +338,8 @@
 				"createFailed": "Αποτυχία δημιουργίας χώρου εργασίας"
 			},
 			"validation": {
-				"workspaceNameRequired": "Το όνομα χώρου εργασίας είναι υποχρεωτικό"
+				"workspaceNameRequired": "Το όνομα χώρου εργασίας είναι υποχρεωτικό",
+				"projectNameRequired": "Δώστε ένα όνομα στο πρώτο σας έργο"
 			},
 			"restrictedSubtitle": "Μόνο ένας διαχειριστής της εγκατάστασης μπορεί να δημιουργεί χώρους εργασίας εδώ. Ζητήστε πρόσκληση και ανανεώστε τη σελίδα.",
 			"restrictedCheckInvitations": "Έλεγχος προσκλήσεων",
@@ -376,6 +377,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "Το πρώτο σας έργο",
+			"projectNameDefault": "Το πρώτο μου έργο",
+			"projectNameHint": "Θα προσθέσουμε μερικές εργασίες εκκίνησης για να σας δείξουμε πώς λειτουργεί.",
+			"starterTasks": {
+				"drag": {
+					"title": "Σύρετε αυτή την κάρτα στην επόμενη στήλη",
+					"description": "Οι κάρτες μετακινούνται από στήλη σε στήλη καθώς προχωρά η δουλειά. Σύρετε αυτή στην επόμενη στήλη ή ανοίξτε την και αλλάξτε την κατάστασή της."
+				},
+				"details": {
+					"title": "Ανοίξτε αυτή την εργασία και προσθέστε μια υποεργασία",
+					"description": "Μια εργασία μπορεί να έχει περιγραφή, υποεργασίες, ετικέτες, υπεύθυνο και ημερομηνία λήξης. Προσθέστε μια υποεργασία σε αυτή για να το δοκιμάσετε."
+				},
+				"invite": {
+					"title": "Προσκαλέστε την ομάδα σας",
+					"description": "Το Kaneo λειτουργεί καλύτερα όταν συμμετέχουν όλοι. Ανοίξτε τα **Μέλη** στην πλαϊνή στήλη για να προσκαλέσετε άτομα μέσω email."
+				},
+				"integrations": {
+					"title": "Συνδέστε GitHub, GitLab ή Gitea",
+					"description": "Συγχρονίστε τα issues και μετακινήστε εργασίες αυτόματα όταν ανοίγουν και συγχωνεύονται pull requests. Ρυθμίστε το στις **Ρυθμίσεις έργου**."
+				},
+				"create": {
+					"title": "Δημιουργήστε τη δική σας εργασία",
+					"description": "Χρησιμοποιήστε το **+** δίπλα στο όνομα μιας στήλης ή πατήστε **T** και μετά **C**. Διαγράψτε αυτές τις εργασίες εκκίνησης όποτε είστε έτοιμοι."
+				}
 			}
 		},
 		"profileSetup": {
@@ -864,7 +890,9 @@
 			"on": "Ενεργό",
 			"off": "Ανενεργό",
 			"newColumnPlaceholder": "Όνομα νέας στήλης...",
-			"add": "Προσθήκη"
+			"add": "Προσθήκη",
+			"deleteAria": "Διαγραφή στήλης {{name}}",
+			"renameAria": "Μετονομασία στήλης {{name}}"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2066,7 +2094,8 @@
 			"deleteConfirmTitle": "Διαγραφή έργου;",
 			"deleteConfirmDescription": "Αυτό θα αφαιρέσει οριστικά το έργο και όλα τα δεδομένα του. Δεν μπορείτε να αναιρέσετε αυτήν την ενέργεια.",
 			"deletedToast": "Το έργο διαγράφηκε",
-			"deleteProject": "Διαγραφή έργου"
+			"deleteProject": "Διαγραφή έργου",
+			"switcherLabel": "Αλλαγή έργου ή προβολής"
 		},
 		"search": {
 			"inputPlaceholder": "Αναζήτηση εργασιών, έργων, σχολίων...",
@@ -2352,7 +2381,10 @@
 		"boardSearchPlaceholder": "Αναζήτηση αιτημάτων...",
 		"view": {
 			"board": "Πίνακας",
-			"list": "Λίστα"
+			"list": "Λίστα",
+			"backlog": "Backlog",
+			"gantt": "Gantt",
+			"heading": "Προβολή"
 		},
 		"common": {
 			"selectTask": "Επιλέξτε εργασία",
@@ -2582,7 +2614,8 @@
 					"terracotta": "Τερακότα",
 					"rose": "Ροζ",
 					"crimson": "Βυσσινί"
-				}
+				},
+				"editLabels": "Επεξεργασία ετικετών"
 			}
 		},
 		"backlog": {
@@ -2787,7 +2820,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: άνοιγμα εργασίας",
 			"title": "Ημερολόγιο",
 			"today": "Σήμερα",
-			"loadError": "Αποτυχία φόρτωσης εργασιών."
+			"loadError": "Αποτυχία φόρτωσης εργασιών.",
+			"noTasksThisMonth": "Τίποτα προγραμματισμένο αυτόν τον μήνα"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

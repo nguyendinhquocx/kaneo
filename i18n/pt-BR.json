@@ -338,7 +338,8 @@
 				"createFailed": "Falha ao criar espaço de trabalho"
 			},
 			"validation": {
-				"workspaceNameRequired": "O nome do espaço de trabalho é obrigatório"
+				"workspaceNameRequired": "O nome do espaço de trabalho é obrigatório",
+				"projectNameRequired": "Dê um nome ao seu primeiro projeto"
 			},
 			"restrictedSubtitle": "Aqui apenas um administrador da instância pode criar espaços de trabalho. Peça um convite e recarregue esta página.",
 			"restrictedCheckInvitations": "Ver convites",
@@ -377,6 +378,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "Seu primeiro projeto",
+			"projectNameDefault": "Meu primeiro projeto",
+			"projectNameHint": "Vamos adicionar algumas tarefas iniciais para você se orientar.",
+			"starterTasks": {
+				"drag": {
+					"title": "Arraste este cartão para a próxima coluna",
+					"description": "Os cartões passam de coluna em coluna conforme o trabalho anda. Arraste este para a próxima coluna, ou abra-o e mude o status."
+				},
+				"details": {
+					"title": "Abra esta tarefa e adicione uma subtarefa",
+					"description": "Uma tarefa pode ter descrição, subtarefas, etiquetas, um responsável e um prazo. Adicione uma subtarefa a esta para experimentar."
+				},
+				"invite": {
+					"title": "Convide sua equipe",
+					"description": "O Kaneo funciona melhor com todo mundo junto. Abra **Membros** na barra lateral para convidar pessoas por e-mail."
+				},
+				"integrations": {
+					"title": "Conecte GitHub, GitLab ou Gitea",
+					"description": "Sincronize issues e mova tarefas automaticamente quando pull requests forem abertos e mesclados. Configure em **Configurações do projeto**."
+				},
+				"create": {
+					"title": "Crie sua própria tarefa",
+					"description": "Use o **+** ao lado do nome de uma coluna, ou pressione **T** e depois **C**. Exclua estas tarefas iniciais quando quiser."
+				}
 			}
 		},
 		"profileSetup": {
@@ -1101,7 +1127,9 @@
 			"on": "Ativado",
 			"off": "Desativado",
 			"newColumnPlaceholder": "Nome da nova coluna...",
-			"add": "Adicionar"
+			"add": "Adicionar",
+			"deleteAria": "Excluir a coluna {{name}}",
+			"renameAria": "Renomear a coluna {{name}}"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2077,7 +2105,8 @@
 			"deleteConfirmTitle": "Excluir projeto?",
 			"deleteConfirmDescription": "Isso removerá permanentemente o projeto e todos os seus dados. Você não pode desfazer esta ação.",
 			"deletedToast": "Projeto excluído",
-			"deleteProject": "Excluir projeto"
+			"deleteProject": "Excluir projeto",
+			"switcherLabel": "Trocar de projeto ou visualização"
 		},
 		"search": {
 			"inputPlaceholder": "Buscar tarefas, projetos, comentários...",
@@ -2367,7 +2396,10 @@
 		"boardSearchPlaceholder": "Buscar tickets...",
 		"view": {
 			"board": "Quadro",
-			"list": "Lista"
+			"list": "Lista",
+			"backlog": "Backlog",
+			"gantt": "Gantt",
+			"heading": "Visualização"
 		},
 		"common": {
 			"selectTask": "Selecionar tarefa",
@@ -2597,7 +2629,8 @@
 					"terracotta": "Terracota",
 					"rose": "Rosa",
 					"crimson": "Carmesim"
-				}
+				},
+				"editLabels": "Editar etiquetas"
 			}
 		},
 		"backlog": {
@@ -2803,7 +2836,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: abrir tarefa",
 			"title": "Calendário",
 			"today": "Hoje",
-			"loadError": "Falha ao carregar as tarefas."
+			"loadError": "Falha ao carregar as tarefas.",
+			"noTasksThisMonth": "Nada agendado neste mês"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

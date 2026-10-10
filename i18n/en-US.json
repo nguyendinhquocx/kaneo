@@ -341,7 +341,8 @@
 				"createFailed": "Failed to create workspace"
 			},
 			"validation": {
-				"workspaceNameRequired": "Workspace name is required"
+				"workspaceNameRequired": "Workspace name is required",
+				"projectNameRequired": "Give your first project a name"
 			},
 			"cloud": {
 				"title": "Name your workspace",
@@ -375,6 +376,31 @@
 					"continueTrial": "Start free trial",
 					"continueWithoutPlan": "Continue to workspace",
 					"note": "You can pick or change a plan anytime in Settings, under Billing."
+				}
+			},
+			"projectName": "Your first project",
+			"projectNameDefault": "My first project",
+			"projectNameHint": "We'll add a few starter tasks to show you around.",
+			"starterTasks": {
+				"drag": {
+					"title": "Drag this card to the next column",
+					"description": "Cards move from column to column as work moves forward. Drag this one to the next column, or open it and change its status."
+				},
+				"details": {
+					"title": "Open this task and add a subtask",
+					"description": "A task can hold a description, subtasks, labels, an assignee and a due date. Add a subtask to this one to try it."
+				},
+				"invite": {
+					"title": "Invite your team",
+					"description": "Kaneo works best with everyone in it. Open **Members** in the sidebar to invite people by email."
+				},
+				"integrations": {
+					"title": "Connect GitHub, GitLab or Gitea",
+					"description": "Sync issues and move tasks automatically when pull requests are opened and merged. Set it up under **Project settings**."
+				},
+				"create": {
+					"title": "Create your own task",
+					"description": "Use the **+** next to a column name, or press **T** then **C**. Delete these starter tasks whenever you're ready."
 				}
 			}
 		},
@@ -1327,7 +1353,9 @@
 			"on": "On",
 			"off": "Off",
 			"newColumnPlaceholder": "New column name...",
-			"add": "Add"
+			"add": "Add",
+			"deleteAria": "Delete {{name}} column",
+			"renameAria": "Rename {{name}} column"
 		},
 		"customFields": {
 			"namePlaceholder": "Field name",
@@ -2066,7 +2094,8 @@
 			"deleteConfirmTitle": "Delete Project?",
 			"deleteConfirmDescription": "This will permanently remove the project and all its data. You can't undo this action.",
 			"deletedToast": "Project deleted",
-			"deleteProject": "Delete Project"
+			"deleteProject": "Delete Project",
+			"switcherLabel": "Switch project or view"
 		},
 		"search": {
 			"inputPlaceholder": "Search tasks, projects, comments...",
@@ -2353,7 +2382,10 @@
 		"boardSearchPlaceholder": "Search tickets...",
 		"view": {
 			"board": "Board",
-			"list": "List"
+			"list": "List",
+			"backlog": "Backlog",
+			"gantt": "Gantt",
+			"heading": "View"
 		},
 		"common": {
 			"selectTask": "Select task",
@@ -2583,7 +2615,8 @@
 					"terracotta": "Terracotta",
 					"rose": "Rose",
 					"crimson": "Crimson"
-				}
+				},
+				"editLabels": "Edit labels"
 			}
 		},
 		"backlog": {
@@ -2662,7 +2695,8 @@
 			"moreTasks": "+{{count}} more",
 			"loadError": "Failed to load tasks.",
 			"dayTasksAriaLabel": "Show all tasks for {{date}}",
-			"taskAriaLabel": "{{title}}, {{range}}: open task"
+			"taskAriaLabel": "{{title}}, {{range}}: open task",
+			"noTasksThisMonth": "Nothing scheduled this month"
 		},
 		"gantt": {
 			"pageTitle": "{{name}} – Gantt",

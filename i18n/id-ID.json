@@ -338,7 +338,8 @@
 				"createFailed": "Gagal membuat ruang kerja"
 			},
 			"validation": {
-				"workspaceNameRequired": "Nama ruang kerja wajib diisi"
+				"workspaceNameRequired": "Nama ruang kerja wajib diisi",
+				"projectNameRequired": "Beri nama proyek pertama Anda"
 			},
 			"restrictedSubtitle": "Hanya administrator instance yang dapat membuat ruang kerja di sini. Minta undangan, lalu muat ulang halaman ini.",
 			"restrictedCheckInvitations": "Lihat undangan",
@@ -375,6 +376,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "Proyek pertama Anda",
+			"projectNameDefault": "Proyek pertama saya",
+			"projectNameHint": "Kami akan menambahkan beberapa tugas awal untuk membantu Anda memulai.",
+			"starterTasks": {
+				"drag": {
+					"title": "Seret kartu ini ke kolom berikutnya",
+					"description": "Kartu berpindah dari kolom ke kolom seiring pekerjaan berjalan. Seret kartu ini ke kolom berikutnya, atau buka dan ubah statusnya."
+				},
+				"details": {
+					"title": "Buka tugas ini dan tambahkan subtugas",
+					"description": "Tugas bisa berisi deskripsi, subtugas, label, penanggung jawab, dan tenggat. Tambahkan subtugas ke tugas ini untuk mencobanya."
+				},
+				"invite": {
+					"title": "Undang tim Anda",
+					"description": "Kaneo bekerja paling baik jika semua orang ikut. Buka **Anggota** di bilah samping untuk mengundang orang lewat email."
+				},
+				"integrations": {
+					"title": "Hubungkan GitHub, GitLab, atau Gitea",
+					"description": "Sinkronkan issue dan pindahkan tugas secara otomatis saat pull request dibuka dan digabungkan. Atur di **Pengaturan proyek**."
+				},
+				"create": {
+					"title": "Buat tugas Anda sendiri",
+					"description": "Gunakan **+** di samping nama kolom, atau tekan **T** lalu **C**. Hapus tugas awal ini kapan pun Anda siap."
+				}
 			}
 		},
 		"profileSetup": {
@@ -863,7 +889,9 @@
 			"on": "Aktif",
 			"off": "Nonaktif",
 			"newColumnPlaceholder": "Nama kolom baru...",
-			"add": "Tambah"
+			"add": "Tambah",
+			"deleteAria": "Hapus kolom {{name}}",
+			"renameAria": "Ganti nama kolom {{name}}"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2055,7 +2083,8 @@
 			"deleteConfirmTitle": "Hapus Proyek?",
 			"deleteConfirmDescription": "Ini akan menghapus proyek dan semua datanya secara permanen. Anda tidak dapat membatalkan tindakan ini.",
 			"deletedToast": "Proyek dihapus",
-			"deleteProject": "Hapus Proyek"
+			"deleteProject": "Hapus Proyek",
+			"switcherLabel": "Ganti proyek atau tampilan"
 		},
 		"search": {
 			"inputPlaceholder": "Cari tugas, proyek, komentar...",
@@ -2337,7 +2366,10 @@
 		"boardSearchPlaceholder": "Cari tiket...",
 		"view": {
 			"board": "Papan",
-			"list": "Daftar"
+			"list": "Daftar",
+			"backlog": "Backlog",
+			"gantt": "Gantt",
+			"heading": "Tampilan"
 		},
 		"common": {
 			"selectTask": "Pilih tugas",
@@ -2567,7 +2599,8 @@
 					"terracotta": "Terracotta",
 					"rose": "Rose",
 					"crimson": "Crimson"
-				}
+				},
+				"editLabels": "Edit label"
 			}
 		},
 		"backlog": {
@@ -2771,7 +2804,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: buka tugas",
 			"title": "Kalender",
 			"today": "Hari ini",
-			"loadError": "Gagal memuat tugas."
+			"loadError": "Gagal memuat tugas.",
+			"noTasksThisMonth": "Tidak ada yang terjadwal bulan ini"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

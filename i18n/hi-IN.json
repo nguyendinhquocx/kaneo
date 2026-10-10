@@ -338,7 +338,8 @@
 				"createFailed": "वर्कस्पेस बनाने में विफल"
 			},
 			"validation": {
-				"workspaceNameRequired": "वर्कस्पेस का नाम आवश्यक है"
+				"workspaceNameRequired": "वर्कस्पेस का नाम आवश्यक है",
+				"projectNameRequired": "अपने पहले प्रोजेक्ट को एक नाम दें"
 			},
 			"restrictedSubtitle": "यहाँ केवल इंस्टेंस व्यवस्थापक ही कार्यक्षेत्र बना सकता है। आमंत्रण के लिए कहें, फिर यह पृष्ठ पुनः लोड करें।",
 			"restrictedCheckInvitations": "आमंत्रण देखें",
@@ -376,6 +377,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "आपका पहला प्रोजेक्ट",
+			"projectNameDefault": "मेरा पहला प्रोजेक्ट",
+			"projectNameHint": "शुरुआत में मदद के लिए हम कुछ स्टार्टर टास्क जोड़ देंगे।",
+			"starterTasks": {
+				"drag": {
+					"title": "इस कार्ड को अगले कॉलम में खींचें",
+					"description": "काम आगे बढ़ने के साथ कार्ड एक कॉलम से दूसरे कॉलम में जाते हैं। इसे अगले कॉलम में खींचें, या इसे खोलकर इसका स्टेटस बदलें।"
+				},
+				"details": {
+					"title": "इस टास्क को खोलें और एक सबटास्क जोड़ें",
+					"description": "एक टास्क में विवरण, सबटास्क, लेबल, असाइनी और ड्यू डेट हो सकती है। आज़माने के लिए इसमें एक सबटास्क जोड़ें।"
+				},
+				"invite": {
+					"title": "अपनी टीम को आमंत्रित करें",
+					"description": "Kaneo तब सबसे अच्छा काम करता है जब सभी इसमें हों। लोगों को ईमेल से आमंत्रित करने के लिए साइडबार में **सदस्य** खोलें।"
+				},
+				"integrations": {
+					"title": "GitHub, GitLab या Gitea कनेक्ट करें",
+					"description": "इश्यू सिंक करें और पुल रिक्वेस्ट खुलने और मर्ज होने पर टास्क अपने आप आगे बढ़ाएँ। इसे **प्रोजेक्ट सेटिंग** में सेट करें।"
+				},
+				"create": {
+					"title": "अपना खुद का टास्क बनाएँ",
+					"description": "किसी कॉलम के नाम के पास **+** का इस्तेमाल करें, या **T** और फिर **C** दबाएँ। तैयार होने पर इन स्टार्टर टास्क को हटा दें।"
+				}
 			}
 		},
 		"profileSetup": {
@@ -1099,7 +1125,9 @@
 			"on": "चालू",
 			"off": "बंद",
 			"newColumnPlaceholder": "नया कॉलम नाम...",
-			"add": "जोड़ें"
+			"add": "जोड़ें",
+			"deleteAria": "{{name}} कॉलम हटाएँ",
+			"renameAria": "{{name}} कॉलम का नाम बदलें"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2066,7 +2094,8 @@
 			"deleteConfirmTitle": "प्रोजेक्ट हटाएँ?",
 			"deleteConfirmDescription": "यह प्रोजेक्ट और इसका सभी डेटा स्थायी रूप से हटा दिया जाएगा। यह कार्रवाई पूर्ववत नहीं की जा सकती।",
 			"deletedToast": "प्रोजेक्ट हटाया गया",
-			"deleteProject": "प्रोजेक्ट हटाएँ"
+			"deleteProject": "प्रोजेक्ट हटाएँ",
+			"switcherLabel": "प्रोजेक्ट या व्यू बदलें"
 		},
 		"search": {
 			"inputPlaceholder": "कार्य, प्रोजेक्ट, टिप्पणियाँ खोजें...",
@@ -2352,7 +2381,10 @@
 		"boardSearchPlaceholder": "टिकट खोजें...",
 		"view": {
 			"board": "बोर्ड",
-			"list": "सूची"
+			"list": "सूची",
+			"backlog": "बैकलॉग",
+			"gantt": "गैंट",
+			"heading": "व्यू"
 		},
 		"common": {
 			"selectTask": "कार्य चुनें",
@@ -2582,7 +2614,8 @@
 					"terracotta": "टेराकोटा",
 					"rose": "गुलाब",
 					"crimson": "किरमिज़ी"
-				}
+				},
+				"editLabels": "लेबल संपादित करें"
 			}
 		},
 		"backlog": {
@@ -2787,7 +2820,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: कार्य खोलें",
 			"title": "कैलेंडर",
 			"today": "आज",
-			"loadError": "कार्य लोड नहीं हो सके।"
+			"loadError": "कार्य लोड नहीं हो सके।",
+			"noTasksThisMonth": "इस महीने कुछ भी शेड्यूल नहीं है"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

@@ -338,7 +338,8 @@
 				"createFailed": "Çalışma alanı oluşturulamadı"
 			},
 			"validation": {
-				"workspaceNameRequired": "Çalışma alanı adı gereklidir"
+				"workspaceNameRequired": "Çalışma alanı adı gereklidir",
+				"projectNameRequired": "İlk projenize bir ad verin"
 			},
 			"restrictedSubtitle": "Burada yalnızca örnek yöneticisi çalışma alanı oluşturabilir. Davet isteyin, ardından bu sayfayı yenileyin.",
 			"restrictedCheckInvitations": "Davetleri görüntüle",
@@ -376,6 +377,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "İlk projeniz",
+			"projectNameDefault": "İlk projem",
+			"projectNameHint": "Yolunuzu bulmanız için birkaç başlangıç görevi ekleyeceğiz.",
+			"starterTasks": {
+				"drag": {
+					"title": "Bu kartı bir sonraki sütuna sürükleyin",
+					"description": "İş ilerledikçe kartlar sütundan sütuna geçer. Bu kartı bir sonraki sütuna sürükleyin ya da açıp durumunu değiştirin."
+				},
+				"details": {
+					"title": "Bu görevi açın ve bir alt görev ekleyin",
+					"description": "Bir görevde açıklama, alt görevler, etiketler, atanan kişi ve bitiş tarihi olabilir. Denemek için bu göreve bir alt görev ekleyin."
+				},
+				"invite": {
+					"title": "Ekibinizi davet edin",
+					"description": "Kaneo herkes dahil olduğunda en iyi şekilde çalışır. İnsanları e-postayla davet etmek için kenar çubuğunda **Üyeler** bölümünü açın."
+				},
+				"integrations": {
+					"title": "GitHub, GitLab veya Gitea bağlayın",
+					"description": "Issue'ları senkronize edin ve pull request'ler açılıp birleştirildiğinde görevleri otomatik taşıyın. **Proje ayarları** bölümünden kurun."
+				},
+				"create": {
+					"title": "Kendi görevinizi oluşturun",
+					"description": "Bir sütun adının yanındaki **+** düğmesini kullanın ya da önce **T**, sonra **C** tuşuna basın. Hazır olduğunuzda bu başlangıç görevlerini silin."
+				}
 			}
 		},
 		"profileSetup": {
@@ -864,7 +890,9 @@
 			"on": "Açık",
 			"off": "Kapalı",
 			"newColumnPlaceholder": "Yeni sütun adı...",
-			"add": "Ekle"
+			"add": "Ekle",
+			"deleteAria": "{{name}} sütununu sil",
+			"renameAria": "{{name}} sütununu yeniden adlandır"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2066,7 +2094,8 @@
 			"deleteConfirmTitle": "Proje Silinsin mi?",
 			"deleteConfirmDescription": "Bu, projeyi ve tüm verilerini kalıcı olarak kaldıracak. Bu işlemi geri alamazsınız.",
 			"deletedToast": "Proje silindi",
-			"deleteProject": "Projeyi Sil"
+			"deleteProject": "Projeyi Sil",
+			"switcherLabel": "Proje veya görünüm değiştir"
 		},
 		"search": {
 			"inputPlaceholder": "Talep, proje, yorum ara...",
@@ -2352,7 +2381,10 @@
 		"boardSearchPlaceholder": "Talep ara...",
 		"view": {
 			"board": "Pano",
-			"list": "Liste"
+			"list": "Liste",
+			"backlog": "Backlog",
+			"gantt": "Gantt",
+			"heading": "Görünüm"
 		},
 		"common": {
 			"selectTask": "Talep seç",
@@ -2582,7 +2614,8 @@
 					"terracotta": "Terakota",
 					"rose": "Gül Kurusu",
 					"crimson": "Koyu Kırmızı"
-				}
+				},
+				"editLabels": "Etiketleri düzenle"
 			}
 		},
 		"backlog": {
@@ -2787,7 +2820,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: talebi aç",
 			"title": "Takvim",
 			"today": "Bugün",
-			"loadError": "Talepler yüklenemedi."
+			"loadError": "Talepler yüklenemedi.",
+			"noTasksThisMonth": "Bu ay planlanmış bir şey yok"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

@@ -338,7 +338,8 @@
 				"createFailed": "Не вдалося створити робочий простір"
 			},
 			"validation": {
-				"workspaceNameRequired": "Назва робочого простору є обов'язковою"
+				"workspaceNameRequired": "Назва робочого простору є обов'язковою",
+				"projectNameRequired": "Назвіть ваш перший проєкт"
 			},
 			"restrictedSubtitle": "Тут створювати робочі простори може лише адміністратор інстансу. Попросіть запрошення й оновіть цю сторінку.",
 			"restrictedCheckInvitations": "Переглянути запрошення",
@@ -378,6 +379,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "Ваш перший проєкт",
+			"projectNameDefault": "Мій перший проєкт",
+			"projectNameHint": "Ми додамо кілька стартових завдань, щоб допомогти вам освоїтися.",
+			"starterTasks": {
+				"drag": {
+					"title": "Перетягніть цю картку до наступної колонки",
+					"description": "Картки переходять з колонки в колонку в міру того, як просувається робота. Перетягніть цю до наступної колонки або відкрийте її та змініть статус."
+				},
+				"details": {
+					"title": "Відкрийте це завдання й додайте підзавдання",
+					"description": "Завдання може мати опис, підзавдання, мітки, виконавця та термін. Додайте підзавдання до цього, щоб спробувати."
+				},
+				"invite": {
+					"title": "Запросіть команду",
+					"description": "Kaneo найкраще працює, коли в ньому вся команда. Відкрийте **Учасники** на бічній панелі, щоб запросити людей електронною поштою."
+				},
+				"integrations": {
+					"title": "Підключіть GitHub, GitLab або Gitea",
+					"description": "Синхронізуйте issues і автоматично переміщуйте завдання, коли pull request відкривається й зливається. Налаштуйте це в розділі **Налаштування проєкту**."
+				},
+				"create": {
+					"title": "Створіть власне завдання",
+					"description": "Скористайтеся **+** біля назви колонки або натисніть **T**, а потім **C**. Видаліть ці стартові завдання, коли будете готові."
+				}
 			}
 		},
 		"profileSetup": {
@@ -866,7 +892,9 @@
 			"on": "Увімк.",
 			"off": "Вимк.",
 			"newColumnPlaceholder": "Назва нової колонки...",
-			"add": "Додати"
+			"add": "Додати",
+			"deleteAria": "Видалити стовпець {{name}}",
+			"renameAria": "Перейменувати стовпець {{name}}"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2088,7 +2116,8 @@
 			"deleteConfirmTitle": "Видалити проєкт?",
 			"deleteConfirmDescription": "Це назавжди видалить проєкт та всі його дані. Цю дію неможливо скасувати.",
 			"deletedToast": "Проєкт видалено",
-			"deleteProject": "Видалити проєкт"
+			"deleteProject": "Видалити проєкт",
+			"switcherLabel": "Змінити проєкт або вигляд"
 		},
 		"search": {
 			"inputPlaceholder": "Пошук завдань, проєктів, коментарів...",
@@ -2382,7 +2411,10 @@
 		"boardSearchPlaceholder": "Пошук тікетів...",
 		"view": {
 			"board": "Дошка",
-			"list": "Список"
+			"list": "Список",
+			"backlog": "Беклог",
+			"gantt": "Ґант",
+			"heading": "Вигляд"
 		},
 		"common": {
 			"selectTask": "Обрати завдання",
@@ -2612,7 +2644,8 @@
 					"terracotta": "Теракота",
 					"rose": "Троянда",
 					"crimson": "Багряний"
-				}
+				},
+				"editLabels": "Редагувати мітки"
 			}
 		},
 		"backlog": {
@@ -2819,7 +2852,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: відкрити завдання",
 			"title": "Календар",
 			"today": "Сьогодні",
-			"loadError": "Не вдалося завантажити завдання."
+			"loadError": "Не вдалося завантажити завдання.",
+			"noTasksThisMonth": "Цього місяця нічого не заплановано"
 		},
 		"descriptionSearchLoading": "Searching full descriptions…",
 		"descriptionSearchError": "Description search failed. Results may be incomplete.",

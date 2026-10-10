@@ -338,7 +338,8 @@
 				"createFailed": "Workspace konnte nicht erstellt werden"
 			},
 			"validation": {
-				"workspaceNameRequired": "Workspace-Name ist erforderlich"
+				"workspaceNameRequired": "Workspace-Name ist erforderlich",
+				"projectNameRequired": "Gib deinem ersten Projekt einen Namen"
 			},
 			"restrictedSubtitle": "Nur eine Instanzadministration kann hier Workspaces anlegen. Bitte um eine Einladung und lade diese Seite neu.",
 			"restrictedCheckInvitations": "Einladungen prüfen",
@@ -376,6 +377,31 @@
 				"usageSoloDescription": "Keep track of your own work",
 				"usageTeam": "My team",
 				"usageTeamDescription": "Plan and ship work together"
+			},
+			"projectName": "Dein erstes Projekt",
+			"projectNameDefault": "Mein erstes Projekt",
+			"projectNameHint": "Wir legen ein paar Starter-Aufgaben an, damit du dich schnell zurechtfindest.",
+			"starterTasks": {
+				"drag": {
+					"title": "Zieh diese Karte in die nächste Spalte",
+					"description": "Karten wandern von Spalte zu Spalte, während die Arbeit vorankommt. Zieh diese Karte in die nächste Spalte oder öffne sie und ändere ihren Status."
+				},
+				"details": {
+					"title": "Öffne diese Aufgabe und füge eine Unteraufgabe hinzu",
+					"description": "Eine Aufgabe kann eine Beschreibung, Unteraufgaben, Labels, eine zuständige Person und ein Fälligkeitsdatum haben. Füge dieser Aufgabe zum Ausprobieren eine Unteraufgabe hinzu."
+				},
+				"invite": {
+					"title": "Lade dein Team ein",
+					"description": "Kaneo funktioniert am besten, wenn alle dabei sind. Öffne **Mitglieder** in der Seitenleiste, um Leute per E-Mail einzuladen."
+				},
+				"integrations": {
+					"title": "Verbinde GitHub, GitLab oder Gitea",
+					"description": "Synchronisiere Issues und verschiebe Aufgaben automatisch, wenn Pull Requests geöffnet und gemergt werden. Richte das unter **Projekteinstellungen** ein."
+				},
+				"create": {
+					"title": "Erstelle deine eigene Aufgabe",
+					"description": "Nutze das **+** neben einem Spaltennamen oder drücke **T** und dann **C**. Lösch diese Starter-Aufgaben, sobald du bereit bist."
+				}
 			}
 		},
 		"profileSetup": {
@@ -944,7 +970,9 @@
 			"on": "Ein",
 			"off": "Aus",
 			"newColumnPlaceholder": "Neuer Spaltenname...",
-			"add": "Hinzufügen"
+			"add": "Hinzufügen",
+			"deleteAria": "Spalte {{name}} löschen",
+			"renameAria": "Spalte {{name}} umbenennen"
 		},
 		"githubIntegration": {
 			"validation": {
@@ -2066,7 +2094,8 @@
 			"deleteConfirmTitle": "Projekt löschen?",
 			"deleteConfirmDescription": "Dadurch wird das Projekt und alle zugehörigen Daten dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
 			"deletedToast": "Projekt gelöscht",
-			"deleteProject": "Projekt löschen"
+			"deleteProject": "Projekt löschen",
+			"switcherLabel": "Projekt oder Ansicht wechseln"
 		},
 		"search": {
 			"inputPlaceholder": "Aufgaben, Projekte, Kommentare suchen...",
@@ -2352,7 +2381,10 @@
 		"boardSearchPlaceholder": "Tickets suchen...",
 		"view": {
 			"board": "Board",
-			"list": "Liste"
+			"list": "Liste",
+			"backlog": "Backlog",
+			"gantt": "Gantt",
+			"heading": "Ansicht"
 		},
 		"common": {
 			"selectTask": "Aufgabe auswählen",
@@ -2582,7 +2614,8 @@
 					"terracotta": "Terrakotta",
 					"rose": "Rosa",
 					"crimson": "Karmesinrot"
-				}
+				},
+				"editLabels": "Labels bearbeiten"
 			}
 		},
 		"backlog": {
@@ -2787,7 +2820,8 @@
 			"taskAriaLabel": "{{title}}, {{range}}: Aufgabe öffnen",
 			"title": "Kalender",
 			"today": "Heute",
-			"loadError": "Aufgaben konnten nicht geladen werden."
+			"loadError": "Aufgaben konnten nicht geladen werden.",
+			"noTasksThisMonth": "Diesen Monat ist nichts geplant"
 		},
 		"descriptionSearchLoading": "Vollständige Beschreibungen werden durchsucht…",
 		"descriptionSearchError": "Die Suche in Beschreibungen ist fehlgeschlagen. Ergebnisse sind möglicherweise unvollständig.",

@@ -1322,9 +1322,12 @@
 							"properties": {
 								"workspaceNameRequired": {
 									"type": "string"
+								},
+								"projectNameRequired": {
+									"type": "string"
 								}
 							},
-							"required": ["workspaceNameRequired"]
+							"required": ["workspaceNameRequired", "projectNameRequired"]
 						},
 						"cloud": {
 							"type": "object",
@@ -1473,6 +1476,93 @@
 								"invite",
 								"plan"
 							]
+						},
+						"projectName": {
+							"type": "string"
+						},
+						"projectNameDefault": {
+							"type": "string"
+						},
+						"projectNameHint": {
+							"type": "string"
+						},
+						"starterTasks": {
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"drag": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"title": {
+											"type": "string"
+										},
+										"description": {
+											"type": "string"
+										}
+									},
+									"required": ["title", "description"]
+								},
+								"details": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"title": {
+											"type": "string"
+										},
+										"description": {
+											"type": "string"
+										}
+									},
+									"required": ["title", "description"]
+								},
+								"invite": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"title": {
+											"type": "string"
+										},
+										"description": {
+											"type": "string"
+										}
+									},
+									"required": ["title", "description"]
+								},
+								"integrations": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"title": {
+											"type": "string"
+										},
+										"description": {
+											"type": "string"
+										}
+									},
+									"required": ["title", "description"]
+								},
+								"create": {
+									"type": "object",
+									"additionalProperties": false,
+									"properties": {
+										"title": {
+											"type": "string"
+										},
+										"description": {
+											"type": "string"
+										}
+									},
+									"required": ["title", "description"]
+								}
+							},
+							"required": [
+								"drag",
+								"details",
+								"invite",
+								"integrations",
+								"create"
+							]
 						}
 					},
 					"required": [
@@ -1493,7 +1583,11 @@
 						"redirectingToWorkspace",
 						"toast",
 						"validation",
-						"cloud"
+						"cloud",
+						"projectName",
+						"projectNameDefault",
+						"projectNameHint",
+						"starterTasks"
 					]
 				},
 				"profileSetup": {
@@ -5213,6 +5307,12 @@
 						},
 						"add": {
 							"type": "string"
+						},
+						"deleteAria": {
+							"type": "string"
+						},
+						"renameAria": {
+							"type": "string"
 						}
 					},
 					"required": [
@@ -5235,7 +5335,9 @@
 						"on",
 						"off",
 						"newColumnPlaceholder",
-						"add"
+						"add",
+						"deleteAria",
+						"renameAria"
 					]
 				},
 				"customFields": {
@@ -8372,6 +8474,9 @@
 						},
 						"deleteProject": {
 							"type": "string"
+						},
+						"switcherLabel": {
+							"type": "string"
 						}
 					},
 					"required": [
@@ -8383,7 +8488,8 @@
 						"deleteConfirmTitle",
 						"deleteConfirmDescription",
 						"deletedToast",
-						"deleteProject"
+						"deleteProject",
+						"switcherLabel"
 					]
 				},
 				"search": {
@@ -9550,9 +9656,18 @@
 						},
 						"list": {
 							"type": "string"
+						},
+						"backlog": {
+							"type": "string"
+						},
+						"gantt": {
+							"type": "string"
+						},
+						"heading": {
+							"type": "string"
 						}
 					},
-					"required": ["board", "list"]
+					"required": ["board", "list", "backlog", "gantt", "heading"]
 				},
 				"common": {
 					"type": "object",
@@ -10433,6 +10548,9 @@
 										"rose",
 										"crimson"
 									]
+								},
+								"editLabels": {
+									"type": "string"
 								}
 							},
 							"required": [
@@ -10445,7 +10563,8 @@
 								"updateError",
 								"createSuccess",
 								"createError",
-								"colors"
+								"colors",
+								"editLabels"
 							]
 						}
 					},
@@ -10822,6 +10941,9 @@
 						},
 						"taskAriaLabel": {
 							"type": "string"
+						},
+						"noTasksThisMonth": {
+							"type": "string"
 						}
 					},
 					"required": [
@@ -10834,7 +10956,8 @@
 						"noTasksSubtitle",
 						"loadError",
 						"dayTasksAriaLabel",
-						"taskAriaLabel"
+						"taskAriaLabel",
+						"noTasksThisMonth"
 					]
 				},
 				"gantt": {
