@@ -1,5 +1,46 @@
 ### Features
 
+- **web:** redesign onboarding with a live preview: [4bc1a9b](https://github.com/usekaneo/kaneo/commit/4bc1a9b4cb801fc6dd0faefbc7503231173186ad)
+
+### Features
+
+- **web:** redesign auth and access pages: [5565833](https://github.com/usekaneo/kaneo/commit/5565833474175ad42ac365ec2c1b992920277d78)
+- **auth:** require email codes for cloud sign-up: [f974b05](https://github.com/usekaneo/kaneo/commit/f974b0529d36bc60caac510d169417633459f381)
+
+### Bug Fixes
+
+- **web:** read the turnstile key at runtime: [a0d8cbb](https://github.com/usekaneo/kaneo/commit/a0d8cbb080c7289109332fd7aee1785132ad5c6a)
+
+### Features
+
+- **import:** add Jira as an import source: #2010
+
+### Credits
+
+Huge thanks to @andrejsshell for helping!
+
+### Features
+
+- import projects from other tools in the UI: #2007
+
+### Credits
+
+Huge thanks to @andrejsshell for helping!
+
+### Bug Fixes
+
+- **email:** fix gmail mobile layout and icons: [2a41318](https://github.com/usekaneo/kaneo/commit/2a41318ab9e093441471396890e40384120668af)
+
+### Features
+
+- **email:** redesign emails with Kaneo components: [ed0ea78](https://github.com/usekaneo/kaneo/commit/ed0ea78838ba703e924c9446c4db344ad6e4d831)
+
+### Documentation
+
+- **site:** list Amazon SES as email subprocessor: [e71a17b](https://github.com/usekaneo/kaneo/commit/e71a17b34bdf8bf3c812773bd4f0a65b554303e9)
+
+### Features
+
 - start new workspaces with a starter project: #1993
 
 ### Bug Fixes
