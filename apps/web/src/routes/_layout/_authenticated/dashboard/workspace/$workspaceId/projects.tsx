@@ -53,13 +53,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import icons from "@/constants/project-icons";
-import { shortcuts } from "@/constants/shortcuts";
 import useReorderProjects from "@/hooks/mutations/project/use-reorder-projects";
 import useGetProjects from "@/hooks/queries/project/use-get-projects";
 import { useCanImport } from "@/hooks/use-can-import";
-import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { useShortcut } from "@/lib/shortcuts/use-shortcut";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { formatDateMedium } from "@/lib/format";
+import { EASE_OUT_CSS } from "@/lib/motion";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -94,7 +94,7 @@ function SortableProjectRow({
     // replays the same move from a stale offset.
     animateLayoutChanges: () => false,
     // dnd-kit defaults to `ease`; this is the app's curve.
-    transition: { duration: 200, easing: "var(--ease-out)" },
+    transition: { duration: 200, easing: EASE_OUT_CSS },
   });
 
   const style: CSSProperties = {
@@ -213,13 +213,7 @@ function RouteComponent() {
     setIsCreateProjectOpen(true);
   };
 
-  useRegisterShortcuts({
-    sequentialShortcuts: {
-      [shortcuts.project.prefix]: {
-        [shortcuts.project.create]: handleCreateProject,
-      },
-    },
-  });
+  useShortcut("createProject", handleCreateProject, { scope: "view" });
 
   const handleProjectClick = (projectId: string) => {
     navigate({
