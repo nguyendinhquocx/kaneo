@@ -50,6 +50,8 @@ import project from "./project";
 import { getPublicProject } from "./project/controllers/get-public-project";
 import { initializeScheduler, shutdownScheduler } from "./scheduler";
 import search from "./search";
+import sharePublic from "./share";
+import shareManage from "./share/manage";
 import slackIntegration from "./slack-integration";
 import { getPrivateObject } from "./storage/s3";
 import task from "./task";
@@ -251,6 +253,11 @@ export function createApp() {
 
     return c.json(project);
   });
+
+  // SPEC-2026-10-08-kaneo-workspace-collaboration: unauthenticated capability
+  // routes. MUST stay registered before the global authentication middleware;
+  // every handler validates token/permission/expiry itself and fails closed.
+  const shareApi = api.route("/share", sharePublic);
 
   api.post("/github-integration/webhook", handleGithubWebhookRoute);
 
@@ -600,6 +607,7 @@ export function createApp() {
   const externalLinkApi = api.route("/external-link", externalLink);
   const executionApi = api.route("/execution", execution);
   const workflowRuleApi = api.route("/workflow-rule", workflowRule);
+  const shareManageApi = api.route("/share-manage", shareManage);
   const invitationApi = api.route("/invitation", invitation);
   const workspaceApi = api.route("/workspace", workspace);
 
@@ -765,6 +773,8 @@ export function createApp() {
     notificationPreferencesApi,
     projectApi,
     publicProjectApi,
+    shareApi,
+    shareManageApi,
     searchApi,
     slackIntegrationApi,
     taskApi,
@@ -884,6 +894,8 @@ const {
   projectApi,
   publicProjectApi,
   searchApi,
+  shareApi,
+  shareManageApi,
   slackIntegrationApi,
   taskApi,
   taskRelationApi,
@@ -928,6 +940,8 @@ export type AppType =
   | typeof invitationApi
   | typeof workspaceApi
   | typeof publicProjectApi
+  | typeof shareApi
+  | typeof shareManageApi
   | typeof invitationPublicApi
   | typeof oauthApi;
 

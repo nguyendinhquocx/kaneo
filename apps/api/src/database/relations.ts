@@ -7,18 +7,24 @@ import {
   assetTable,
   columnTable,
   commentTable,
+  documentCommentTable,
+  documentTable,
   executionIdempotencyTable,
   executionManifestTable,
   executionScheduleOccurrenceTable,
   executionScheduleTable,
   externalLinkTable,
   githubIntegrationTable,
+  goalCheckinTable,
+  goalTable,
   integrationTable,
   invitationTable,
   labelTable,
   notificationTable,
   projectTable,
   sessionTable,
+  shareActionAuditTable,
+  shareLinkTable,
   taskRelationTable,
   taskReminderSentTable,
   taskRunEvidenceTable,
@@ -507,6 +513,90 @@ export const taskReminderSentTableRelations = relations(
     task: one(taskTable, {
       fields: [taskReminderSentTable.taskId],
       references: [taskTable.id],
+    }),
+  }),
+);
+
+export const documentTableRelations = relations(
+  documentTable,
+  ({ one, many }) => ({
+    project: one(projectTable, {
+      fields: [documentTable.projectId],
+      references: [projectTable.id],
+    }),
+    createdBy: one(userTable, {
+      fields: [documentTable.createdByUserId],
+      references: [userTable.id],
+    }),
+    comments: many(documentCommentTable),
+  }),
+);
+
+export const documentCommentTableRelations = relations(
+  documentCommentTable,
+  ({ one }) => ({
+    document: one(documentTable, {
+      fields: [documentCommentTable.documentId],
+      references: [documentTable.id],
+    }),
+    user: one(userTable, {
+      fields: [documentCommentTable.userId],
+      references: [userTable.id],
+    }),
+  }),
+);
+
+export const goalTableRelations = relations(goalTable, ({ one, many }) => ({
+  workspace: one(workspaceTable, {
+    fields: [goalTable.workspaceId],
+    references: [workspaceTable.id],
+  }),
+  owner: one(userTable, {
+    fields: [goalTable.ownerUserId],
+    references: [userTable.id],
+  }),
+  project: one(projectTable, {
+    fields: [goalTable.projectId],
+    references: [projectTable.id],
+  }),
+  checkins: many(goalCheckinTable),
+}));
+
+export const goalCheckinTableRelations = relations(
+  goalCheckinTable,
+  ({ one }) => ({
+    goal: one(goalTable, {
+      fields: [goalCheckinTable.goalId],
+      references: [goalTable.id],
+    }),
+    checkedBy: one(userTable, {
+      fields: [goalCheckinTable.checkedByUserId],
+      references: [userTable.id],
+    }),
+  }),
+);
+
+export const shareLinkTableRelations = relations(
+  shareLinkTable,
+  ({ one, many }) => ({
+    workspace: one(workspaceTable, {
+      fields: [shareLinkTable.workspaceId],
+      references: [workspaceTable.id],
+    }),
+    createdBy: one(userTable, {
+      fields: [shareLinkTable.createdByUserId],
+      references: [userTable.id],
+    }),
+    auditEvents: many(shareActionAuditTable),
+  }),
+);
+
+export const shareActionAuditTableRelations = relations(
+  shareActionAuditTable,
+  ({ one }) => ({
+    shareLink: one(shareLinkTable, {
+      fields: [shareActionAuditTable.shareLinkId],
+      references: [shareLinkTable.id],
     }),
   }),
 );

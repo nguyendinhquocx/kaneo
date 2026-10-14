@@ -3,6 +3,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  date,
   foreignKey,
   index,
   integer,
@@ -1613,6 +1614,217 @@ export const commentTable = pgTable(
   (table) => [
     index("comment_task_idx").on(table.taskId),
     index("comment_user_idx").on(table.userId),
+  ],
+);
+
+export const shareLinkTable = pgTable(
+  "share_link",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    // SPEC-2026-10-08-kaneo-workspace-collaboration: polymorphic capability
+    // pointer — never a permission to traverse linked resources. Must be
+    // validated against the resource/action matrix server-side.
+    resourceType: text("resource_type").notNull(),
+    resourceId: text("resource_id").notNull(),
+    permission: text("permission").notNull(),
+    // SHA-256 hex of the bearer token; raw token never stored or logged.
+    tokenHash: text("token_hash").notNull().unique(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaceTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    createdByUserId: text("created_by_user_id").references(() => userTable.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+    // null = never expires (view links); edit links are 30 days by policy.
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("share_link_resource_idx").on(table.resourceType, table.resourceId),
+    index("share_link_workspaceId_idx").on(table.workspaceId),
+    index("share_link_createdBy_idx").on(table.createdByUserId),
+  ],
+);
+
+export const shareActionAuditTable = pgTable(
+  "share_action_audit",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    shareLinkId: text("share_link_id")
+      .notNull()
+      .references(() => shareLinkTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    resourceType: text("resource_type").notNull(),
+    resourceId: text("resource_id").notNull(),
+    action: text("action").notNull(),
+    // Metadata only: no raw token, no request body, no IP/UA.
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("share_action_audit_shareLinkId_idx").on(table.shareLinkId),
+    index("share_action_audit_resource_idx").on(
+      table.resourceType,
+      table.resourceId,
+    ),
+  ],
+);
+
+// SPEC-2026-10-08-kaneo-workspace-collaboration T3: project-level Markdown
+// documents. Content is plain Markdown text; `revision` is the CAS token for
+// conflict detection (UPDATE ... WHERE revision = expected).
+export const documentTable = pgTable(
+  "document",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    title: text("title").notNull(),
+    content: text("content").notNull().default(""),
+    revision: integer("revision").notNull().default(1),
+    createdByUserId: text("created_by_user_id").references(() => userTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    archivedAt: timestamp("archived_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("document_projectId_idx").on(table.projectId)],
+);
+
+export const documentCommentTable = pgTable(
+  "document_comment",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documentTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => userTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("document_comment_documentId_idx").on(table.documentId),
+    index("document_comment_userId_idx").on(table.userId),
+  ],
+);
+
+// SPEC-2026-10-08-kaneo-workspace-collaboration T5: workspace-level goals.
+// Not tasks, not video records — a goal is a recurring thing tracked per day.
+export const goalTable = pgTable(
+  "goal",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaceTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => userTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    projectId: text("project_id").references(() => projectTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    name: text("name").notNull(),
+    // private | workspace
+    visibility: text("visibility").notNull().default("private"),
+    targetPerWeek: integer("target_per_week"),
+    // IANA timezone captured from the creator's browser; shared goals use it
+    // for week grouping so every member sees the same day boundaries.
+    timezone: text("timezone").notNull().default("UTC"),
+    position: integer("position").notNull().default(0),
+    archivedAt: timestamp("archived_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("goal_workspaceId_idx").on(table.workspaceId),
+    index("goal_ownerUserId_idx").on(table.ownerUserId),
+    index("goal_projectId_idx").on(table.projectId),
+  ],
+);
+
+// DATE (not timestamp) calendar value; a shared goal has at most one row per
+// goal/day. Untick sets completed=false, never deletes the row or note.
+export const goalCheckinTable = pgTable(
+  "goal_checkin",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    goalId: text("goal_id")
+      .notNull()
+      .references(() => goalTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    checkInDate: date("check_in_date", { mode: "string" }).notNull(),
+    completed: boolean("completed").notNull().default(true),
+    checkedByUserId: text("checked_by_user_id").references(() => userTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    note: text("note").notNull().default(""),
+    noteRevision: integer("note_revision").notNull().default(1),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    unique("goal_checkin_goal_date_unique").on(table.goalId, table.checkInDate),
+    index("goal_checkin_goalId_idx").on(table.goalId),
+    index("goal_checkin_date_idx").on(table.checkInDate),
   ],
 );
 

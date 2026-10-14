@@ -1,8 +1,14 @@
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
+import db, { schema } from "../database";
 import { projectSchema } from "../schemas";
-import { requireWorkspacePermission } from "../utils/require-workspace-permission";
+import {
+  hasWorkspacePermission,
+  requireWorkspacePermission,
+} from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import archiveProjectCtrl from "./controllers/archive-project";
 import createProjectCtrl from "./controllers/create-project";
@@ -140,6 +146,24 @@ const project = new Hono<{
       const { id } = c.req.valid("param");
       const { name, icon, slug, description, isPublic } = c.req.valid("json");
       const workspaceId = c.get("workspaceId");
+
+      // SPEC-2026-10-08-kaneo-workspace-collaboration T2: changing public
+      // visibility requires `project:share` server-side — `project:update`
+      // alone is not enough (custom roles may hold update without share).
+      const [currentProject] = await db
+        .select({ isPublic: schema.projectTable.isPublic })
+        .from(schema.projectTable)
+        .where(eq(schema.projectTable.id, id))
+        .limit(1);
+      const currentIsPublic = currentProject?.isPublic ?? false;
+      if (isPublic !== currentIsPublic) {
+        if (!(await hasWorkspacePermission(c, { project: ["share"] }))) {
+          throw new HTTPException(403, {
+            message: "Insufficient permissions",
+          });
+        }
+      }
+
       const updatedProject = await updateProjectCtrl(
         id,
         name,
