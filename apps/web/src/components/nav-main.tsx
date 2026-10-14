@@ -36,6 +36,14 @@ export function NavMain() {
       badge: null,
     },
     {
+      title: t("navigation:sidebar.goals"),
+      url: `/dashboard/workspace/${workspace.id}/goals`,
+      isActive:
+        window.location.pathname ===
+        `/dashboard/workspace/${workspace.id}/goals`,
+      badge: null,
+    },
+    {
       title: t("navigation:sidebar.members"),
       url: `/dashboard/workspace/${workspace.id}/members`,
       isActive:

@@ -1,3 +1,4 @@
+import { resolveApiBaseUrl } from "@kaneo/libs";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { FileText, LinkIcon, ShieldAlert } from "lucide-react";
@@ -16,8 +17,12 @@ export const Route = createFileRoute("/share/$resourceType/$token")({
   component: ShareReader,
 });
 
+const apiBase = resolveApiBaseUrl(
+  import.meta.env.VITE_API_URL as string | undefined,
+);
+
 async function fetchShareResource(resourceType: string, token: string) {
-  const response = await fetch(`/api/share/${resourceType}/${token}`);
+  const response = await fetch(`${apiBase}/share/${resourceType}/${token}`);
   if (response.status === 404 || response.status === 403) {
     throw new Error("invalid");
   }
@@ -49,7 +54,7 @@ function ShareReader() {
     error instanceof Error && error.message === "rate-limited";
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-svh w-full flex-col bg-background">
       <meta name="robots" content="noindex, nofollow" />
       <meta name="referrer" content="no-referrer" />
       <header className="sticky top-0 z-10 border-b border-border bg-background">
