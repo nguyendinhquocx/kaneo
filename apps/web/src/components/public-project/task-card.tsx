@@ -1,22 +1,15 @@
 import { Calendar, CalendarClock, CalendarX } from "lucide-react";
 import { useRef } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { dueDateStatusColors, getDueDateStatus } from "@/lib/due-date-status";
 import { formatDateShort } from "@/lib/format";
-import { getInitials } from "@/lib/get-initials";
 import { getPriorityIcon } from "@/lib/priority";
-import type { ExternalLink } from "@/types/external-link";
-import type Task from "@/types/task";
-import { PublicPRBadge } from "./public-pr-badge";
+import type { PublicProjectTask } from "@/types/public-project";
 import { PublicTaskLabels } from "./public-task-labels";
 
 type PublicTaskCardProps = {
-  task: Task & {
-    labels?: Array<{ id: string; name: string; color: string }>;
-    externalLinks?: Array<ExternalLink>;
-  };
+  task: PublicProjectTask;
   projectSlug: string;
-  onTaskClick: (task: Task) => void;
+  onTaskClick: (task: PublicProjectTask) => void;
 };
 
 export function PublicTaskCard({
@@ -25,7 +18,6 @@ export function PublicTaskCard({
   onTaskClick,
 }: PublicTaskCardProps) {
   const labels = task.labels || [];
-  const externalLinks = task.externalLinks || [];
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(
     null,
   );
@@ -75,23 +67,6 @@ export function PublicTaskCard({
         {projectSlug}-{task.number}
       </div>
 
-      {task.assigneeName && (
-        <div className="flex items-center gap-1.5 mb-2">
-          <Avatar className="h-5 w-5">
-            <AvatarImage
-              src={task.assigneeImage ?? ""}
-              alt={task.assigneeName ?? ""}
-            />
-            <AvatarFallback className="text-[10px] font-medium border border-border/30">
-              {getInitials(task.assigneeName)}
-            </AvatarFallback>
-          </Avatar>
-          <span className="text-[10px] text-muted-foreground font-medium truncate">
-            {task.assigneeName}
-          </span>
-        </div>
-      )}
-
       <div className="mb-3">
         <h3
           className="font-medium text-foreground text-sm leading-relaxed overflow-hidden break-words"
@@ -136,10 +111,6 @@ export function PublicTaskCard({
             )}
             <span>{formatDateShort(task.dueDate)}</span>
           </div>
-        )}
-
-        {externalLinks.length > 0 && (
-          <PublicPRBadge externalLinks={externalLinks} />
         )}
       </div>
     </button>

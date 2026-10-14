@@ -1,11 +1,13 @@
 import { getColumnIcon } from "@/lib/column";
-import type { ProjectWithTasks } from "@/types/project";
-import type Task from "@/types/task";
+import type {
+  PublicProjectPayload,
+  PublicProjectTask,
+} from "@/types/public-project";
 import { PublicTaskCard } from "./task-card";
 
 type PublicKanbanViewProps = {
-  project: ProjectWithTasks;
-  onTaskClick: (task: Task) => void;
+  project: PublicProjectPayload;
+  onTaskClick: (task: PublicProjectTask) => void;
 };
 
 export function PublicKanbanView({

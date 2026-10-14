@@ -1,33 +1,15 @@
-import {
-  Calendar,
-  CalendarClock,
-  CalendarX,
-  ExternalLink as ExternalLinkIcon,
-  GitBranch,
-  GitMerge,
-  GitPullRequest,
-  X,
-} from "lucide-react";
-import { useMemo } from "react";
+import { Calendar, CalendarClock, CalendarX, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogClose, DialogPopup } from "@/components/ui/dialog";
 import { dueDateStatusColors, getDueDateStatus } from "@/lib/due-date-status";
 import { formatDateMedium, formatDateShort } from "@/lib/format";
-import { getInitials } from "@/lib/get-initials";
 import { getPriorityIcon } from "@/lib/priority";
-import type { ExternalLink } from "@/types/external-link";
-import type Task from "@/types/task";
+import type { PublicProjectTask } from "@/types/public-project";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { PublicTaskLabels } from "./public-task-labels";
 
 type PublicTaskDetailModalProps = {
-  task:
-    | (Task & {
-        labels?: Array<{ id: string; name: string; color: string }>;
-        externalLinks?: Array<ExternalLink>;
-      })
-    | null;
+  task: PublicProjectTask | null;
   projectSlug: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,43 +23,9 @@ export function PublicTaskDetailModal({
 }: PublicTaskDetailModalProps) {
   const { t } = useTranslation();
 
-  const getPRStatus = useMemo(
-    () => (pr: { metadata?: { merged?: boolean; draft?: boolean } | null }) => {
-      if (pr.metadata?.merged) {
-        return {
-          icon: <GitMerge className="w-3.5 h-3.5" />,
-          label: t("publicProject:taskDetail.prStatusMerged"),
-          className: "text-info-foreground",
-        };
-      }
-      if (pr.metadata?.draft) {
-        return {
-          icon: <GitPullRequest className="w-3.5 h-3.5" />,
-          label: t("publicProject:taskDetail.prStatusDraft"),
-          className: "text-muted-foreground",
-        };
-      }
-      return {
-        icon: <GitPullRequest className="w-3.5 h-3.5" />,
-        label: t("publicProject:taskDetail.prStatusOpen"),
-        className: "text-success-foreground",
-      };
-    },
-    [t],
-  );
-
   if (!task) return null;
 
   const labels = task.labels || [];
-  const externalLinks = task.externalLinks || [];
-
-  const pullRequests = externalLinks.filter(
-    (link) => link.resourceType === "pull_request",
-  );
-  const issues = externalLinks.filter((link) => link.resourceType === "issue");
-  const branches = externalLinks.filter(
-    (link) => link.resourceType === "branch",
-  );
 
   const statusLabel = task.status ? t(`tasks:status.${task.status}`) : "";
   const priorityLabel =
@@ -143,21 +91,6 @@ export function PublicTaskDetailModal({
                     </span>
                   </div>
                 )}
-
-                {task.assigneeName && (
-                  <div className="flex items-center gap-2 px-2.5 py-1 text-xs bg-muted text-muted-foreground rounded-md">
-                    <Avatar className="h-4 w-4">
-                      <AvatarImage
-                        src={task.assigneeImage ?? ""}
-                        alt={task.assigneeName ?? ""}
-                      />
-                      <AvatarFallback className="text-[10px]">
-                        {getInitials(task.assigneeName)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span>{task.assigneeName}</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -173,105 +106,6 @@ export function PublicTaskDetailModal({
                   {t("publicProject:taskDetail.labels")}
                 </h3>
                 <PublicTaskLabels labels={labels} />
-              </div>
-            )}
-
-            {externalLinks.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  {t("publicProject:taskDetail.externalLinks")}
-                </h3>
-
-                {pullRequests.length > 0 && (
-                  <div className="space-y-2">
-                    {pullRequests.map((pr) => {
-                      const status = getPRStatus(pr);
-                      const repoMatch = pr.url.match(
-                        /github\.com\/([^/]+\/[^/]+)\/pull/,
-                      );
-                      const repoName = repoMatch ? repoMatch[1] : null;
-                      return (
-                        <a
-                          key={pr.id}
-                          href={pr.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between p-3 bg-muted/50 hover:bg-muted rounded-md border border-border/50 transition-colors group"
-                        >
-                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                              <span className="text-sm font-medium text-foreground truncate">
-                                {pr.title || t("tasks:pr.label")}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {repoName}#{pr.externalId}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span
-                              className={`text-xs font-medium flex items-center gap-1 ${status.className}`}
-                            >
-                              {status.icon}
-                              {status.label}
-                            </span>
-                            <ExternalLinkIcon className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </a>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {issues.length > 0 && (
-                  <div className="space-y-2">
-                    {issues.map((issue) => (
-                      <a
-                        key={issue.id}
-                        href={issue.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-between p-3 bg-muted/50 hover:bg-muted rounded-md border border-border/50 transition-colors group"
-                      >
-                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                          <GitPullRequest className="w-3.5 h-3.5 text-muted-foreground" />
-                          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                            <span className="text-sm font-medium text-foreground truncate">
-                              {issue.title ||
-                                t("publicProject:taskDetail.issueFallback")}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              #{issue.externalId}
-                            </span>
-                          </div>
-                        </div>
-                        <ExternalLinkIcon className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </a>
-                    ))}
-                  </div>
-                )}
-
-                {branches.length > 0 && (
-                  <div className="space-y-2">
-                    {branches.map((branch) => (
-                      <a
-                        key={branch.id}
-                        href={branch.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-between p-3 bg-muted/50 hover:bg-muted rounded-md border border-border/50 transition-colors group"
-                      >
-                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                          <GitBranch className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="text-sm font-medium text-foreground truncate">
-                            {branch.title || branch.externalId}
-                          </span>
-                        </div>
-                        <ExternalLinkIcon className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </a>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 

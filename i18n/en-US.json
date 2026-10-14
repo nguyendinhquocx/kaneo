@@ -2197,5 +2197,82 @@
 		"branding": {
 			"poweredBy": "Powered by"
 		}
+	},
+	"documents": {
+		"title": "Docs",
+		"untitled": "Untitled document",
+		"listTitle": "Documents",
+		"empty": "No documents yet. Create the first Markdown page for this project.",
+		"create": "New document",
+		"archivedBadge": "archived",
+		"archive": "Archive",
+		"unarchive": "Restore",
+		"backToDocs": "All documents",
+		"titlePlaceholder": "Document title",
+		"contentPlaceholder": "Write in Markdown…",
+		"saveState": {
+			"saving": "Saving…",
+			"saved": "Saved",
+			"error": "Save failed",
+			"conflict": "Someone saved a newer version"
+		},
+		"conflict": {
+			"message": "This document changed while you were editing. Reload to see the latest version, or copy your draft first.",
+			"copyDraft": "Copy my draft",
+			"reload": "Reload server version",
+			"copied": "Draft copied to clipboard",
+			"copyFailed": "Could not copy the draft"
+		},
+		"comments": {
+			"title": "Comments",
+			"empty": "No comments yet.",
+			"placeholder": "Write a comment…",
+			"submit": "Comment",
+			"delete": "Delete",
+			"error": "Could not add the comment"
+		}
+	},
+	"share": {
+		"manage": "Share",
+		"title": "Share \"{{name}}\"",
+		"description": "Anyone with the link gets exactly this access. The link can be revoked at any time.",
+		"permission": {
+			"view": "View",
+			"edit": "Edit"
+		},
+		"create": "Create link",
+		"creating": "Creating…",
+		"editWarning": "An edit link lets anyone holding the URL change this resource without signing in. Holders cannot be reliably identified. Edit links expire after 30 days and can be revoked anytime.",
+		"empty": "No share links yet.",
+		"expires": "Expires {{date}}",
+		"neverExpires": "Does not expire",
+		"revoke": "Revoke link",
+		"revoked": "Revoked",
+		"copyHint": "Copy this link now — the token is shown only once.",
+		"copy": "Copy",
+		"copied": "Copied",
+		"editScopeNote": "This edit link can create and update basic task fields only. It cannot delete, assign people, or change project settings.",
+		"badge": "Shared",
+		"documentTitle": "Shared document",
+		"document": {
+			"updated": "Updated {{date}}",
+			"rawHint": "Agents can fetch this document as plain Markdown at /raw."
+		},
+		"goal": {
+			"total": "{{total}}/{{target}} days completed",
+			"done": "done",
+			"notDone": "not done"
+		},
+		"invalid": {
+			"title": "This link is no longer valid",
+			"description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link."
+		},
+		"rateLimited": {
+			"title": "Too many requests",
+			"description": "Slow down a little and try again shortly.",
+			"retry": "Try again"
+		},
+		"footer": "Shared with a scoped link. The owner can revoke access at any time.",
+		"unsupported": "This resource type cannot be displayed here."
 	}
 }

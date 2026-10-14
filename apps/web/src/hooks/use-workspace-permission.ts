@@ -20,6 +20,10 @@ const CAPABILITIES = {
   reviewExecutions: { execution: ["review"] },
   createTasks: { task: ["create"] },
   assignTasks: { task: ["assign"] },
+  // SPEC-2026-10-08-kaneo-workspace-collaboration: documents are project work
+  // content (task:update) and share-link management is project:share.
+  writeDocuments: { task: ["update"] },
+  manageShareLinks: { project: ["share"] },
   manageLabels: { label: ["create", "update", "delete"] },
   manageWorkspace: { workspace: ["update", "manage_settings"] },
   deleteWorkspace: { workspace: ["delete"] },
@@ -101,6 +105,8 @@ export function useWorkspacePermission() {
       canInviteUsers: () => can.inviteUsers,
       canManageTeam: () => can.manageTeam,
       canRemoveMembers: () => can.removeMembers,
+      canWriteDocuments: () => can.writeDocuments,
+      canManageShareLinks: () => can.manageShareLinks,
       // Escape hatch for ad-hoc permission checks (uncached). Prefer adding
       // a capability above.
       hasPermission: async (permissions: Record<string, string[]>) => {

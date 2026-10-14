@@ -2259,5 +2259,82 @@
 		"branding": {
 			"poweredBy": "Работает на"
 		}
+	},
+	"documents": {
+		"archive": "Archive",
+		"archivedBadge": "archived",
+		"backToDocs": "All documents",
+		"comments": {
+			"delete": "Delete",
+			"empty": "No comments yet.",
+			"error": "Could not add the comment",
+			"placeholder": "Write a comment…",
+			"submit": "Comment",
+			"title": "Comments"
+		},
+		"conflict": {
+			"copied": "Draft copied to clipboard",
+			"copyDraft": "Copy my draft",
+			"copyFailed": "Could not copy the draft",
+			"message": "This document changed while you were editing. Reload to see the latest version, or copy your draft first.",
+			"reload": "Reload server version"
+		},
+		"contentPlaceholder": "Write in Markdown…",
+		"create": "New document",
+		"empty": "No documents yet. Create the first Markdown page for this project.",
+		"listTitle": "Documents",
+		"saveState": {
+			"conflict": "Someone saved a newer version",
+			"error": "Save failed",
+			"saved": "Saved",
+			"saving": "Saving…"
+		},
+		"title": "Docs",
+		"titlePlaceholder": "Document title",
+		"unarchive": "Restore",
+		"untitled": "Untitled document"
+	},
+	"share": {
+		"badge": "Shared",
+		"copied": "Copied",
+		"copy": "Copy",
+		"copyHint": "Copy this link now — the token is shown only once.",
+		"create": "Create link",
+		"creating": "Creating…",
+		"description": "Anyone with the link gets exactly this access. The link can be revoked at any time.",
+		"document": {
+			"rawHint": "Agents can fetch this document as plain Markdown at /raw.",
+			"updated": "Updated {{date}}"
+		},
+		"documentTitle": "Shared document",
+		"editScopeNote": "This edit link can create and update basic task fields only. It cannot delete, assign people, or change project settings.",
+		"editWarning": "An edit link lets anyone holding the URL change this resource without signing in. Holders cannot be reliably identified. Edit links expire after 30 days and can be revoked anytime.",
+		"empty": "No share links yet.",
+		"expires": "Expires {{date}}",
+		"footer": "Shared with a scoped link. The owner can revoke access at any time.",
+		"goal": {
+			"done": "done",
+			"notDone": "not done",
+			"total": "{{total}}/{{target}} days completed"
+		},
+		"invalid": {
+			"description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
+			"title": "This link is no longer valid"
+		},
+		"manage": "Share",
+		"neverExpires": "Does not expire",
+		"permission": {
+			"edit": "Edit",
+			"view": "View"
+		},
+		"rateLimited": {
+			"description": "Slow down a little and try again shortly.",
+			"retry": "Try again",
+			"title": "Too many requests"
+		},
+		"revoke": "Revoke link",
+		"revoked": "Revoked",
+		"title": "Share \"{{name}}\"",
+		"unsupported": "This resource type cannot be displayed here."
 	}
 }

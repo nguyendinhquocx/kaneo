@@ -1,22 +1,15 @@
 import { Calendar, CalendarClock, CalendarX } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { dueDateStatusColors, getDueDateStatus } from "@/lib/due-date-status";
 import { formatDateShort } from "@/lib/format";
-import { getInitials } from "@/lib/get-initials";
 import { getPriorityIcon } from "@/lib/priority";
-import type { ExternalLink } from "@/types/external-link";
-import type Task from "@/types/task";
-import { PublicPRBadge } from "./public-pr-badge";
+import type { PublicProjectTask } from "@/types/public-project";
 import { PublicTaskLabels } from "./public-task-labels";
 
 type PublicTaskRowProps = {
-  task: Task & {
-    labels?: Array<{ id: string; name: string; color: string }>;
-    externalLinks?: Array<ExternalLink>;
-  };
+  task: PublicProjectTask;
   projectSlug: string;
-  onTaskClick: (task: Task) => void;
+  onTaskClick: (task: PublicProjectTask) => void;
 };
 
 export function PublicTaskRow({
@@ -26,7 +19,6 @@ export function PublicTaskRow({
 }: PublicTaskRowProps) {
   const { t } = useTranslation();
   const labels = task.labels || [];
-  const externalLinks = task.externalLinks || [];
 
   return (
     <button
@@ -49,24 +41,7 @@ export function PublicTaskRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        {task.assigneeName && (
-          <div className="flex items-center gap-1.5">
-            <Avatar className="h-5 w-5">
-              <AvatarImage
-                src={task.assigneeImage ?? ""}
-                alt={task.assigneeName ?? ""}
-              />
-              <AvatarFallback className="text-[10px] font-medium border border-border/30">
-                {getInitials(task.assigneeName)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-xs text-muted-foreground font-medium">
-              {task.assigneeName}
-            </span>
-          </div>
-        )}
-
+      <div className="flex items-center gap-2 shrink-0">
         {task.dueDate && (
           <div
             className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded ${dueDateStatusColors[getDueDateStatus(task.dueDate)]}`}
@@ -89,10 +64,6 @@ export function PublicTaskRow({
           <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-sidebar text-[10px] font-medium text-muted-foreground">
             {getPriorityIcon(task.priority)}
           </div>
-        )}
-
-        {externalLinks.length > 0 && (
-          <PublicPRBadge externalLinks={externalLinks} />
         )}
       </div>
     </button>

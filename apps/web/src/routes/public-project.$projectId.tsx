@@ -14,7 +14,7 @@ import { ThemeToggle } from "@/components/public-project/theme-toggle";
 import { Button } from "@/components/ui/button";
 import icons from "@/constants/project-icons";
 import useGetPublicProject from "@/hooks/queries/project/use-get-public-project";
-import type Task from "@/types/task";
+import type { PublicProjectTask } from "@/types/public-project";
 
 export const Route = createFileRoute("/public-project/$projectId")({
   component: RouteComponent,
@@ -37,14 +37,16 @@ function RouteComponent() {
     return "kanban";
   });
 
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTask, setSelectedTask] = useState<PublicProjectTask | null>(
+    null,
+  );
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
   }, [viewMode]);
 
-  const handleTaskClick = (task: Task) => {
+  const handleTaskClick = (task: PublicProjectTask) => {
     setSelectedTask(task);
     setIsTaskModalOpen(true);
   };

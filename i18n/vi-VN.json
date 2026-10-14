@@ -2197,5 +2197,82 @@
 		"branding": {
 			"poweredBy": "Được cung cấp bởi"
 		}
+	},
+	"documents": {
+		"title": "Tài liệu",
+		"untitled": "Tài liệu không tên",
+		"listTitle": "Tài liệu",
+		"empty": "Chưa có tài liệu nào. Tạo trang Markdown đầu tiên cho dự án này.",
+		"create": "Tài liệu mới",
+		"archivedBadge": "đã lưu trữ",
+		"archive": "Lưu trữ",
+		"unarchive": "Khôi phục",
+		"backToDocs": "Tất cả tài liệu",
+		"titlePlaceholder": "Tiêu đề tài liệu",
+		"contentPlaceholder": "Viết bằng Markdown…",
+		"saveState": {
+			"saving": "Đang lưu…",
+			"saved": "Đã lưu",
+			"error": "Lỗi khi lưu",
+			"conflict": "Có người đã lưu bản mới hơn"
+		},
+		"conflict": {
+			"message": "Tài liệu đã đổi trong khi bạn đang sửa. Tải lại để xem bản mới nhất, hoặc sao chép bản nháp của bạn trước.",
+			"copyDraft": "Sao chép bản nháp",
+			"reload": "Tải bản trên máy chủ",
+			"copied": "Đã sao chép bản nháp vào clipboard",
+			"copyFailed": "Không sao chép được bản nháp"
+		},
+		"comments": {
+			"title": "Bình luận",
+			"empty": "Chưa có bình luận nào.",
+			"placeholder": "Viết bình luận…",
+			"submit": "Bình luận",
+			"delete": "Xóa",
+			"error": "Không thêm được bình luận"
+		}
+	},
+	"share": {
+		"manage": "Chia sẻ",
+		"title": "Chia sẻ \"{{name}}\"",
+		"description": "Ai cầm link có đúng quyền này. Link có thể thu hồi bất kỳ lúc nào.",
+		"permission": {
+			"view": "Xem",
+			"edit": "Sửa"
+		},
+		"create": "Tạo link",
+		"creating": "Đang tạo…",
+		"editWarning": "Link sửa cho phép bất kỳ ai cầm URL thay đổi tài nguyên này mà không cần đăng nhập. Không thể xác minh danh tính người cầm link. Link sửa hết hạn sau 30 ngày và có thể thu hồi bất kỳ lúc nào.",
+		"empty": "Chưa có link chia sẻ nào.",
+		"expires": "Hết hạn {{date}}",
+		"neverExpires": "Không hết hạn",
+		"revoke": "Thu hồi link",
+		"revoked": "Đã thu hồi",
+		"copyHint": "Sao chép link ngay — token chỉ hiển thị một lần.",
+		"copy": "Sao chép",
+		"copied": "Đã sao chép",
+		"editScopeNote": "Link sửa này chỉ tạo và cập nhật các trường task cơ bản. Không thể xóa, gán người, hay đổi cài đặt dự án.",
+		"badge": "Được chia sẻ",
+		"documentTitle": "Tài liệu được chia sẻ",
+		"document": {
+			"updated": "Cập nhật {{date}}",
+			"rawHint": "Agent có thể lấy tài liệu này dưới dạng Markdown thô tại /raw."
+		},
+		"goal": {
+			"total": "Hoàn thành {{total}}/{{target}} ngày",
+			"done": "xong",
+			"notDone": "chưa xong"
+		},
+		"invalid": {
+			"title": "Link này không còn hiệu lực",
+			"description": "Link đã bị thu hồi, hết hạn, hoặc gõ sai. Hãy xin chủ sở hữu một link mới."
+		},
+		"rateLimited": {
+			"title": "Quá nhiều yêu cầu",
+			"description": "Chờ một chút rồi thử lại nhé.",
+			"retry": "Thử lại"
+		},
+		"footer": "Được chia sẻ bằng link giới hạn phạm vi. Chủ sở hữu có thể thu hồi bất kỳ lúc nào.",
+		"unsupported": "Loại tài nguyên này không hiển thị được ở đây."
 	}
 }
