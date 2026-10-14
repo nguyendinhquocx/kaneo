@@ -81,4 +81,40 @@ app.get("/document/:token/raw", async (c) => {
   });
 });
 
+// Goal capability read: the link grants exactly this goal's check-in history
+// (dates, completion, notes). No owner identity, no workspace/project IDs.
+app.get("/goal/:token", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "goal", "view");
+  const [goal] = await db
+    .select()
+    .from(schema.goalTable)
+    .where(eq(schema.goalTable.id, link.resourceId))
+    .limit(1);
+  if (!goal) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+
+  const checkins = await db
+    .select({
+      checkInDate: schema.goalCheckinTable.checkInDate,
+      completed: schema.goalCheckinTable.completed,
+      note: schema.goalCheckinTable.note,
+    })
+    .from(schema.goalCheckinTable)
+    .where(eq(schema.goalCheckinTable.goalId, goal.id))
+    .orderBy(schema.goalCheckinTable.checkInDate);
+
+  return c.json({
+    id: goal.id,
+    name: goal.name,
+    timezone: goal.timezone,
+    targetPerWeek: goal.targetPerWeek,
+    archivedAt: goal.archivedAt,
+    checkins,
+  });
+});
+
 export default app;

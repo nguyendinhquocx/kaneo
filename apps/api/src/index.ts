@@ -37,6 +37,7 @@ import giteaIntegration, { handleGiteaWebhookRoute } from "./gitea-integration";
 import githubIntegration, {
   handleGithubWebhookRoute,
 } from "./github-integration";
+import goal from "./goal";
 import getInstanceStatus from "./instance/controllers/get-instance-status";
 import invitation from "./invitation";
 import label from "./label";
@@ -607,6 +608,7 @@ export function createApp() {
   );
   const taskRelationApi = api.route("/task-relation", taskRelation);
   const externalLinkApi = api.route("/external-link", externalLink);
+  const goalApi = api.route("/goal", goal);
   const executionApi = api.route("/execution", execution);
   const workflowRuleApi = api.route("/workflow-rule", workflowRule);
   const shareManageApi = api.route("/share-manage", shareManage);
@@ -769,6 +771,7 @@ export function createApp() {
     genericWebhookIntegrationApi,
     githubIntegrationApi,
     giteaIntegrationApi,
+    goalApi,
     invitationApi,
     invitationPublicApi,
     labelApi,
@@ -890,6 +893,7 @@ const {
   genericWebhookIntegrationApi,
   githubIntegrationApi,
   giteaIntegrationApi,
+  goalApi,
   invitationApi,
   invitationPublicApi,
   labelApi,
@@ -940,6 +944,7 @@ export type AppType =
   | typeof telegramIntegrationApi
   | typeof taskRelationApi
   | typeof externalLinkApi
+  | typeof goalApi
   | typeof executionApi
   | typeof workflowRuleApi
   | typeof invitationApi
