@@ -32,6 +32,7 @@ import {
 } from "@/hooks/queries/goal/use-goals";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
+import { toast } from "@/lib/toast";
 
 // SPEC-2026-10-08-kaneo-workspace-collaboration T6: the matrix stays a
 // table-like grid, not a Kanban. Only the 7-date region scrolls horizontally;
@@ -92,7 +93,12 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
   const from = formatDateKey(weekDays[0]);
   const to = formatDateKey(weekDays[6]);
 
-  const { data: goals = [], isLoading } = useGetGoals({
+  const {
+    data: goals = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useGetGoals({
     workspaceId,
     includeArchived: showArchived,
     from,
@@ -110,6 +116,8 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       setNewGoalName("");
+    } catch {
+      toast.error(t("errors.createFailed"));
     } finally {
       setIsCreating(false);
     }
@@ -117,7 +125,9 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
 
   const handleToggle = (goal: GoalType, dateKey: string) => {
     if (!canWrite || goal.archivedAt) return;
-    void toggleCheckin.mutateAsync({ goalId: goal.id, date: dateKey });
+    toggleCheckin.mutateAsync({ goalId: goal.id, date: dateKey }).catch(() => {
+      toast.error(t("errors.toggleFailed"));
+    });
   };
 
   const openNote = (goal: GoalType) => {
@@ -218,7 +228,16 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
         {canWrite ? createForm : null}
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <div className="flex flex-col items-center gap-2 py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {t("errors.loadFailed")}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => void refetch()}>
+            {t("errors.retry")}
+          </Button>
+        </div>
+      ) : isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }, (_, i) => `sk-${i}`).map((key) => (
             <div key={key} className="h-10 animate-pulse rounded bg-muted" />
@@ -298,7 +317,7 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
                               disabled={!canWrite || goal.archivedAt !== null}
                               onCheckedChange={() => handleToggle(goal, key)}
                               aria-label={`${goal.name} — ${key}`}
-                              className="size-4.5"
+                              className="relative size-4.5 after:absolute after:-inset-[13px] after:content-['']"
                             />
                           </TableCell>
                         );

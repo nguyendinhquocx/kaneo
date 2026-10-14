@@ -2231,6 +2231,10 @@
 			"submit": "Bình luận",
 			"delete": "Xóa",
 			"error": "Không thêm được bình luận"
+		},
+		"errors": {
+			"loadFailed": "Không tải được tài liệu",
+			"retry": "Thử lại"
 		}
 	},
 	"share": {
@@ -2276,7 +2280,12 @@
 		"footer": "Được chia sẻ bằng link giới hạn phạm vi. Chủ sở hữu có thể thu hồi bất kỳ lúc nào.",
 		"unsupported": "Loại tài nguyên này không hiển thị được ở đây.",
 		"capabilityLinks": "Link chia sẻ giới hạn",
-		"capabilityLinksHint": "Link giới hạn phạm vi cho dự án này. Khác với URL công khai ở trên, mỗi link cấp rõ quyền xem hoặc sửa và có thể thu hồi."
+		"capabilityLinksHint": "Link giới hạn phạm vi cho dự án này. Khác với URL công khai ở trên, mỗi link cấp rõ quyền xem hoặc sửa và có thể thu hồi.",
+		"confirmEdit": "Xác nhận tạo link sửa",
+		"errors": {
+			"createFailed": "Không tạo được link chia sẻ",
+			"revokeFailed": "Không thu hồi được link"
+		}
 	},
 	"goals": {
 		"pageTitle": "Mục tiêu",
@@ -2305,7 +2314,16 @@
 			"saved": "Đã lưu ghi chú",
 			"conflict": "Ghi chú này đã bị đổi ở nơi khác. Tải bản mới nhất rồi áp lại chỉnh sửa của bạn.",
 			"reloadNote": "Tải ghi chú mới nhất",
-			"noRow": "Chưa có dòng check-in cho ngày này — tick ngày trong lưới trước, rồi viết ghi chú."
+			"noRow": "Chưa có dòng check-in cho ngày này — tick ngày trong lưới trước, rồi viết ghi chú.",
+			"relatedDocs": "Mở tài liệu dự án",
+			"startEntry": "Tạo dòng cho ngày này"
+		},
+		"errors": {
+			"loadFailed": "Không tải được mục tiêu",
+			"retry": "Thử lại",
+			"createFailed": "Không tạo được mục tiêu",
+			"toggleFailed": "Không cập nhật được check-in",
+			"saveFailed": "Không lưu được ghi chú"
 		}
 	}
 }

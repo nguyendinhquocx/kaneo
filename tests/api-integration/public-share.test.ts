@@ -298,10 +298,11 @@ describe("API integration: public share boundary", () => {
     const response = await app.request(`/api/public-project/${project.id}`);
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
-      agentControlled: boolean;
       columns: Array<{ tasks: Array<{ description: string | null }> }>;
+      agentControlled?: boolean;
     };
-    expect(payload.agentControlled).toBe(true);
+    // P2-F4: the agent-control signal must not leak into the public payload.
+    expect(payload.agentControlled).toBeUndefined();
     for (const column of payload.columns) {
       for (const task of column.tasks) {
         expect(task.description).toBeNull();
@@ -323,10 +324,8 @@ describe("API integration: public share boundary", () => {
     const shareRead = await app2.request(`/api/share/project/${created.token}`);
     expect(shareRead.status).toBe(200);
     const sharePayload = (await shareRead.json()) as {
-      agentControlled: boolean;
       columns: Array<{ tasks: Array<{ description: string | null }> }>;
     };
-    expect(sharePayload.agentControlled).toBe(true);
     for (const column of sharePayload.columns) {
       for (const task of column.tasks) {
         expect(task.description).toBeNull();

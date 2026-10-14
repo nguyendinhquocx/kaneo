@@ -414,4 +414,136 @@ describe("API integration: anonymous share writes (adversarial)", () => {
     });
     expect(second.status).toBe(429);
   });
+  it("cross-project task id fails closed on an edit link", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project: projectA } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const { project: projectB } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const taskB = await seedTask(projectB.id);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", projectA.id, "edit");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const response = await app.request(
+      `/api/share/project/${link.token}/task/${taskB.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Hijack" }),
+      },
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it("task_run on any task also refuses public writes", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const task = await seedTask(project.id);
+    await db.insert(schema.taskRunTable).values({
+      taskId: task.id,
+      manifestVersion: 1,
+      protocolVersion: 1,
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+      baseBranch: "main",
+      state: "queued",
+      hostId: "test-host",
+      branchName: "test-branch",
+      scope: [],
+      requestKey: "test-run-key",
+      requestHash: "test-run-hash",
+      leaseTokenHash: "test-lease-hash",
+      leaseExpiresAt: new Date(Date.now() + 3_600_000),
+    });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "edit");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const response = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Nope" }),
+      },
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it("view links cannot mutate documents or goals", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const doc = await seedDocument(project.id);
+    const goal = await seedGoal(admin.workspace.id, admin.user.id);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const docLink = await createLink(app, "document", doc.id, "view");
+    const goalLink = await createLink(app, "goal", goal.id, "view");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const docWrite = await app.request(`/api/share/document/${docLink.token}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "X", content: "X", revision: 1 }),
+    });
+    expect(docWrite.status).toBe(404);
+
+    const goalWrite = await app.request(
+      `/api/share/goal/${goalLink.token}/checkin`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ date: "2026-10-12" }),
+      },
+    );
+    expect(goalWrite.status).toBe(404);
+  });
+
+  it("virtual statuses are rejected on public task writes", async () => {
+    delete process.env.SHARE_RATE_LIMIT_WRITE;
+    resetShareRateLimits();
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const task = await seedTask(project.id);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "edit");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const created = await app.request(`/api/share/project/${link.token}/task`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Hidden", status: "archived" }),
+    });
+    expect(created.status).toBe(400);
+
+    const updated = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "planned" }),
+      },
+    );
+    expect(updated.status).toBe(400);
+  });
 });

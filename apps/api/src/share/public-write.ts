@@ -6,6 +6,7 @@ import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
 import {
   assertValidPriority,
   assertValidTaskStatus,
+  VIRTUAL_STATUSES,
 } from "../task/validate-task-fields";
 import {
   appendShareActionAudit,
@@ -44,6 +45,13 @@ export async function publicCreateTask(
   const priority = body.priority || "no-priority";
   await assertValidTaskStatus(status, link.resourceId);
   assertValidPriority(priority);
+  // P2-F1 fix: virtual statuses hide tasks from the board — not part of the
+  // "basic task fields" an edit link grants.
+  if (VIRTUAL_STATUSES.includes(status as (typeof VIRTUAL_STATUSES)[number])) {
+    throw new HTTPException(400, {
+      message: "Public links cannot set planned or archived status",
+    });
+  }
 
   const column = await db.query.columnTable.findFirst({
     where: and(
@@ -145,6 +153,15 @@ export async function publicUpdateTask(
   }
   if (body.status !== undefined && body.status !== task.status) {
     await assertValidTaskStatus(body.status, link.resourceId);
+    if (
+      VIRTUAL_STATUSES.includes(
+        body.status as (typeof VIRTUAL_STATUSES)[number],
+      )
+    ) {
+      throw new HTTPException(400, {
+        message: "Public links cannot set planned or archived status",
+      });
+    }
     const column = await db.query.columnTable.findFirst({
       where: and(
         eq(schema.columnTable.projectId, link.resourceId),
@@ -262,19 +279,34 @@ export async function publicToggleGoalCheckin(
     )
     .limit(1);
 
-  let row: typeof schema.goalCheckinTable.$inferSelect | undefined;
-  if (existing) {
-    [row] = await db
-      .update(schema.goalCheckinTable)
-      .set({
-        // Anonymous writes are attributed to the link, not a user.
-        completed: !existing.completed,
-        checkedByUserId: null,
-      })
-      .where(eq(schema.goalCheckinTable.id, existing.id))
-      .returning();
-  } else {
-    [row] = await db
+  // P2-F2 fix: serialize the flip like the authenticated path so concurrent
+  // anonymous submits cannot read the same state and cancel each other out.
+  const row = await db.transaction(async (tx) => {
+    const locked = existing
+      ? (
+          await tx
+            .select()
+            .from(schema.goalCheckinTable)
+            .where(eq(schema.goalCheckinTable.id, existing.id))
+            .for("update")
+            .limit(1)
+        )[0]
+      : undefined;
+
+    if (locked) {
+      const [updated] = await tx
+        .update(schema.goalCheckinTable)
+        .set({
+          // Anonymous writes are attributed to the link, not a user.
+          completed: !locked.completed,
+          checkedByUserId: null,
+        })
+        .where(eq(schema.goalCheckinTable.id, locked.id))
+        .returning();
+      return updated;
+    }
+
+    const [inserted] = await tx
       .insert(schema.goalCheckinTable)
       .values({
         goalId: link.resourceId,
@@ -291,28 +323,33 @@ export async function publicToggleGoalCheckin(
         ],
       })
       .returning();
-    if (!row) {
-      // Lost a race: re-read and flip.
-      const [raced] = await db
-        .select()
-        .from(schema.goalCheckinTable)
-        .where(
-          and(
-            eq(schema.goalCheckinTable.goalId, link.resourceId),
-            eq(schema.goalCheckinTable.checkInDate, date),
-          ),
-        )
-        .limit(1);
-      if (!raced) {
-        throw new HTTPException(500, { message: "Check-in race lost" });
-      }
-      [row] = await db
-        .update(schema.goalCheckinTable)
-        .set({ completed: !raced.completed, checkedByUserId: null })
-        .where(eq(schema.goalCheckinTable.id, raced.id))
-        .returning();
+    if (inserted) {
+      return inserted;
     }
-  }
+
+    // Lost a race with a concurrent insert: lock and flip.
+    const [raced] = await tx
+      .select()
+      .from(schema.goalCheckinTable)
+      .where(
+        and(
+          eq(schema.goalCheckinTable.goalId, link.resourceId),
+          eq(schema.goalCheckinTable.checkInDate, date),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    if (!raced) {
+      throw new HTTPException(500, { message: "Check-in race lost" });
+    }
+    const [updated] = await tx
+      .update(schema.goalCheckinTable)
+      .set({ completed: !raced.completed, checkedByUserId: null })
+      .where(eq(schema.goalCheckinTable.id, raced.id))
+      .returning();
+    return updated;
+  });
+
   if (!row) {
     throw new HTTPException(500, { message: "Failed to toggle check-in" });
   }

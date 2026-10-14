@@ -21,10 +21,28 @@ export default function DocumentsView({
   onCreate,
 }: DocumentsViewProps) {
   const { t } = useTranslation("documents");
-  const { data: documents = [], isLoading } = useGetDocuments(projectId);
+  const {
+    data: documents = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useGetDocuments(projectId);
   const archiveDocument = useArchiveDocument();
   const { canWriteDocuments } = useWorkspacePermission();
   const canWrite = canWriteDocuments();
+
+  if (isError) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-2 px-4 py-16 text-center">
+        <p className="text-sm text-muted-foreground">
+          {t("errors.loadFailed")}
+        </p>
+        <Button size="sm" variant="outline" onClick={() => void refetch()}>
+          {t("errors.retry")}
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

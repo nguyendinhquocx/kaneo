@@ -2293,7 +2293,11 @@
 		"title": "Docs",
 		"titlePlaceholder": "Document title",
 		"unarchive": "Restore",
-		"untitled": "Untitled document"
+		"untitled": "Untitled document",
+		"errors": {
+			"loadFailed": "Could not load documents",
+			"retry": "Try again"
+		}
 	},
 	"share": {
 		"badge": "Shared",
@@ -2338,7 +2342,12 @@
 		"title": "Share \"{{name}}\"",
 		"unsupported": "This resource type cannot be displayed here.",
 		"capabilityLinks": "Capability share links",
-		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked."
+		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
+		"confirmEdit": "Confirm edit link",
+		"errors": {
+			"createFailed": "Could not create the share link",
+			"revokeFailed": "Could not revoke the link"
+		}
 	},
 	"goals": {
 		"archive": "Archive",
@@ -2362,12 +2371,21 @@
 			"reloadNote": "Reload latest note",
 			"save": "Save note",
 			"saved": "Note saved",
-			"saving": "Saving…"
+			"saving": "Saving…",
+			"relatedDocs": "Open project docs",
+			"startEntry": "Start an entry for this day"
 		},
 		"showActive": "Active goals",
 		"showArchived": "Archived",
 		"thisWeek": "This week",
 		"totalColumn": "Total",
-		"unarchive": "Restore"
+		"unarchive": "Restore",
+		"errors": {
+			"createFailed": "Could not create the goal",
+			"loadFailed": "Could not load goals",
+			"retry": "Try again",
+			"saveFailed": "Could not save the note",
+			"toggleFailed": "Could not update the check-in"
+		}
 	}
 }

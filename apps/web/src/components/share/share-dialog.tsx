@@ -18,6 +18,7 @@ import {
   useRevokeShareLink,
 } from "@/hooks/mutations/share/use-share-links";
 import { cn } from "@/lib/cn";
+import { toast } from "@/lib/toast";
 
 type ShareDialogProps = {
   resourceType: ShareResourceType;
@@ -59,7 +60,10 @@ export default function ShareDialog({
       return;
     }
     setEditConfirmed(false);
-    createLink.mutate({ resourceType, resourceId, permission });
+    createLink.mutate(
+      { resourceType, resourceId, permission },
+      { onError: () => toast.error(t("errors.createFailed")) },
+    );
   };
 
   const handleCopy = async (url: string) => {
@@ -115,7 +119,11 @@ export default function ShareDialog({
               onClick={handleCreate}
               disabled={createLink.isPending}
             >
-              {createLink.isPending ? t("creating") : t("create")}
+              {createLink.isPending
+                ? t("creating")
+                : editConfirmed && permission === "edit"
+                  ? t("confirmEdit")
+                  : t("create")}
             </Button>
           </div>
 
@@ -161,7 +169,11 @@ export default function ShareDialog({
                       size="icon-xs"
                       aria-label={t("revoke")}
                       disabled={revokeLink.isPending}
-                      onClick={() => revokeLink.mutate(link.id)}
+                      onClick={() =>
+                        revokeLink.mutate(link.id, {
+                          onError: () => toast.error(t("errors.revokeFailed")),
+                        })
+                      }
                     >
                       <Trash2 className="size-3.5 text-destructive" />
                     </Button>

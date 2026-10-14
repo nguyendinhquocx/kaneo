@@ -74,7 +74,7 @@ function DocumentComments({ documentId }: { documentId: string }) {
                 <Button
                   variant="ghost"
                   size="xs"
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
+                  className="text-muted-foreground"
                   onClick={() => deleteComment.mutate(comment.id)}
                 >
                   {t("comments.delete")}
@@ -117,7 +117,7 @@ export default function DocumentWorkspace({
   onBack,
 }: DocumentWorkspaceProps) {
   const { t } = useTranslation("documents");
-  const { data: document, isLoading } = useGetDocument(documentId);
+  const { data: document, isLoading, refetch } = useGetDocument(documentId);
   const updateDocument = useUpdateDocument();
   const archiveDocument = useArchiveDocument();
   const { canWriteDocuments } = useWorkspacePermission();
@@ -147,20 +147,26 @@ export default function DocumentWorkspace({
     async (nextTitle: string, nextContent: string) => {
       if (!document) return;
       setSaveState("saving");
-      const result = await updateDocument.mutateAsync({
-        id: document.id,
-        title: nextTitle,
-        content: nextContent,
-        revision,
-      });
-      if ("conflict" in result) {
-        setSaveState("conflict");
-        setDraftSnapshot(nextContent);
-        return;
+      try {
+        const result = await updateDocument.mutateAsync({
+          id: document.id,
+          title: nextTitle,
+          content: nextContent,
+          revision,
+        });
+        if ("conflict" in result) {
+          setSaveState("conflict");
+          setDraftSnapshot(nextContent);
+          return;
+        }
+        setRevision(result.revision);
+        setSaveState("saved");
+        dirtyRef.current = false;
+      } catch {
+        // P1-1 fix: network/server failures surface as a visible error state
+        // instead of an unhandled rejection stuck on "saving".
+        setSaveState("error");
       }
-      setRevision(result.revision);
-      setSaveState("saved");
-      dirtyRef.current = false;
     },
     [document, revision, updateDocument],
   );
@@ -194,18 +200,20 @@ export default function DocumentWorkspace({
     }
   };
 
-  const handleReloadServerVersion = () => {
+  const handleReloadServerVersion = useCallback(async () => {
     if (!document) return;
-    loadedDocId.current = null;
-    // Refetch by clearing the cache entry key content: useQuery refetches on
-    // invalidation; simplest path is re-mount through the document payload.
-    setTitle(document.title);
-    setContent(document.content);
-    setRevision(document.revision);
+    // P1-2 fix: the cache holds our stale copy (conflict skips invalidation
+    // and refetchOnMount is off), so reset must come from a fresh fetch.
+    const { data: fresh } = await refetch();
+    if (fresh) {
+      setTitle(fresh.title);
+      setContent(fresh.content);
+      setRevision(fresh.revision);
+    }
     setSaveState("saved");
     setDraftSnapshot(null);
     dirtyRef.current = false;
-  };
+  }, [document, refetch]);
 
   const handleCopyDraft = async () => {
     if (draftSnapshot === null) return;
@@ -300,8 +308,8 @@ export default function DocumentWorkspace({
           </Button>
           <Button
             size="xs"
-            variant="outline"
-            onClick={handleReloadServerVersion}
+            variant="secondary"
+            onClick={() => void handleReloadServerVersion()}
           >
             {t("conflict.reload")}
           </Button>

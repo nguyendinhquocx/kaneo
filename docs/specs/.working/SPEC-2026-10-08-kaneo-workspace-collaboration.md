@@ -109,6 +109,8 @@
 - Video use case dùng goal/check-in + note Markdown, không tạo video database v1. Dashboard chỉ thống kê số ngày check-in và mục tiêu; không hứa đếm video/nhạc sĩ/ca sĩ.
 - Thứ tự: capture product/design authority → harden public boundary + capability model → Docs → Goals/check-ins → gated anonymous writes → API/UI/UAT.
 - Decision (T3, EP 2026-10-14): quyền member map lên statements hiện có để KHÔNG đổi role matrix (Out-of-scope) — documents dùng `task:read`/`task:update` (nội dung công việc project); goals/check-ins KHÔNG thêm statement mới: private goal = owner-only (controller check), shared goal = read cho workspace member, write (tick/note/sửa goal) cho owner hoặc member có `task:update` (collaborator); share-link management dùng `project:share` cho mọi resource type.
+- Decision (T6, EP 2026-10-14): week boundary của matrix tính theo viewer-local Monday–Sunday v1; giá trị check-in vẫn là DATE string nên lịch sử không trôi ngày giữa các timezone. Day-boundary đúng theo goal.timezone để tăng cấp ở spec riêng nếu cần.
+- Decision (EP, 2026-10-14): migration 0048 được trim tay sau `drizzle-kit generate` — bản generate kéo nhầm CREATE/ALTER của repair migrations 0044-0047 (không có snapshot trong meta/), sẽ fail trên DB sạch lẫn upgrade; chỉ giữ diff của spec. compose.local.yml đổi port postgres sang 15432 do 5432/5433 bị Hyper-V excluded ranges chặn trên host này.
 
 ## Diagram
 

@@ -39,7 +39,6 @@ export type PublicProjectPayload = {
   icon: string | null;
   description: string | null;
   isPublic: boolean;
-  agentControlled: boolean;
   columns: PublicProjectColumn[];
   archivedTasks: PublicProjectTask[];
   plannedTasks: PublicProjectTask[];
@@ -189,7 +188,8 @@ export async function buildPublicProjectPayload(
     icon: project.icon,
     description: project.description,
     isPublic: project.isPublic ?? false,
-    agentControlled,
+    // P2-F4 fix: no agent-control signal in the public payload (acceptance:
+    // no agent-control fields). The redaction above already protects content.
     columns,
     archivedTasks: tasks
       .filter((task) => task.status === "archived")
