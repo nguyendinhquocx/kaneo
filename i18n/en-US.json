@@ -1304,7 +1304,8 @@
 			"members": "Members",
 			"invitations": "Invitations",
 			"more": "More",
-			"backToBoard": "Back to board"
+			"backToBoard": "Back to board",
+			"goals": "Goals"
 		},
 		"projectList": {
 			"viewProject": "View Project",
@@ -2273,6 +2274,38 @@
 			"retry": "Try again"
 		},
 		"footer": "Shared with a scoped link. The owner can revoke access at any time.",
-		"unsupported": "This resource type cannot be displayed here."
+		"unsupported": "This resource type cannot be displayed here.",
+		"capabilityLinks": "Capability share links",
+		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked."
+	},
+	"goals": {
+		"pageTitle": "Goals",
+		"previousWeek": "Previous week",
+		"nextWeek": "Next week",
+		"thisWeek": "This week",
+		"showActive": "Active goals",
+		"showArchived": "Archived",
+		"empty": "No goals yet. Create one to start tracking your week.",
+		"emptyArchived": "No archived goals.",
+		"newGoalPlaceholder": "e.g. Make a video",
+		"createGoal": "Create goal",
+		"goalColumn": "Goal",
+		"totalColumn": "Total",
+		"matrixAria": "Weekly goals matrix",
+		"privateBadge": "private",
+		"archive": "Archive",
+		"unarchive": "Restore",
+		"noteAria": "Open note details",
+		"sheet": {
+			"completed": "done",
+			"notCompleted": "not done",
+			"notePlaceholder": "Write a Markdown note for this day…",
+			"save": "Save note",
+			"saving": "Saving…",
+			"saved": "Note saved",
+			"conflict": "This note changed elsewhere. Reload to get the latest version, then re-apply your edit.",
+			"reloadNote": "Reload latest note",
+			"noRow": "No check-in row exists for this day yet — tick the day in the grid first, then write its note."
+		}
 	}
 }

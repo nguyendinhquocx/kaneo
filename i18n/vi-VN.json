@@ -1304,7 +1304,8 @@
 			"members": "Thành viên",
 			"invitations": "Lời mời",
 			"more": "Thêm",
-			"backToBoard": "Quay lại bảng"
+			"backToBoard": "Quay lại bảng",
+			"goals": "Mục tiêu"
 		},
 		"projectList": {
 			"viewProject": "Xem dự án",
@@ -2273,6 +2274,38 @@
 			"retry": "Thử lại"
 		},
 		"footer": "Được chia sẻ bằng link giới hạn phạm vi. Chủ sở hữu có thể thu hồi bất kỳ lúc nào.",
-		"unsupported": "Loại tài nguyên này không hiển thị được ở đây."
+		"unsupported": "Loại tài nguyên này không hiển thị được ở đây.",
+		"capabilityLinks": "Link chia sẻ giới hạn",
+		"capabilityLinksHint": "Link giới hạn phạm vi cho dự án này. Khác với URL công khai ở trên, mỗi link cấp rõ quyền xem hoặc sửa và có thể thu hồi."
+	},
+	"goals": {
+		"pageTitle": "Mục tiêu",
+		"previousWeek": "Tuần trước",
+		"nextWeek": "Tuần sau",
+		"thisWeek": "Tuần này",
+		"showActive": "Đang theo dõi",
+		"showArchived": "Đã lưu trữ",
+		"empty": "Chưa có mục tiêu nào. Tạo một mục tiêu để bắt đầu theo dõi tuần của bạn.",
+		"emptyArchived": "Không có mục tiêu nào đã lưu trữ.",
+		"newGoalPlaceholder": "VD: Làm video",
+		"createGoal": "Tạo mục tiêu",
+		"goalColumn": "Mục tiêu",
+		"totalColumn": "Tổng",
+		"matrixAria": "Ma trận mục tiêu tuần",
+		"privateBadge": "riêng tư",
+		"archive": "Lưu trữ",
+		"unarchive": "Khôi phục",
+		"noteAria": "Mở ghi chú chi tiết",
+		"sheet": {
+			"completed": "xong",
+			"notCompleted": "chưa xong",
+			"notePlaceholder": "Viết ghi chú Markdown cho ngày này…",
+			"save": "Lưu ghi chú",
+			"saving": "Đang lưu…",
+			"saved": "Đã lưu ghi chú",
+			"conflict": "Ghi chú này đã bị đổi ở nơi khác. Tải bản mới nhất rồi áp lại chỉnh sửa của bạn.",
+			"reloadNote": "Tải ghi chú mới nhất",
+			"noRow": "Chưa có dòng check-in cho ngày này — tick ngày trong lưới trước, rồi viết ghi chú."
+		}
 	}
 }

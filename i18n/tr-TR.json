@@ -1304,7 +1304,8 @@
 			"members": "Üyeler",
 			"invitations": "Davetler",
 			"more": "Daha fazla",
-			"backToBoard": "Panoya dön"
+			"backToBoard": "Panoya dön",
+			"goals": "Goals"
 		},
 		"projectList": {
 			"viewProject": "Projeyi Görüntüle",
@@ -2273,6 +2274,38 @@
 		"revoke": "Revoke link",
 		"revoked": "Revoked",
 		"title": "Share \"{{name}}\"",
-		"unsupported": "This resource type cannot be displayed here."
+		"unsupported": "This resource type cannot be displayed here.",
+		"capabilityLinks": "Capability share links",
+		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked."
+	},
+	"goals": {
+		"archive": "Archive",
+		"createGoal": "Create goal",
+		"empty": "No goals yet. Create one to start tracking your week.",
+		"emptyArchived": "No archived goals.",
+		"goalColumn": "Goal",
+		"matrixAria": "Weekly goals matrix",
+		"newGoalPlaceholder": "e.g. Make a video",
+		"nextWeek": "Next week",
+		"noteAria": "Open note details",
+		"pageTitle": "Goals",
+		"previousWeek": "Previous week",
+		"privateBadge": "private",
+		"sheet": {
+			"completed": "done",
+			"conflict": "This note changed elsewhere. Reload to get the latest version, then re-apply your edit.",
+			"noRow": "No check-in row exists for this day yet — tick the day in the grid first, then write its note.",
+			"notCompleted": "not done",
+			"notePlaceholder": "Write a Markdown note for this day…",
+			"reloadNote": "Reload latest note",
+			"save": "Save note",
+			"saved": "Note saved",
+			"saving": "Saving…"
+		},
+		"showActive": "Active goals",
+		"showArchived": "Archived",
+		"thisWeek": "This week",
+		"totalColumn": "Total",
+		"unarchive": "Restore"
 	}
 }

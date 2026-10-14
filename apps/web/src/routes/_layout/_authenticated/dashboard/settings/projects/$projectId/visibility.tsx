@@ -3,6 +3,7 @@ import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import PageTitle from "@/components/page-title";
+import ShareDialog from "@/components/share/share-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -154,6 +155,28 @@ function RouteComponent() {
                   {t("settings:projectVisibility.copy")}
                 </Button>
               </div>
+            </div>
+
+            <Separator />
+
+            {/* SPEC-2026-10-08-kaneo-workspace-collaboration T7: scoped
+                capability links (view/edit, expiring, revocable) for this
+                project — separate from the legacy isPublic URL above. */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">
+                  {t("share:capabilityLinks")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("share:capabilityLinksHint")}
+                </p>
+              </div>
+              <ShareDialog
+                resourceType="project"
+                resourceId={project?.id || ""}
+                resourceLabel={project?.name || ""}
+                canShare={canShare}
+              />
             </div>
           </div>
         </div>

@@ -44,6 +44,11 @@ We believe the best tools are **invisible**. They should amplify your team's nat
 - **Actually fast** because we care about performance
 - **Open source** with a permissive MIT license
 
+**Workspace collaboration:**
+- **Project Docs** — write Markdown pages per project with member comments, conflict-safe saves (revision CAS), and a raw `text/markdown` endpoint agents can fetch without an account
+- **Weekly Goals** — track recurring goals on a Monday–Sunday matrix with one check-in per day, a separate Markdown note per day, weekly targets, and archive that keeps history
+- **Scoped share links** — grant view or edit on exactly one project, document, or goal. Edit links expire after 30 days, every link is revocable, agent-controlled projects refuse public writes, and each anonymous change is audited by link ID
+
 Learn more about Kaneo's features and capabilities in our [documentation](https://kaneo.app/docs/core).
 
 ## Sponsors
