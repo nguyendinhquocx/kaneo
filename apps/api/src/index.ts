@@ -27,6 +27,7 @@ import db, { getDatabase, schema } from "./database";
 import { prepareDatabaseStartup } from "./database/prepare-database-startup";
 import { waitForDatabase } from "./database/wait-for-database";
 import discordIntegration from "./discord-integration";
+import document from "./document";
 import { eventContext } from "./events";
 import execution from "./execution";
 import { getExecutionMetrics, seedExecutionFlags } from "./execution/gates";
@@ -575,6 +576,7 @@ export function createApp() {
   const projectApi = api.route("/project", project);
   const taskApi = api.route("/task", task);
   const columnApi = api.route("/column", column);
+  const documentApi = api.route("/document", document);
   const activityApi = api.route("/activity", activity);
   const commentApi = api.route("/comment", comment);
   const timeEntryApi = api.route("/time-entry", timeEntry);
@@ -761,6 +763,7 @@ export function createApp() {
     commentApi,
     configApi,
     discordIntegrationApi,
+    documentApi,
     externalLinkApi,
     executionApi,
     genericWebhookIntegrationApi,
@@ -881,6 +884,7 @@ const {
   commentApi,
   configApi,
   discordIntegrationApi,
+  documentApi,
   executionApi,
   externalLinkApi,
   genericWebhookIntegrationApi,
@@ -919,6 +923,7 @@ export type AppType =
   | typeof configApi
   | typeof projectApi
   | typeof taskApi
+  | typeof documentApi
   | typeof columnApi
   | typeof activityApi
   | typeof commentApi

@@ -19,7 +19,11 @@ type WorkspaceIdSource =
         | "activity"
         | "comment"
         | "column"
-        | "workflowRule";
+        | "workflowRule"
+        | "document"
+        | "documentComment"
+        | "goal"
+        | "goalCheckin";
       idKey: string;
     }
   | { type: "lookupTasks"; idsKey: string };
@@ -131,7 +135,11 @@ async function lookupWorkspaceId(
     | "activity"
     | "comment"
     | "column"
-    | "workflowRule",
+    | "workflowRule"
+    | "document"
+    | "goal"
+    | "goalCheckin"
+    | "documentComment",
   id: string,
 ): Promise<string | null> {
   try {
@@ -280,6 +288,58 @@ async function lookupWorkspaceId(
         return workflowRule?.workspaceId || null;
       }
 
+      case "document": {
+        const [document] = await db
+          .select({ workspaceId: schema.projectTable.workspaceId })
+          .from(schema.documentTable)
+          .innerJoin(
+            schema.projectTable,
+            eq(schema.documentTable.projectId, schema.projectTable.id),
+          )
+          .where(eq(schema.documentTable.id, id))
+          .limit(1);
+        return document?.workspaceId || null;
+      }
+
+      case "documentComment": {
+        const [documentComment] = await db
+          .select({ workspaceId: schema.projectTable.workspaceId })
+          .from(schema.documentCommentTable)
+          .innerJoin(
+            schema.documentTable,
+            eq(schema.documentCommentTable.documentId, schema.documentTable.id),
+          )
+          .innerJoin(
+            schema.projectTable,
+            eq(schema.documentTable.projectId, schema.projectTable.id),
+          )
+          .where(eq(schema.documentCommentTable.id, id))
+          .limit(1);
+        return documentComment?.workspaceId || null;
+      }
+
+      case "goal": {
+        const [goal] = await db
+          .select({ workspaceId: schema.goalTable.workspaceId })
+          .from(schema.goalTable)
+          .where(eq(schema.goalTable.id, id))
+          .limit(1);
+        return goal?.workspaceId || null;
+      }
+
+      case "goalCheckin": {
+        const [goalCheckin] = await db
+          .select({ workspaceId: schema.goalTable.workspaceId })
+          .from(schema.goalCheckinTable)
+          .innerJoin(
+            schema.goalTable,
+            eq(schema.goalCheckinTable.goalId, schema.goalTable.id),
+          )
+          .where(eq(schema.goalCheckinTable.id, id))
+          .limit(1);
+        return goalCheckin?.workspaceId || null;
+      }
+
       default:
         return null;
     }
@@ -378,5 +438,44 @@ export const workspaceAccess = {
         { type: "lookup", resource: "workflowRule", idKey },
         { type: "query", key: "workspaceId" },
       ],
+    }),
+
+  fromDocument: (idKey = "id") =>
+    workspaceAccessMiddleware({
+      sources: [
+        { type: "lookup", resource: "document", idKey },
+        { type: "query", key: "workspaceId" },
+      ],
+    }),
+
+  fromDocumentComment: (idKey = "id") =>
+    workspaceAccessMiddleware({
+      sources: [
+        { type: "lookup", resource: "documentComment", idKey },
+        { type: "query", key: "workspaceId" },
+      ],
+    }),
+
+  fromGoal: (idKey = "id") =>
+    workspaceAccessMiddleware({
+      sources: [
+        { type: "lookup", resource: "goal", idKey },
+        { type: "query", key: "workspaceId" },
+      ],
+    }),
+
+  fromGoalCheckin: (idKey = "id") =>
+    workspaceAccessMiddleware({
+      sources: [
+        { type: "lookup", resource: "goalCheckin", idKey },
+        { type: "query", key: "workspaceId" },
+      ],
+    }),
+
+  // SPEC-2026-10-08-kaneo-workspace-collaboration: project documents resolve
+  // their workspace through the owning project.
+  fromProjectId: (idKey = "projectId") =>
+    workspaceAccessMiddleware({
+      sources: [{ type: "lookup", resource: "project", idKey }],
     }),
 };
