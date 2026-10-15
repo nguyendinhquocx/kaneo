@@ -703,7 +703,8 @@
 			"copy": "복사",
 			"copiedToast": "복사됨",
 			"toastUpdated": "공개 설정이 업데이트되었습니다",
-			"toastUpdateError": "공개 설정 업데이트에 실패했습니다"
+			"toastUpdateError": "공개 설정 업데이트에 실패했습니다",
+			"copyFailed": "복사할 수 없습니다. URL을 선택해 직접 복사하세요."
 		},
 		"projectWorkflow": {
 			"pageTitle": "워크플로 설정",
@@ -2235,7 +2236,8 @@
 		"errors": {
 			"loadFailed": "Could not load documents",
 			"retry": "Try again"
-		}
+		},
+		"archivedSection": "보관됨"
 	},
 	"share": {
 		"badge": "Shared",
@@ -2244,15 +2246,12 @@
 		"copyHint": "Copy this link now — the token is shown only once.",
 		"create": "Create link",
 		"creating": "Creating…",
-		"description": "Anyone with the link gets exactly this access. The link can be revoked at any time.",
 		"document": {
 			"rawHint": "Agents can fetch this document as plain Markdown at /raw.",
 			"updated": "Updated {{date}}"
 		},
 		"documentTitle": "Shared document",
 		"editScopeNote": "This edit link can create and update basic task fields only. It cannot delete, assign people, or change project settings.",
-		"editWarning": "An edit link lets anyone holding the URL change this resource without signing in. Holders cannot be reliably identified. Edit links expire after 30 days and can be revoked anytime.",
-		"empty": "No share links yet.",
 		"expires": "Expires {{date}}",
 		"footer": "Shared with a scoped link. The owner can revoke access at any time.",
 		"goal": {
@@ -2277,11 +2276,10 @@
 		},
 		"revoke": "Revoke link",
 		"revoked": "Revoked",
-		"title": "Share \"{{name}}\"",
+		"title": "공유",
 		"unsupported": "This resource type cannot be displayed here.",
 		"capabilityLinks": "Capability share links",
 		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
-		"confirmEdit": "Confirm edit link",
 		"errors": {
 			"createFailed": "Could not create the share link",
 			"revokeFailed": "Could not revoke the link"
@@ -2290,7 +2288,6 @@
 	"goals": {
 		"archive": "Archive",
 		"createGoal": "Create goal",
-		"empty": "No goals yet. Create one to start tracking your week.",
 		"emptyArchived": "No archived goals.",
 		"goalColumn": "Goal",
 		"matrixAria": "Weekly goals matrix",
@@ -2303,7 +2300,7 @@
 		"sheet": {
 			"completed": "done",
 			"conflict": "This note changed elsewhere. Reload to get the latest version, then re-apply your edit.",
-			"noRow": "No check-in row exists for this day yet — tick the day in the grid first, then write its note.",
+			"noRow": "이 날짜에는 아직 체크인 항목이 없습니다.",
 			"notCompleted": "not done",
 			"notePlaceholder": "Write a Markdown note for this day…",
 			"reloadNote": "Reload latest note",
@@ -2311,7 +2308,13 @@
 			"saved": "Note saved",
 			"saving": "Saving…",
 			"relatedDocs": "Open project docs",
-			"startEntry": "Start an entry for this day"
+			"startEntry": "Start an entry for this day",
+			"history": "메모 기록",
+			"nextDay": "다음 날짜",
+			"previousDay": "이전 날짜",
+			"today": "오늘",
+			"unsavedNote": "저장되지 않은 메모입니다. 날짜를 바꾸기 전에 저장하세요.",
+			"chooseDate": "날짜 선택"
 		},
 		"showActive": "Active goals",
 		"showArchived": "Archived",
@@ -2324,6 +2327,7 @@
 			"retry": "Try again",
 			"saveFailed": "Could not save the note",
 			"toggleFailed": "Could not update the check-in"
-		}
+		},
+		"weeklyTarget": "주간 목표 {{target}}회"
 	}
 }

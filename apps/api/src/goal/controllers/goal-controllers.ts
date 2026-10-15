@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../../database";
 import { hasUserWorkspacePermission } from "../../utils/require-workspace-permission";
@@ -151,6 +151,42 @@ export async function getCheckinsInRange(
   return byGoal;
 }
 
+// UAT fix: the matrix "Tổng" column must reflect every week, not just the
+// viewed week, so completion counts are aggregated without a date filter.
+export async function getCompletedCountsByGoal(goalIds: string[]) {
+  const counts = new Map<string, number>();
+  if (goalIds.length === 0) {
+    return counts;
+  }
+  const rows = await db
+    .select({
+      goalId: schema.goalCheckinTable.goalId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.goalCheckinTable)
+    .where(
+      and(
+        inArray(schema.goalCheckinTable.goalId, goalIds),
+        eq(schema.goalCheckinTable.completed, true),
+      ),
+    )
+    .groupBy(schema.goalCheckinTable.goalId);
+  for (const row of rows) {
+    counts.set(row.goalId, row.count);
+  }
+  return counts;
+}
+
+// UAT fix: the note sheet needs the full check-in history (any day), not just
+// the currently viewed week, so notes stay reachable after the week passes.
+export async function listCheckinsForGoal(goalId: string) {
+  return db
+    .select()
+    .from(schema.goalCheckinTable)
+    .where(eq(schema.goalCheckinTable.goalId, goalId))
+    .orderBy(asc(schema.goalCheckinTable.checkInDate));
+}
+
 export async function updateGoal(
   goalId: string,
   updates: Partial<{
@@ -189,10 +225,13 @@ export async function setGoalArchived(goalId: string, archived: boolean) {
 // completed. The row is never deleted, so history (and the note) survives.
 // Concurrent submits are serialized with SELECT ... FOR UPDATE; both requests
 // succeed and exactly one row exists afterwards.
+// ensureOnly (UAT): the note sheet needs a row for a day without ticking it —
+// existing rows are returned untouched, new rows are created not-completed.
 export async function toggleCheckin(
   goalId: string,
   checkInDate: string,
   userId: string,
+  options?: { ensureOnly?: boolean },
 ) {
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -208,6 +247,9 @@ export async function toggleCheckin(
       .limit(1);
 
     if (existing) {
+      if (options?.ensureOnly) {
+        return { row: existing, toggledOff: false };
+      }
       const [updated] = await tx
         .update(schema.goalCheckinTable)
         .set({
@@ -224,7 +266,7 @@ export async function toggleCheckin(
       .values({
         goalId,
         checkInDate,
-        completed: true,
+        completed: !options?.ensureOnly,
         checkedByUserId: userId,
         note: "",
         noteRevision: 1,

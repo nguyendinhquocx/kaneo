@@ -869,6 +869,7 @@
 			"publicUrl": "Public URL",
 			"publicUrlHint": "Share this link if the project is public",
 			"copy": "Copy",
+			"copyFailed": "Couldn't copy. Select the URL to copy it manually.",
 			"copiedToast": "Copied",
 			"toastUpdated": "Visibility updated",
 			"toastUpdateError": "Failed to update visibility"
@@ -2235,20 +2236,18 @@
 		"errors": {
 			"loadFailed": "Could not load documents",
 			"retry": "Try again"
-		}
+		},
+		"archivedSection": "Archived"
 	},
 	"share": {
 		"manage": "Share",
-		"title": "Share \"{{name}}\"",
-		"description": "Anyone with the link gets exactly this access. The link can be revoked at any time.",
+		"title": "Share",
 		"permission": {
 			"view": "View",
 			"edit": "Edit"
 		},
 		"create": "Create link",
 		"creating": "Creating…",
-		"editWarning": "An edit link lets anyone holding the URL change this resource without signing in. Holders cannot be reliably identified. Edit links expire after 30 days and can be revoked anytime.",
-		"empty": "No share links yet.",
 		"expires": "Expires {{date}}",
 		"neverExpires": "Does not expire",
 		"revoke": "Revoke link",
@@ -2281,7 +2280,6 @@
 		"unsupported": "This resource type cannot be displayed here.",
 		"capabilityLinks": "Capability share links",
 		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
-		"confirmEdit": "Confirm edit link",
 		"errors": {
 			"createFailed": "Could not create the share link",
 			"revokeFailed": "Could not revoke the link"
@@ -2294,7 +2292,6 @@
 		"thisWeek": "This week",
 		"showActive": "Active goals",
 		"showArchived": "Archived",
-		"empty": "No goals yet. Create one to start tracking your week.",
 		"emptyArchived": "No archived goals.",
 		"newGoalPlaceholder": "e.g. Make a video",
 		"createGoal": "Create goal",
@@ -2314,9 +2311,15 @@
 			"saved": "Note saved",
 			"conflict": "This note changed elsewhere. Reload to get the latest version, then re-apply your edit.",
 			"reloadNote": "Reload latest note",
-			"noRow": "No check-in row exists for this day yet — tick the day in the grid first, then write its note.",
+			"noRow": "No check-in row for this day yet.",
 			"relatedDocs": "Open project docs",
-			"startEntry": "Start an entry for this day"
+			"startEntry": "Start an entry for this day",
+			"previousDay": "Previous day",
+			"nextDay": "Next day",
+			"today": "Today",
+			"history": "Note history",
+			"unsavedNote": "Unsaved note — save it before switching days.",
+			"chooseDate": "Choose date"
 		},
 		"errors": {
 			"loadFailed": "Could not load goals",
@@ -2324,6 +2327,7 @@
 			"createFailed": "Could not create the goal",
 			"toggleFailed": "Could not update the check-in",
 			"saveFailed": "Could not save the note"
-		}
+		},
+		"weeklyTarget": "{{target}}/week target"
 	}
 }

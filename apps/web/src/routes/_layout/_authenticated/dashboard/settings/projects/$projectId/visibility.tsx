@@ -34,6 +34,7 @@ function RouteComponent() {
   const { mutateAsync: updateProject } = useUpdateProject();
   const { hasPermission } = useWorkspacePermission();
   const savingRef = useRef(false);
+  const publicUrlInputRef = useRef<HTMLInputElement | null>(null);
   // `project:share` isn't in CAPABILITIES (only admin/owner/custom roles
   // with it can flip visibility), so use the generic server check. Result
   // isn't cached, but visibility is a rarely-toggled setting page.
@@ -138,18 +139,26 @@ function RouteComponent() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Input readOnly value={publicUrl} className="w-96" />
+                <Input
+                  ref={publicUrlInputRef}
+                  readOnly
+                  value={publicUrl}
+                  className="w-96"
+                  onFocus={(event) => event.currentTarget.select()}
+                />
                 <Button
                   size="sm"
-                  onClick={() => {
+                  onClick={async () => {
                     if (!publicUrl) return;
-                    navigator.clipboard
-                      .writeText(publicUrl)
-                      .then(() =>
-                        toast.success(
-                          t("settings:projectVisibility.copiedToast"),
-                        ),
+                    try {
+                      await navigator.clipboard.writeText(publicUrl);
+                      toast.success(
+                        t("settings:projectVisibility.copiedToast"),
                       );
+                    } catch {
+                      publicUrlInputRef.current?.select();
+                      toast.error(t("settings:projectVisibility.copyFailed"));
+                    }
                   }}
                 >
                   {t("settings:projectVisibility.copy")}
@@ -174,7 +183,6 @@ function RouteComponent() {
               <ShareDialog
                 resourceType="project"
                 resourceId={project?.id || ""}
-                resourceLabel={project?.name || ""}
                 canShare={canShare}
               />
             </div>

@@ -703,7 +703,8 @@
 			"copy": "Копировать",
 			"copiedToast": "Скопировано",
 			"toastUpdated": "Видимость обновлена",
-			"toastUpdateError": "Не удалось обновить видимость"
+			"toastUpdateError": "Не удалось обновить видимость",
+			"copyFailed": "Не удалось скопировать. Выберите URL и скопируйте его вручную."
 		},
 		"projectWorkflow": {
 			"pageTitle": "Настройки рабочего процесса",
@@ -2297,7 +2298,8 @@
 		"errors": {
 			"loadFailed": "Could not load documents",
 			"retry": "Try again"
-		}
+		},
+		"archivedSection": "В архиве"
 	},
 	"share": {
 		"badge": "Shared",
@@ -2306,15 +2308,12 @@
 		"copyHint": "Copy this link now — the token is shown only once.",
 		"create": "Create link",
 		"creating": "Creating…",
-		"description": "Anyone with the link gets exactly this access. The link can be revoked at any time.",
 		"document": {
 			"rawHint": "Agents can fetch this document as plain Markdown at /raw.",
 			"updated": "Updated {{date}}"
 		},
 		"documentTitle": "Shared document",
 		"editScopeNote": "This edit link can create and update basic task fields only. It cannot delete, assign people, or change project settings.",
-		"editWarning": "An edit link lets anyone holding the URL change this resource without signing in. Holders cannot be reliably identified. Edit links expire after 30 days and can be revoked anytime.",
-		"empty": "No share links yet.",
 		"expires": "Expires {{date}}",
 		"footer": "Shared with a scoped link. The owner can revoke access at any time.",
 		"goal": {
@@ -2339,11 +2338,10 @@
 		},
 		"revoke": "Revoke link",
 		"revoked": "Revoked",
-		"title": "Share \"{{name}}\"",
+		"title": "Поделиться",
 		"unsupported": "This resource type cannot be displayed here.",
 		"capabilityLinks": "Capability share links",
 		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
-		"confirmEdit": "Confirm edit link",
 		"errors": {
 			"createFailed": "Could not create the share link",
 			"revokeFailed": "Could not revoke the link"
@@ -2352,7 +2350,6 @@
 	"goals": {
 		"archive": "Archive",
 		"createGoal": "Create goal",
-		"empty": "No goals yet. Create one to start tracking your week.",
 		"emptyArchived": "No archived goals.",
 		"goalColumn": "Goal",
 		"matrixAria": "Weekly goals matrix",
@@ -2365,7 +2362,7 @@
 		"sheet": {
 			"completed": "done",
 			"conflict": "This note changed elsewhere. Reload to get the latest version, then re-apply your edit.",
-			"noRow": "No check-in row exists for this day yet — tick the day in the grid first, then write its note.",
+			"noRow": "За этот день ещё нет отметки check-in.",
 			"notCompleted": "not done",
 			"notePlaceholder": "Write a Markdown note for this day…",
 			"reloadNote": "Reload latest note",
@@ -2373,7 +2370,13 @@
 			"saved": "Note saved",
 			"saving": "Saving…",
 			"relatedDocs": "Open project docs",
-			"startEntry": "Start an entry for this day"
+			"startEntry": "Start an entry for this day",
+			"history": "История заметок",
+			"nextDay": "Следующий день",
+			"previousDay": "Предыдущий день",
+			"today": "Сегодня",
+			"unsavedNote": "Заметка не сохранена — сохраните её перед сменой дня.",
+			"chooseDate": "Выбрать дату"
 		},
 		"showActive": "Active goals",
 		"showArchived": "Archived",
@@ -2386,6 +2389,7 @@
 			"retry": "Try again",
 			"saveFailed": "Could not save the note",
 			"toggleFailed": "Could not update the check-in"
-		}
+		},
+		"weeklyTarget": "Цель: {{target}} в неделю"
 	}
 }

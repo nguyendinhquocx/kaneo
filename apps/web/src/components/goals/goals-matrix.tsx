@@ -23,7 +23,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  type GoalCheckinType,
   type GoalType,
   useCreateGoal,
   useGetGoals,
@@ -68,7 +67,6 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
   const [noteTarget, setNoteTarget] = useState<{
     goal: GoalType;
     dateKey: string;
-    checkin?: GoalCheckinType;
   } | null>(null);
   const createGoal = useCreateGoal();
   const toggleCheckin = useToggleGoalCheckin();
@@ -132,14 +130,7 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
 
   const openNote = (goal: GoalType) => {
     const todayKey = formatDateKey(new Date());
-    const target =
-      goal.checkins.find((ci) => ci.checkInDate === todayKey) ??
-      goal.checkins[goal.checkins.length - 1];
-    setNoteTarget({
-      goal,
-      dateKey: target?.checkInDate ?? todayKey,
-      checkin: target,
-    });
+    setNoteTarget({ goal, dateKey: todayKey });
   };
 
   const checkinFor = (goal: GoalType, dateKey: string) =>
@@ -225,7 +216,7 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
           )}
           {showArchived ? t("showActive") : t("showArchived")}
         </Button>
-        {canWrite ? createForm : null}
+        {canWrite && goals.length > 0 ? createForm : null}
       </div>
 
       {isError ? (
@@ -245,9 +236,11 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
         </div>
       ) : goals.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            {showArchived ? t("emptyArchived") : t("empty")}
-          </p>
+          {showArchived ? (
+            <p className="text-sm text-muted-foreground">
+              {t("emptyArchived")}
+            </p>
+          ) : null}
           {canWrite && !showArchived ? createForm : null}
         </div>
       ) : (
@@ -288,7 +281,9 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
               </TableHeader>
               <TableBody>
                 {goals.map((goal) => {
-                  const total = goal.totalCompleted;
+                  // UAT: "Tổng" counts every week, not just the viewed one;
+                  // the per-week target stays as a tooltip on the cell.
+                  const total = goal.totalAllTime;
                   const target = goal.targetPerWeek;
                   return (
                     <TableRow
@@ -322,8 +317,13 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
                           </TableCell>
                         );
                       })}
-                      <TableCell className="text-center text-sm font-medium tabular-nums">
-                        {target ? `${total}/${target}` : total}
+                      <TableCell
+                        className="text-center text-sm font-medium tabular-nums"
+                        title={
+                          target ? t("weeklyTarget", { target }) : undefined
+                        }
+                      >
+                        {total}
                       </TableCell>
                       <TableCell className="text-center">
                         <Button
@@ -340,7 +340,6 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
                         <ShareDialog
                           resourceType="goal"
                           resourceId={goal.id}
-                          resourceLabel={goal.name}
                           canShare={canWrite}
                         />
                       </TableCell>
@@ -382,7 +381,6 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
         <GoalDetailsSheet
           goal={noteTarget.goal}
           dateKey={noteTarget.dateKey}
-          checkin={noteTarget.checkin}
           onClose={() => setNoteTarget(null)}
         />
       ) : null}

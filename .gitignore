@@ -42,6 +42,7 @@ yarn-error.log*
 
 # Cache
 .cache/
+apps/web/.tanstack/
 
 # Local worktrees
 .worktrees/

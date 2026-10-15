@@ -9,8 +9,10 @@ import {
   canWriteGoal,
   createGoal,
   getCheckinsInRange,
+  getCompletedCountsByGoal,
   getGoal,
   getGoalCheckin,
+  listCheckinsForGoal,
   listGoalsForWorkspace,
   setGoalArchived,
   toggleCheckin,
@@ -121,6 +123,9 @@ const goal = new Hono<{
               to,
             )
           : new Map();
+      const completedCounts = await getCompletedCountsByGoal(
+        goals.map((g) => g.id),
+      );
 
       return c.json(
         goals.map((goal) => {
@@ -130,9 +135,38 @@ const goal = new Hono<{
             ...goal,
             checkins,
             totalCompleted,
+            totalAllTime: completedCounts.get(goal.id) ?? 0,
           };
         }),
       );
+    },
+  )
+  .get(
+    "/:id/checkins",
+    describeRoute({
+      operationId: "listGoalCheckins",
+      tags: ["Goals"],
+      description:
+        "List every check-in row of one goal (any week) for the note history sheet",
+      responses: {
+        200: {
+          description: "Check-in rows ordered by date",
+          content: { "application/json": { schema: resolver(v.any()) } },
+        },
+      },
+    }),
+    validator("param", v.object({ id: v.string() })),
+    workspaceAccess.fromGoal(),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const userId = c.get("userId");
+
+      const goal = await getGoal(id);
+      if (!canReadGoal(goal, userId)) {
+        // 404 to match sibling read paths and avoid existence disclosure.
+        return goalResponseError(404);
+      }
+      return c.json(await listCheckinsForGoal(id));
     },
   )
   .put(
@@ -251,11 +285,17 @@ const goal = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
-    validator("json", v.object({ date: v.string() })),
+    validator(
+      "json",
+      v.object({
+        date: v.string(),
+        ensureOnly: v.optional(v.boolean()),
+      }),
+    ),
     workspaceAccess.fromGoal(),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { date } = c.req.valid("json");
+      const { date, ensureOnly } = c.req.valid("json");
       const userId = c.get("userId");
 
       assertDateString(date);
@@ -268,7 +308,7 @@ const goal = new Hono<{
       }
       assertNotArchived(existing);
 
-      const { row } = await toggleCheckin(id, date, userId);
+      const { row } = await toggleCheckin(id, date, userId, { ensureOnly });
       return c.json(row);
     },
   )

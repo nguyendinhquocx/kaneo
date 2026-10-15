@@ -886,6 +886,10 @@ export default function CommentEditor({
       onUpdate: ({ editor: activeEditor }) => {
         if (readOnly || disabled || !onChange || isSyncingRef.current) return;
         const markdown = normalizeMarkdown(activeEditor.getMarkdown());
+        // UAT repair: a programmatic sync can surface as an update event with
+        // unchanged markdown — only propagate real changes, otherwise the
+        // document autosave fires with empty content right after mount.
+        if (markdown === latestValueRef.current) return;
         latestValueRef.current = markdown;
         onChange(markdown);
       },

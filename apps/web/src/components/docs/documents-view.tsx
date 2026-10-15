@@ -1,6 +1,12 @@
-import { FileText, Plus } from "lucide-react";
+import { Archive, ChevronRight, FileText, Plus } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsiblePanel,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   type DocumentSummaryType,
   useArchiveDocument,
@@ -27,9 +33,16 @@ export default function DocumentsView({
     isError,
     refetch,
   } = useGetDocuments(projectId);
+  // UAT: archived documents used to vanish from the UI with no way back —
+  // fetch the archived set and always show a restore section when non-empty.
+  const { data: allDocuments = [] } = useGetDocuments(projectId, true);
+  const archivedDocuments = allDocuments.filter(
+    (document) => document.archivedAt !== null,
+  );
   const archiveDocument = useArchiveDocument();
   const { canWriteDocuments } = useWorkspacePermission();
   const canWrite = canWriteDocuments();
+  const [archivedOpen, setArchivedOpen] = useState(false);
 
   if (isError) {
     return (
@@ -54,7 +67,7 @@ export default function DocumentsView({
     );
   }
 
-  if (documents.length === 0) {
+  if (documents.length === 0 && archivedDocuments.length === 0) {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-4 py-16 text-center">
         <FileText className="size-8 text-muted-foreground" />
@@ -68,6 +81,71 @@ export default function DocumentsView({
       </div>
     );
   }
+
+  const archivedSection =
+    archivedDocuments.length > 0 ? (
+      <Collapsible
+        open={archivedOpen}
+        onOpenChange={setArchivedOpen}
+        className="mt-6"
+      >
+        <CollapsibleTrigger
+          className="data-panel-open:[&_svg]:rotate-90"
+          render={
+            <button
+              type="button"
+              className="flex w-full items-center gap-1.5 text-left"
+            />
+          }
+        >
+          <ChevronRight className="size-3.5 text-muted-foreground transition-transform" />
+          <Archive className="size-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("archivedSection")} ({archivedDocuments.length})
+          </span>
+        </CollapsibleTrigger>
+        <CollapsiblePanel>
+          <ul className="mt-2 space-y-1.5">
+            {archivedDocuments.map((document: DocumentSummaryType) => (
+              <li key={document.id}>
+                <div className="flex items-center gap-3 rounded-lg border border-border/80 bg-card px-3 py-2.5 opacity-80">
+                  <FileText className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-foreground">
+                      {document.title}
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {new Date(document.updatedAt).toLocaleString(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                      {` · ${t("archivedBadge")}`}
+                    </span>
+                  </span>
+                  {canWrite ? (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="shrink-0 text-[11px] text-muted-foreground"
+                      disabled={archiveDocument.isPending}
+                      onClick={() =>
+                        archiveDocument.mutate({
+                          id: document.id,
+                          archived: false,
+                          projectId,
+                        })
+                      }
+                    >
+                      {t("unarchive")}
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </CollapsiblePanel>
+      </Collapsible>
+    ) : null;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-4">
@@ -131,6 +209,7 @@ export default function DocumentsView({
           </li>
         ))}
       </ul>
+      {archivedSection}
     </div>
   );
 }

@@ -101,6 +101,7 @@ function DocumentComments({ documentId }: { documentId: string }) {
         <div className="mt-2 flex justify-end">
           <Button
             size="xs"
+            className="min-h-11 sm:min-h-6"
             disabled={!draft.trim() || createComment.isPending}
             onClick={handleSubmit}
           >
@@ -130,10 +131,31 @@ export default function DocumentWorkspace({
   const [draftSnapshot, setDraftSnapshot] = useState<string | null>(null);
   const loadedDocId = useRef<string | null>(null);
   const dirtyRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const pendingSaveRef = useRef<{ title: string; content: string } | null>(
+    null,
+  );
+  const titleRef = useRef("");
+  const contentRef = useRef("");
 
   useEffect(() => {
-    if (document && loadedDocId.current !== document.id) {
+    if (!document) return;
+    // UAT fix: navigating away and back served a stale cached copy (empty
+    // content) and the id-only guard never re-initialized from the fresh
+    // fetch. Re-init on a new id, or on fresh server data while not dirty —
+    // a local unsaved draft always wins.
+    const isNewDocument = loadedDocId.current !== document.id;
+    // Reviewer P2: react-query invalidation refetches AFTER the save resolves,
+    // so a stale cached copy (revision < local) must never overwrite state.
+    // Only a strictly newer server revision re-initializes a clean editor.
+    const hasFreshServerData =
+      !dirtyRef.current &&
+      saveState !== "conflict" &&
+      document.revision > revision;
+    if (isNewDocument || hasFreshServerData) {
       loadedDocId.current = document.id;
+      titleRef.current = document.title;
+      contentRef.current = document.content;
       setTitle(document.title);
       setContent(document.content);
       setRevision(document.revision);
@@ -141,31 +163,60 @@ export default function DocumentWorkspace({
       setDraftSnapshot(null);
       dirtyRef.current = false;
     }
-  }, [document]);
+  }, [document, revision, saveState]);
 
   const save = useCallback(
     async (nextTitle: string, nextContent: string) => {
       if (!document) return;
+      if (saveInFlightRef.current) {
+        pendingSaveRef.current = { title: nextTitle, content: nextContent };
+        return;
+      }
+
+      saveInFlightRef.current = true;
+      let snapshot = { title: nextTitle, content: nextContent };
+      let expectedRevision = revision;
       setSaveState("saving");
       try {
-        const result = await updateDocument.mutateAsync({
-          id: document.id,
-          title: nextTitle,
-          content: nextContent,
-          revision,
-        });
-        if ("conflict" in result) {
-          setSaveState("conflict");
-          setDraftSnapshot(nextContent);
-          return;
+        while (true) {
+          const result = await updateDocument.mutateAsync({
+            id: document.id,
+            title: snapshot.title,
+            content: snapshot.content,
+            revision: expectedRevision,
+          });
+          if ("conflict" in result) {
+            setSaveState("conflict");
+            setDraftSnapshot(contentRef.current);
+            pendingSaveRef.current = null;
+            return;
+          }
+
+          expectedRevision = result.revision;
+          setRevision(result.revision);
+          const draftMatchesSavedSnapshot =
+            titleRef.current === snapshot.title &&
+            contentRef.current === snapshot.content;
+          if (draftMatchesSavedSnapshot) {
+            dirtyRef.current = false;
+            setSaveState("saved");
+            pendingSaveRef.current = null;
+            return;
+          }
+
+          dirtyRef.current = true;
+          setSaveState("saving");
+          const pending = pendingSaveRef.current;
+          if (!pending) return;
+          snapshot = pending;
+          pendingSaveRef.current = null;
         }
-        setRevision(result.revision);
-        setSaveState("saved");
-        dirtyRef.current = false;
       } catch {
         // P1-1 fix: network/server failures surface as a visible error state
         // instead of an unhandled rejection stuck on "saving".
         setSaveState("error");
+      } finally {
+        saveInFlightRef.current = false;
       }
     },
     [document, revision, updateDocument],
@@ -174,8 +225,9 @@ export default function DocumentWorkspace({
   // Debounced autosave while typing.
   useEffect(() => {
     if (!document || !dirtyRef.current) return;
-    if (saveState === "conflict") return;
+    if (saveState === "conflict" || saveState === "error") return;
     const timer = window.setTimeout(() => {
+      if (!document || !dirtyRef.current) return;
       void save(title, content);
     }, 1200);
     return () => window.clearTimeout(timer);
@@ -183,6 +235,10 @@ export default function DocumentWorkspace({
 
   const handleContentChange = useCallback(
     (next: string) => {
+      contentRef.current = next;
+      if (saveInFlightRef.current) {
+        pendingSaveRef.current = { title: titleRef.current, content: next };
+      }
       setContent(next);
       dirtyRef.current = true;
       if (saveState !== "conflict") {
@@ -193,6 +249,10 @@ export default function DocumentWorkspace({
   );
 
   const handleTitleChange = (next: string) => {
+    titleRef.current = next;
+    if (saveInFlightRef.current) {
+      pendingSaveRef.current = { title: next, content: contentRef.current };
+    }
     setTitle(next);
     dirtyRef.current = true;
     if (saveState !== "conflict") {
@@ -204,16 +264,34 @@ export default function DocumentWorkspace({
     if (!document) return;
     // P1-2 fix: the cache holds our stale copy (conflict skips invalidation
     // and refetchOnMount is off), so reset must come from a fresh fetch.
-    const { data: fresh } = await refetch();
-    if (fresh) {
-      setTitle(fresh.title);
-      setContent(fresh.content);
-      setRevision(fresh.revision);
+    const result = await refetch();
+    if (!result.isSuccess || !result.data) {
+      toast.error(t("errors.loadFailed"));
+      return;
     }
+    titleRef.current = result.data.title;
+    contentRef.current = result.data.content;
+    setTitle(result.data.title);
+    setContent(result.data.content);
+    setRevision(result.data.revision);
     setSaveState("saved");
     setDraftSnapshot(null);
     dirtyRef.current = false;
-  }, [document, refetch]);
+  }, [document, refetch, t]);
+
+  const flushDraft = useCallback(() => {
+    if (dirtyRef.current) {
+      void save(titleRef.current, contentRef.current);
+    }
+  }, [save]);
+
+  const handleBack = async () => {
+    if (dirtyRef.current) {
+      await save(titleRef.current, contentRef.current);
+      if (dirtyRef.current) return;
+    }
+    onBack();
+  };
 
   const handleCopyDraft = async () => {
     if (draftSnapshot === null) return;
@@ -240,8 +318,9 @@ export default function DocumentWorkspace({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 gap-1.5 text-xs"
-          onClick={onBack}
+          className="h-11 min-h-11 gap-1.5 text-xs sm:h-7 sm:min-h-0"
+          disabled={updateDocument.isPending}
+          onClick={() => void handleBack()}
         >
           <ArrowLeft className="size-3.5" />
           {t("backToDocs")}
@@ -250,7 +329,7 @@ export default function DocumentWorkspace({
         <span
           aria-live="polite"
           className={cn(
-            "text-[11px]",
+            "shrink-0 whitespace-nowrap text-[11px]",
             saveState === "saved" && "text-muted-foreground",
             saveState === "saving" && "text-muted-foreground",
             saveState === "error" && "text-destructive",
@@ -266,9 +345,13 @@ export default function DocumentWorkspace({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 gap-1.5 text-xs"
-            disabled={archiveDocument.isPending}
+            className="h-11 min-h-11 gap-1.5 text-xs sm:h-7 sm:min-h-0"
+            disabled={archiveDocument.isPending || updateDocument.isPending}
             onClick={async () => {
+              if (dirtyRef.current) {
+                await save(titleRef.current, contentRef.current);
+                if (dirtyRef.current) return;
+              }
               await archiveDocument.mutateAsync({
                 id: document.id,
                 archived: document.archivedAt === null,
@@ -293,7 +376,6 @@ export default function DocumentWorkspace({
         <ShareDialog
           resourceType="document"
           resourceId={document.id}
-          resourceLabel={document.title}
           canShare={canWrite}
         />
       </div>
@@ -316,21 +398,42 @@ export default function DocumentWorkspace({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl space-y-3 px-4 py-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/* UAT: the editor takes the remaining viewport space and comments
+        stay at the lower edge instead of crowding the document title. */}
+        <div className="mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col px-4 py-4">
           <Input
             value={title}
             onChange={(event) => handleTitleChange(event.target.value)}
+            onBlur={flushDraft}
             disabled={!canWrite}
             placeholder={t("titlePlaceholder")}
             aria-label={t("titlePlaceholder")}
-            className="border-none bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
+            title={title}
+            className="border-none bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:ring-0 [&_[data-slot=input]]:truncate"
           />
-          <div className={cn(!canWrite && "pointer-events-none opacity-80")}>
+          <div
+            className={cn(
+              "flex flex-1 flex-col",
+              !canWrite && "pointer-events-none opacity-80",
+            )}
+            onBlurCapture={(event) => {
+              const nextTarget = event.relatedTarget;
+              if (
+                nextTarget instanceof Node &&
+                event.currentTarget.contains(nextTarget)
+              ) {
+                return;
+              }
+              flushDraft();
+            }}
+          >
             <CommentEditor
               value={content}
               onChange={handleContentChange}
               placeholder={t("contentPlaceholder")}
+              className="min-h-[45vh] flex-1"
+              contentClassName="min-h-[45vh]"
             />
           </div>
         </div>

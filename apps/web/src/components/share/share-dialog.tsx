@@ -1,11 +1,10 @@
-import { Copy, Link2, ShieldAlert, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Copy, Link2, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -23,7 +22,6 @@ import { toast } from "@/lib/toast";
 type ShareDialogProps = {
   resourceType: ShareResourceType;
   resourceId: string;
-  resourceLabel: string;
   canShare: boolean;
 };
 
@@ -39,7 +37,6 @@ function formatDate(value: string | null) {
 export default function ShareDialog({
   resourceType,
   resourceId,
-  resourceLabel,
   canShare,
 }: ShareDialogProps) {
   const { t } = useTranslation("share");
@@ -47,22 +44,43 @@ export default function ShareDialog({
   const createLink = useCreateShareLink();
   const revokeLink = useRevokeShareLink();
   const [permission, setPermission] = useState<"view" | "edit">("view");
-  const [editConfirmed, setEditConfirmed] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const urlInputRef = useRef<HTMLInputElement | null>(null);
+  const newLink = createLink.data;
 
   if (!canShare) {
     return null;
   }
 
   const handleCreate = () => {
-    if (permission === "edit" && !editConfirmed) {
-      setEditConfirmed(true);
-      return;
-    }
-    setEditConfirmed(false);
     createLink.mutate(
       { resourceType, resourceId, permission },
-      { onError: () => toast.error(t("errors.createFailed")) },
+      {
+        onSuccess: (created) => {
+          // UAT: the one-time URL was easy to miss at the bottom of the
+          // dialog — surface it right under the actions and pre-select it.
+          window.setTimeout(() => {
+            urlInputRef.current?.focus();
+            urlInputRef.current?.select();
+          }, 50);
+          // Reviewer P2: writeText rejects asynchronously when the clipboard
+          // is denied — only claim "copied" once it actually resolved.
+          try {
+            void navigator.clipboard
+              .writeText(created.url)
+              .then(() => {
+                setCopiedUrl(created.url);
+                window.setTimeout(() => setCopiedUrl(null), 2000);
+              })
+              .catch(() => {
+                // Clipboard unavailable — the URL stays selected in the input.
+              });
+          } catch {
+            // Clipboard API unavailable — the URL stays selected in the input.
+          }
+        },
+        onError: () => toast.error(t("errors.createFailed")),
+      },
     );
   };
 
@@ -76,13 +94,15 @@ export default function ShareDialog({
     }
   };
 
-  const activeLinks = links;
-
   return (
     <Dialog>
       <DialogTrigger
         render={
-          <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-11 min-h-11 gap-1.5 text-xs sm:h-7 sm:min-h-0"
+          >
             <Link2 className="size-3.5" />
             {t("manage")}
           </Button>
@@ -90,18 +110,17 @@ export default function ShareDialog({
       />
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("title", { name: resourceLabel })}</DialogTitle>
-          <DialogDescription>{t("description")}</DialogDescription>
+          <DialogTitle>{t("title")}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
             <div className="flex flex-1 gap-0.5 rounded-lg border border-border/80 bg-background p-0.5">
               <Button
                 variant={permission === "view" ? "secondary" : "ghost"}
                 size="xs"
                 onClick={() => setPermission("view")}
-                className="h-6 flex-1 text-xs"
+                className="h-11 flex-1 text-xs sm:h-6"
               >
                 {t("permission.view")}
               </Button>
@@ -109,112 +128,94 @@ export default function ShareDialog({
                 variant={permission === "edit" ? "secondary" : "ghost"}
                 size="xs"
                 onClick={() => setPermission("edit")}
-                className="h-6 flex-1 text-xs"
+                className="h-11 flex-1 text-xs sm:h-6"
               >
                 {t("permission.edit")}
               </Button>
             </div>
             <Button
               size="xs"
+              className="min-h-11 sm:min-h-6"
               onClick={handleCreate}
               disabled={createLink.isPending}
             >
-              {createLink.isPending
-                ? t("creating")
-                : editConfirmed && permission === "edit"
-                  ? t("confirmEdit")
-                  : t("create")}
+              {createLink.isPending ? t("creating") : t("create")}
             </Button>
           </div>
 
-          {permission === "edit" && editConfirmed && (
-            <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-2.5">
-              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
-              <p className="text-xs text-foreground">{t("editWarning")}</p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {activeLinks.length === 0 ? (
-              <p className="text-xs text-muted-foreground">{t("empty")}</p>
-            ) : (
-              activeLinks.map((link) => (
-                <div
-                  key={link.id}
-                  className="space-y-1.5 rounded-lg border border-border/80 p-2.5"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                        link.permission === "edit"
-                          ? "bg-warning/20 text-warning-foreground"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {link.permission === "edit"
-                        ? t("permission.edit")
-                        : t("permission.view")}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {link.expiresAt
-                        ? t("expires", {
-                            date: formatDate(link.expiresAt) ?? "",
-                          })
-                        : t("neverExpires")}
-                    </span>
-                    <div className="flex-1" />
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={t("revoke")}
-                      disabled={revokeLink.isPending}
-                      onClick={() =>
-                        revokeLink.mutate(link.id, {
-                          onError: () => toast.error(t("errors.revokeFailed")),
-                        })
-                      }
-                    >
-                      <Trash2 className="size-3.5 text-destructive" />
-                    </Button>
-                  </div>
-                  {link.revokedAt ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      {t("revoked")}
-                    </p>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </div>
-
-          {createLink.data ? (
-            <div className="space-y-1.5">
+          {newLink ? (
+            <div className="space-y-1.5 rounded-lg border border-border/80 bg-muted/40 p-2.5">
               <p className="text-[11px] text-muted-foreground">
                 {t("copyHint")}
               </p>
               <div className="flex items-center gap-1.5">
                 <Input
+                  ref={urlInputRef}
                   readOnly
-                  value={createLink.data.url}
+                  value={newLink.url}
                   onFocus={(event) => event.currentTarget.select()}
                   className="h-7 font-mono text-[11px]"
                 />
                 <Button
                   variant="secondary"
                   size="xs"
-                  className="h-7 gap-1.5"
-                  onClick={() => handleCopy(createLink.data.url)}
+                  className="h-11 gap-1.5 sm:h-7"
+                  onClick={() => handleCopy(newLink.url)}
                 >
                   <Copy className="size-3.5" />
-                  {copiedUrl === createLink.data.url ? t("copied") : t("copy")}
+                  {copiedUrl === newLink.url ? t("copied") : t("copy")}
                 </Button>
               </div>
-              {createLink.data.permission === "edit" ? (
+              {newLink.permission === "edit" ? (
                 <p className="text-[11px] text-muted-foreground">
                   {t("editScopeNote")}
                 </p>
               ) : null}
+            </div>
+          ) : null}
+
+          {links.length > 0 ? (
+            <div className="space-y-2">
+              {links.map((link) => (
+                <div
+                  key={link.id}
+                  className="flex items-center gap-2 rounded-lg border border-border/80 p-2.5"
+                >
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                      link.permission === "edit"
+                        ? "bg-warning/20 text-warning-foreground"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {link.permission === "edit"
+                      ? t("permission.edit")
+                      : t("permission.view")}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {link.expiresAt
+                      ? t("expires", { date: formatDate(link.expiresAt) ?? "" })
+                      : t("neverExpires")}
+                  </span>
+                  <div className="flex-1" />
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-11 p-0 sm:size-7"
+                    aria-label={t("revoke")}
+                    title={t("revoke")}
+                    disabled={revokeLink.isPending}
+                    onClick={() =>
+                      revokeLink.mutate(link.id, {
+                        onError: () => toast.error(t("errors.revokeFailed")),
+                      })
+                    }
+                  >
+                    <Trash2 className="size-3.5 text-destructive" />
+                  </Button>
+                </div>
+              ))}
             </div>
           ) : null}
         </div>

@@ -467,6 +467,10 @@ export const auth = betterAuth({
     openAPI(),
   ],
   session: {
+    // UAT: owner asked for 60-day sessions instead of the 7-day Better Auth
+    // default; weekly refresh keeps active devices alive indefinitely.
+    expiresIn: 60 * 24 * 60 * 60,
+    updateAge: 7 * 24 * 60 * 60,
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60,

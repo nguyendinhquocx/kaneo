@@ -37,46 +37,77 @@ export function useGetDocumentComments(documentId: string | null) {
   });
 }
 
-function useInvalidateDocument() {
-  const queryClient = useQueryClient();
-  return (documentId?: string, projectId?: string) => {
-    if (documentId) {
-      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
-    }
-    if (projectId) {
-      queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
-    }
+async function syncDocumentQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  document: DocumentFull,
+) {
+  // The app disables refetch-on-mount globally. Cancel older reads, then write
+  // the server result into every cached document view so navigation cannot
+  // reveal an invalidated but stale list row after save/archive/restore.
+  await Promise.all([
+    queryClient.cancelQueries({
+      queryKey: ["document", document.id],
+      exact: true,
+    }),
+    queryClient.cancelQueries({
+      queryKey: ["documents", document.projectId],
+    }),
+  ]);
+
+  queryClient.setQueryData(["document", document.id], document);
+  const summary: DocumentSummary = {
+    id: document.id,
+    projectId: document.projectId,
+    title: document.title,
+    revision: document.revision,
+    archivedAt: document.archivedAt,
+    createdByUserId: document.createdByUserId,
+    createdAt: document.createdAt,
+    updatedAt: document.updatedAt,
   };
+
+  for (const includeArchived of [false, true]) {
+    const queryKey = ["documents", document.projectId, includeArchived] as const;
+    queryClient.setQueryData<DocumentSummary[]>(queryKey, (current) => {
+      if (!current) return current;
+      const next = current.filter((item) => item.id !== document.id);
+      if (includeArchived || document.archivedAt === null) {
+        next.push(summary);
+      }
+      next.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+      return next;
+    });
+  }
 }
 
 export function useCreateDocument() {
-  const invalidate = useInvalidateDocument();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createDocument,
     onSuccess: (document: DocumentFull) =>
-      invalidate(document.id, document.projectId),
+      syncDocumentQueries(queryClient, document),
   });
 }
 
 export function useUpdateDocument() {
-  const invalidate = useInvalidateDocument();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: updateDocument,
     onSuccess: (result) => {
       if (!("conflict" in result)) {
-        invalidate(result.id, result.projectId);
+        return syncDocumentQueries(queryClient, result);
       }
     },
   });
 }
 
 export function useArchiveDocument() {
-  const invalidate = useInvalidateDocument();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { id: string; archived: boolean; projectId: string }) =>
       archiveDocument(input.id, input.archived),
     onSuccess: (document: DocumentFull) =>
-      invalidate(document.id, document.projectId),
+      syncDocumentQueries(queryClient, document),
   });
 }
 

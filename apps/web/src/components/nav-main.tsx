@@ -29,18 +29,19 @@ export function NavMain() {
 
   const navItems = [
     {
-      title: t("navigation:sidebar.projects"),
-      url: `/dashboard/workspace/${workspace.id}`,
-      isActive:
-        window.location.pathname === `/dashboard/workspace/${workspace.id}`,
-      badge: null,
-    },
-    {
+      // UAT: goals come first in the sidebar — it is the daily surface.
       title: t("navigation:sidebar.goals"),
       url: `/dashboard/workspace/${workspace.id}/goals`,
       isActive:
         window.location.pathname ===
         `/dashboard/workspace/${workspace.id}/goals`,
+      badge: null,
+    },
+    {
+      title: t("navigation:sidebar.projects"),
+      url: `/dashboard/workspace/${workspace.id}`,
+      isActive:
+        window.location.pathname === `/dashboard/workspace/${workspace.id}`,
       badge: null,
     },
     {

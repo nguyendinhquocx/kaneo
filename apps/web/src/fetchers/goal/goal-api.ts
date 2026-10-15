@@ -30,6 +30,7 @@ export type GoalCheckin = {
 export type GoalWithCheckins = Goal & {
   checkins: GoalCheckin[];
   totalCompleted: number;
+  totalAllTime: number;
 };
 
 export async function listGoals(input: {
@@ -52,6 +53,16 @@ export async function listGoals(input: {
   return (await response.json()) as GoalWithCheckins[];
 }
 
+export async function getGoalCheckins(goalId: string) {
+  const response = await client.goal[":id"].checkins.$get({
+    param: { id: goalId },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as GoalCheckin[];
+}
+
 export async function createGoal(input: {
   workspaceId: string;
   name: string;
@@ -70,10 +81,11 @@ export async function createGoal(input: {
 export async function toggleGoalCheckin(input: {
   goalId: string;
   date: string;
+  ensureOnly?: boolean;
 }) {
   const response = await client.goal[":id"].checkin.$post({
     param: { id: input.goalId },
-    json: { date: input.date },
+    json: { date: input.date, ensureOnly: input.ensureOnly },
   });
   if (response.status === 409) {
     return { archived: true as const };

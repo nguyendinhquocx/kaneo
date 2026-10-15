@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createGoal,
   type Goal,
-  type GoalCheckin,
   type GoalWithCheckins,
+  getGoalCheckins,
   listGoals,
   setGoalArchived,
   toggleGoalCheckin,
@@ -47,6 +47,9 @@ export function useToggleGoalCheckin() {
       if (!("archived" in result)) {
         queryClient.invalidateQueries({ queryKey: ["goals"] });
         queryClient.invalidateQueries({
+          queryKey: ["goal-checkins"],
+        });
+        queryClient.invalidateQueries({
           queryKey: ["goal-checkin", result.id],
         });
       }
@@ -61,11 +64,20 @@ export function useUpdateGoalCheckinNote() {
     onSuccess: (result) => {
       if (!("conflict" in result)) {
         queryClient.invalidateQueries({ queryKey: ["goals"] });
+        queryClient.invalidateQueries({ queryKey: ["goal-checkins"] });
         queryClient.invalidateQueries({
           queryKey: ["goal-checkin", result.id],
         });
       }
     },
+  });
+}
+
+export function useGetGoalCheckins(goalId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["goal-checkins", goalId],
+    queryFn: () => getGoalCheckins(goalId as string),
+    enabled: Boolean(goalId) && enabled,
   });
 }
 
@@ -80,4 +92,3 @@ export function useSetGoalArchived() {
 }
 
 export type GoalType = GoalWithCheckins;
-export type GoalCheckinType = GoalCheckin;

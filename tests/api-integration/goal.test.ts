@@ -92,13 +92,15 @@ describe("API integration: goals and check-ins", () => {
     const mateGoals = (await mateList.json()) as Array<{ id: string }>;
     expect(mateGoals).toHaveLength(0);
 
-    // Teammate cannot toggle the private goal either.
+    // Teammate cannot toggle or read the private goal either.
     const denied = await app2.request(`/api/goal/${goal.id}/checkin`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ date: "2026-10-12" }),
     });
     expect(denied.status).toBe(404);
+    const hiddenHistory = await app2.request(`/api/goal/${goal.id}/checkins`);
+    expect(hiddenHistory.status).toBe(404);
   });
 
   it("check-in toggles with DATE values, keeps history and supports CAS notes", async () => {
@@ -197,6 +199,64 @@ describe("API integration: goals and check-ins", () => {
     const wideGoal = goals2.find((g) => g.id === goal.id);
     expect(wideGoal?.totalCompleted).toBe(0);
     expect(wideGoal?.checkins).toHaveLength(1);
+  });
+
+  it("reports all-time totals and exposes full note history without ticking note-only days", async () => {
+    const owner = await createWorkspaceMember({ role: "member" });
+    const goal = await seedGoal(owner.workspace.id, owner.user.id, {
+      visibility: "workspace",
+    });
+    mockAuthenticatedSession(owner.user);
+    const { app } = createApp();
+
+    const postCheckin = (date: string, ensureOnly = false) =>
+      app.request(`/api/goal/${goal.id}/checkin`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          date,
+          ...(ensureOnly ? { ensureOnly: true } : {}),
+        }),
+      });
+
+    // One completion in an earlier week and one in the viewed week.
+    expect((await postCheckin("2026-10-05")).status).toBe(200);
+    expect((await postCheckin("2026-10-12")).status).toBe(200);
+
+    // A note-only row is idempotent and must not toggle a day to completed.
+    const noteOnly = await postCheckin("2026-10-13", true);
+    expect(noteOnly.status).toBe(200);
+    expect(((await noteOnly.json()) as { completed: boolean }).completed).toBe(
+      false,
+    );
+    const ensureExisting = await postCheckin("2026-10-13", true);
+    expect(
+      ((await ensureExisting.json()) as { completed: boolean }).completed,
+    ).toBe(false);
+
+    const rangeResponse = await app.request(
+      `/api/goal?workspaceId=${owner.workspace.id}&from=2026-10-12&to=2026-10-18`,
+    );
+    const rangeGoals = (await rangeResponse.json()) as Array<{
+      id: string;
+      totalCompleted: number;
+      totalAllTime: number;
+    }>;
+    const viewedGoal = rangeGoals.find((item) => item.id === goal.id);
+    expect(viewedGoal?.totalCompleted).toBe(1);
+    expect(viewedGoal?.totalAllTime).toBe(2);
+
+    const history = await app.request(`/api/goal/${goal.id}/checkins`);
+    expect(history.status).toBe(200);
+    const rows = (await history.json()) as Array<{
+      checkInDate: string;
+      completed: boolean;
+    }>;
+    expect(rows.map((row) => [row.checkInDate, row.completed])).toEqual([
+      ["2026-10-05", true],
+      ["2026-10-12", true],
+      ["2026-10-13", false],
+    ]);
   });
 
   it("shared goal can be ticked by a collaborator with task:update but not a viewer", async () => {
