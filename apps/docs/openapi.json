@@ -12085,7 +12085,8 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "Column slug, current column name, or slugified current name. Unknown values map to planned with a warning; ambiguous names fail the task import."
                         },
                         "priority": {
                           "type": "string"
@@ -12106,7 +12107,8 @@
                           "type": [
                             "string",
                             "null"
-                          ]
+                          ],
+                          "description": "Assignable user's ID or email address. Emails match case-insensitively. Null, empty, or omitted leaves the task unassigned."
                         }
                       },
                       "required": [
