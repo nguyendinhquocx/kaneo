@@ -1079,12 +1079,26 @@ input:-webkit-autofill:active {
     overflow-y: auto;
     padding: 0.62rem 0.75rem 2.9rem;
     font-family: var(--font-sans);
-    font-size: 0.92rem;
-    line-height: 1.62;
+    font-size: 0.92rem;    line-height: 1.62;
     white-space: pre-wrap;
     color: var(--foreground);
     caret-color: var(--foreground);
     outline: none;
+  }
+
+  /* R2-T1: docs editor fills its reserved space — the whole area below the
+  title is part of the editable content and grows with it (no inner
+  scrollbar; the outer page scrolls). */
+  .kaneo-comment-editor-fill {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kaneo-comment-editor-fill .ProseMirror {
+    flex: 1 0 auto;
+    min-height: 45vh;
+    max-height: none;
+    overflow: visible;
   }
 
   .kaneo-comment-editor-shell-readonly .kaneo-comment-editor-content .ProseMirror {

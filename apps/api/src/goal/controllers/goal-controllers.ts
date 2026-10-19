@@ -221,6 +221,29 @@ export async function setGoalArchived(goalId: string, archived: boolean) {
   return updated;
 }
 
+// R2-T6: hard delete. Check-ins cascade via the goal_checkin FK. Allowed for
+// the goal owner or task:delete (workspace admin/owner) — collaborators who
+// can only write cannot destroy someone's history.
+export async function deleteGoal(goalId: string, userId: string) {
+  const goal = await getGoal(goalId);
+  const allowed =
+    goal.ownerUserId === userId ||
+    (await hasUserWorkspacePermission(userId, goal.workspaceId, {
+      task: ["delete"],
+    }));
+  if (!allowed) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  const [deleted] = await db
+    .delete(schema.goalTable)
+    .where(eq(schema.goalTable.id, goalId))
+    .returning();
+  if (!deleted) {
+    throw new HTTPException(404, { message: "Goal not found" });
+  }
+  return deleted;
+}
+
 // Toggle semantics: existing row flips completed, missing row is created as
 // completed. The row is never deleted, so history (and the note) survives.
 // Concurrent submits are serialized with SELECT ... FOR UPDATE; both requests

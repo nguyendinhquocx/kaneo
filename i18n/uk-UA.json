@@ -2243,7 +2243,16 @@
 			"loadFailed": "Could not load documents",
 			"retry": "Try again"
 		},
-		"archivedSection": "В архіві"
+		"archivedSection": "В архіві",
+		"delete": {
+			"action": "Delete document",
+			"cancel": "Cancel",
+			"description": "Permanently delete \"{{name}}\" and all of its comments. This cannot be undone.",
+			"error": "Failed to delete document",
+			"success": "Document deleted",
+			"title": "Delete document?"
+		},
+		"deleteButton": "Delete"
 	},
 	"share": {
 		"badge": "Shared",
@@ -2257,13 +2266,16 @@
 			"updated": "Updated {{date}}"
 		},
 		"documentTitle": "Shared document",
-		"editScopeNote": "This edit link can create and update basic task fields only. It cannot delete, assign people, or change project settings.",
 		"expires": "Expires {{date}}",
-		"footer": "Shared with a scoped link. The owner can revoke access at any time.",
 		"goal": {
-			"done": "done",
-			"notDone": "not done",
-			"total": "{{total}}/{{target}} days completed"
+			"matrixGoal": "Goal",
+			"nextWeek": "Next week",
+			"notesTitle": "Notes",
+			"perWeek": " · target {{target}}/week",
+			"prevWeek": "Previous week",
+			"thisWeek": "This week",
+			"totalAllTime": "{{total}} completions",
+			"totalColumn": "Total"
 		},
 		"invalid": {
 			"description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
@@ -2332,8 +2344,16 @@
 			"loadFailed": "Could not load goals",
 			"retry": "Try again",
 			"saveFailed": "Could not save the note",
-			"toggleFailed": "Could not update the check-in"
+			"toggleFailed": "Could not update the check-in",
+			"deleteFailed": "Failed to delete goal"
 		},
-		"weeklyTarget": "Ціль: {{target}} на тиждень"
+		"weeklyTarget": "Ціль: {{target}} на тиждень",
+		"delete": {
+			"action": "Delete goal",
+			"aria": "Delete goal",
+			"cancel": "Cancel",
+			"description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
+			"title": "Delete goal?"
+		}
 	}
 }

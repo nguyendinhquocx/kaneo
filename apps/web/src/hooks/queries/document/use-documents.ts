@@ -6,6 +6,7 @@ import {
   type DocumentComment,
   type DocumentFull,
   type DocumentSummary,
+  deleteDocument,
   deleteDocumentComment,
   getDocument,
   listDocumentComments,
@@ -67,7 +68,11 @@ async function syncDocumentQueries(
   };
 
   for (const includeArchived of [false, true]) {
-    const queryKey = ["documents", document.projectId, includeArchived] as const;
+    const queryKey = [
+      "documents",
+      document.projectId,
+      includeArchived,
+    ] as const;
     queryClient.setQueryData<DocumentSummary[]>(queryKey, (current) => {
       if (!current) return current;
       const next = current.filter((item) => item.id !== document.id);
@@ -129,6 +134,25 @@ export function useDeleteDocumentComment() {
     mutationFn: deleteDocumentComment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["document-comments"] });
+    },
+  });
+}
+
+export function useDeleteDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteDocument,
+    onSuccess: (deleted: DocumentFull) => {
+      // R2-T4: hard delete — drop the detail cache and the row from both
+      // list views instead of syncing a tombstone.
+      queryClient.removeQueries({ queryKey: ["document", deleted.id] });
+      for (const includeArchived of [false, true]) {
+        queryClient.setQueryData<DocumentSummary[]>(
+          ["documents", deleted.projectId, includeArchived],
+          (current) =>
+            current?.filter((item) => item.id !== deleted.id) ?? current,
+        );
+      }
     },
   });
 }

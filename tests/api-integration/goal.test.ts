@@ -424,4 +424,81 @@ describe("API integration: goals and check-ins", () => {
     expect(payload.checkins).toHaveLength(1);
     expect(payload.checkins[0]?.checkInDate).toBe("2026-10-12");
   });
+
+  it("R2-T6 goal delete: owner and task:delete admins can; task:update collaborators cannot", async () => {
+    const owner = await createWorkspaceMember({ role: "member" });
+    const teammate = await createWorkspaceMember({ role: "member" });
+    const admin = await createWorkspaceMember({ role: "admin" });
+    await db.insert(schema.workspaceUserTable).values([
+      {
+        workspaceId: owner.workspace.id,
+        userId: teammate.user.id,
+        role: "member",
+        joinedAt: new Date(),
+      },
+      {
+        workspaceId: owner.workspace.id,
+        userId: admin.user.id,
+        role: "admin",
+        joinedAt: new Date(),
+      },
+    ]);
+    const goal = await seedGoal(owner.workspace.id, owner.user.id, {
+      visibility: "workspace",
+    });
+    await db.insert(schema.goalCheckinTable).values({
+      goalId: goal.id,
+      checkInDate: "2026-10-12",
+      completed: true,
+    });
+
+    // Collaborator with task:update cannot hard-delete someone else's goal.
+    mockAuthenticatedSession(teammate.user);
+    const { app: teammateApp } = createApp();
+    const denied = await teammateApp.request(`/api/goal/${goal.id}`, {
+      method: "DELETE",
+    });
+    expect(denied.status).toBe(403);
+    const stillThere = await db
+      .select()
+      .from(schema.goalTable)
+      .where(eq(schema.goalTable.id, goal.id));
+    expect(stillThere).toHaveLength(1);
+
+    // Admin (task:delete) can; check-ins cascade.
+    mockAuthenticatedSession(admin.user);
+    const { app: adminApp } = createApp();
+    const deleted = await adminApp.request(`/api/goal/${goal.id}`, {
+      method: "DELETE",
+    });
+    expect(deleted.status).toBe(200);
+    const goneGoal = await db
+      .select()
+      .from(schema.goalTable)
+      .where(eq(schema.goalTable.id, goal.id));
+    expect(goneGoal).toHaveLength(0);
+    const goneCheckins = await db
+      .select()
+      .from(schema.goalCheckinTable)
+      .where(eq(schema.goalCheckinTable.goalId, goal.id));
+    expect(goneCheckins).toHaveLength(0);
+
+    // Owner deletes their own goal without any workspace role gate.
+    const ownGoal = await seedGoal(owner.workspace.id, owner.user.id, {
+      name: "Second",
+    });
+    mockAuthenticatedSession(owner.user);
+    const { app: ownerApp } = createApp();
+    const own = await ownerApp.request(`/api/goal/${ownGoal.id}`, {
+      method: "DELETE",
+    });
+    expect(own.status).toBe(200);
+
+    // Unknown id 404s at the controller; the workspace-access middleware
+    // fail-closes unresolvable ids earlier with 400.
+    const missing = await ownerApp.request("/api/goal/does-not-exist", {
+      method: "DELETE",
+    });
+    expect([400, 404]).toContain(missing.status);
+  });
 });

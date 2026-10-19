@@ -130,3 +130,13 @@ export async function setGoalArchived(input: {
   }
   return (await response.json()) as Goal;
 }
+
+export async function deleteGoal(input: { goalId: string }) {
+  const response = await client.goal[":id"].$delete({
+    param: { id: input.goalId },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as Goal;
+}

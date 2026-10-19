@@ -123,6 +123,10 @@ app.get("/goal/:token", async (c) => {
     timezone: goal.timezone,
     targetPerWeek: goal.targetPerWeek,
     archivedAt: goal.archivedAt,
+    // R2-T8: the page renders an interactive matrix only for edit links.
+    // Exposing the link's own scope to the link holder reveals nothing the
+    // holder cannot probe by attempting a write.
+    scope: link.permission,
     checkins,
   });
 });

@@ -14,6 +14,7 @@ import {
 import {
   archiveDocument,
   createDocument,
+  deleteDocument,
   getDocument,
   getDocuments,
   unarchiveDocument,
@@ -273,6 +274,29 @@ const document = new Hono<{
       );
       const result = await deleteDocumentComment(id, userId, isModerator);
       return c.json(result);
+    },
+  )
+  .delete(
+    "/:id",
+    describeRoute({
+      operationId: "deleteDocument",
+      tags: ["Documents"],
+      description:
+        "Permanently delete a document and its comments (R2-T4; task:delete)",
+      responses: {
+        200: {
+          description: "Deleted document row",
+          content: { "application/json": { schema: resolver(v.any()) } },
+        },
+      },
+    }),
+    validator("param", v.object({ id: v.string() })),
+    workspaceAccess.fromDocument(),
+    requireWorkspacePermission({ task: ["delete"] }),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const deleted = await deleteDocument(id);
+      return c.json(deleted);
     },
   );
 

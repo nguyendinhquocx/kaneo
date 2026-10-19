@@ -8,6 +8,7 @@ import {
   canReadGoal,
   canWriteGoal,
   createGoal,
+  deleteGoal,
   getCheckinsInRange,
   getCompletedCountsByGoal,
   getGoal,
@@ -267,6 +268,29 @@ const goal = new Hono<{
       }
       const restored = await setGoalArchived(id, false);
       return c.json(restored);
+    },
+  )
+  .delete(
+    "/:id",
+    describeRoute({
+      operationId: "deleteGoal",
+      tags: ["Goals"],
+      description:
+        "Permanently delete a goal and its check-ins (R2-T6; goal owner or task:delete)",
+      responses: {
+        200: {
+          description: "Deleted goal row",
+          content: { "application/json": { schema: resolver(v.any()) } },
+        },
+      },
+    }),
+    validator("param", v.object({ id: v.string() })),
+    workspaceAccess.fromGoal(),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const userId = c.get("userId");
+      const deleted = await deleteGoal(id, userId);
+      return c.json(deleted);
     },
   )
   .post(

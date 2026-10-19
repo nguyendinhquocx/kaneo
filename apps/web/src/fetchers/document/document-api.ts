@@ -90,6 +90,14 @@ export async function archiveDocument(id: string, archived: boolean) {
   return (await response.json()) as DocumentFull;
 }
 
+export async function deleteDocument(id: string) {
+  const response = await client.document[":id"].$delete({ param: { id } });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as DocumentFull;
+}
+
 export type DocumentComment = {
   id: string;
   documentId: string;

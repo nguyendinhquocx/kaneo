@@ -121,3 +121,17 @@ export async function unarchiveDocument(documentId: string) {
   }
   return unarchived;
 }
+
+// R2-T4: hard delete. Comments cascade via the document_comment FK; callers
+// gate this behind task:delete (workspace admin/owner).
+export async function deleteDocument(documentId: string) {
+  const [deleted] = await db
+    .delete(schema.documentTable)
+    .where(eq(schema.documentTable.id, documentId))
+    .returning();
+
+  if (!deleted) {
+    throw new HTTPException(404, { message: "Document not found" });
+  }
+  return deleted;
+}

@@ -283,4 +283,62 @@ describe("API integration: project documents", () => {
     });
     expect(response.status).toBe(404);
   });
+
+  it("R2-T4 document delete: member denied, admin deletes with comments cascade", async () => {
+    const member = await createWorkspaceMember({ role: "member" });
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    await db.insert(schema.workspaceUserTable).values({
+      workspaceId: member.workspace.id,
+      userId: admin.user.id,
+      role: "admin",
+      joinedAt: new Date(),
+    });
+    const doc = await seedDocument(project.id, { title: "Doomed" });
+    await db.insert(schema.documentCommentTable).values({
+      documentId: doc.id,
+      userId: member.user.id,
+      content: "hello",
+    });
+
+    // Member (task:update only) cannot hard-delete.
+    mockAuthenticatedSession(member.user);
+    const { app: memberApp } = createApp();
+    const denied = await memberApp.request(`/api/document/${doc.id}`, {
+      method: "DELETE",
+    });
+    expect(denied.status).toBe(403);
+    const stillThere = await db
+      .select()
+      .from(schema.documentTable)
+      .where(eq(schema.documentTable.id, doc.id));
+    expect(stillThere).toHaveLength(1);
+
+    // Admin (task:delete) can; comments cascade.
+    mockAuthenticatedSession(admin.user);
+    const { app: adminApp } = createApp();
+    const deleted = await adminApp.request(`/api/document/${doc.id}`, {
+      method: "DELETE",
+    });
+    expect(deleted.status).toBe(200);
+    const goneDoc = await db
+      .select()
+      .from(schema.documentTable)
+      .where(eq(schema.documentTable.id, doc.id));
+    expect(goneDoc).toHaveLength(0);
+    const goneComments = await db
+      .select()
+      .from(schema.documentCommentTable)
+      .where(eq(schema.documentCommentTable.documentId, doc.id));
+    expect(goneComments).toHaveLength(0);
+
+    // Unknown id 404s at the controller; the workspace-access middleware
+    // fail-closes unresolvable ids earlier with 400.
+    const missing = await adminApp.request("/api/document/does-not-exist", {
+      method: "DELETE",
+    });
+    expect([400, 404]).toContain(missing.status);
+  });
 });

@@ -1,14 +1,30 @@
-import { Archive, ArchiveRestore, ArrowLeft, FileText } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  FileText,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CommentEditor from "@/components/activity/comment-editor";
 import { MarkdownRenderer } from "@/components/public-project/markdown-renderer";
 import ShareDialog from "@/components/share/share-dialog";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   useArchiveDocument,
   useCreateDocumentComment,
+  useDeleteDocument,
   useDeleteDocumentComment,
   useGetDocument,
   useGetDocumentComments,
@@ -121,8 +137,11 @@ export default function DocumentWorkspace({
   const { data: document, isLoading, refetch } = useGetDocument(documentId);
   const updateDocument = useUpdateDocument();
   const archiveDocument = useArchiveDocument();
-  const { canWriteDocuments } = useWorkspacePermission();
+  const { canWriteDocuments, canDeleteDocuments } = useWorkspacePermission();
   const canWrite = canWriteDocuments();
+  const canDelete = canDeleteDocuments();
+  const deleteDocument = useDeleteDocument();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -373,6 +392,18 @@ export default function DocumentWorkspace({
             )}
           </Button>
         ) : null}
+        {canDelete ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-11 min-h-11 gap-1.5 text-xs text-muted-foreground hover:text-destructive sm:h-7 sm:min-h-0"
+            disabled={deleteDocument.isPending}
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 className="size-3.5" />
+            {t("deleteButton")}
+          </Button>
+        ) : null}
         <ShareDialog
           resourceType="document"
           resourceId={document.id}
@@ -400,8 +431,10 @@ export default function DocumentWorkspace({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {/* UAT: the editor takes the remaining viewport space and comments
-        stay at the lower edge instead of crowding the document title. */}
-        <div className="mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col px-4 py-4">
+        stay at the lower edge instead of crowding the document title. R2-T1:
+        the grow chain lets content expand past the viewport so the outer
+        container scrolls, while short content still fills the space. */}
+        <div className="mx-auto flex w-full max-w-3xl min-h-0 grow flex-col px-4 py-4">
           <Input
             value={title}
             onChange={(event) => handleTitleChange(event.target.value)}
@@ -414,7 +447,7 @@ export default function DocumentWorkspace({
           />
           <div
             className={cn(
-              "flex flex-1 flex-col",
+              "flex grow flex-col",
               !canWrite && "pointer-events-none opacity-80",
             )}
             onBlurCapture={(event) => {
@@ -432,14 +465,51 @@ export default function DocumentWorkspace({
               value={content}
               onChange={handleContentChange}
               placeholder={t("contentPlaceholder")}
-              className="min-h-[45vh] flex-1"
-              contentClassName="min-h-[45vh]"
+              className="flex min-h-[45vh] grow flex-col"
+              contentClassName="kaneo-comment-editor-fill grow"
             />
           </div>
         </div>
 
         <DocumentComments documentId={document.id} />
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("delete.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("delete.description", { name: document.title })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose>
+              <Button variant="outline" size="sm">
+                {t("delete.cancel")}
+              </Button>
+            </AlertDialogClose>
+            <AlertDialogClose
+              onClick={() => {
+                deleteDocument.mutate(document.id, {
+                  onSuccess: () => {
+                    toast.success(t("delete.success"));
+                    onBack();
+                  },
+                  onError: () => toast.error(t("delete.error")),
+                });
+              }}
+            >
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteDocument.isPending}
+              >
+                {t("delete.action")}
+              </Button>
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

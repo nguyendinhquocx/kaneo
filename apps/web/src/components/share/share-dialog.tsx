@@ -166,11 +166,6 @@ export default function ShareDialog({
                   {copiedUrl === newLink.url ? t("copied") : t("copy")}
                 </Button>
               </div>
-              {newLink.permission === "edit" ? (
-                <p className="text-[11px] text-muted-foreground">
-                  {t("editScopeNote")}
-                </p>
-              ) : null}
             </div>
           ) : null}
 

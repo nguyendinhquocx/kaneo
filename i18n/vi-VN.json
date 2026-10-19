@@ -2237,7 +2237,16 @@
 			"loadFailed": "Không tải được tài liệu",
 			"retry": "Thử lại"
 		},
-		"archivedSection": "Đã lưu trữ"
+		"archivedSection": "Đã lưu trữ",
+		"deleteButton": "Xoá",
+		"delete": {
+			"title": "Xoá tài liệu?",
+			"description": "Xoá vĩnh viễn \"{{name}}\" cùng toàn bộ bình luận. Không thể hoàn tác.",
+			"cancel": "Huỷ",
+			"action": "Xoá tài liệu",
+			"success": "Đã xoá tài liệu",
+			"error": "Không xoá được tài liệu"
+		}
 	},
 	"share": {
 		"manage": "Chia sẻ",
@@ -2255,7 +2264,6 @@
 		"copyHint": "Sao chép link ngay — token chỉ hiển thị một lần.",
 		"copy": "Sao chép",
 		"copied": "Đã sao chép",
-		"editScopeNote": "Link sửa này chỉ tạo và cập nhật các trường task cơ bản. Không thể xóa, gán người, hay đổi cài đặt dự án.",
 		"badge": "Được chia sẻ",
 		"documentTitle": "Tài liệu được chia sẻ",
 		"document": {
@@ -2263,9 +2271,14 @@
 			"rawHint": "Agent có thể lấy tài liệu này dưới dạng Markdown thô tại /raw."
 		},
 		"goal": {
-			"total": "Hoàn thành {{total}}/{{target}} ngày",
-			"done": "xong",
-			"notDone": "chưa xong"
+			"totalAllTime": "Hoàn thành {{total}} lượt",
+			"perWeek": " · mục tiêu {{target}}/tuần",
+			"prevWeek": "Tuần trước",
+			"nextWeek": "Tuần sau",
+			"thisWeek": "Tuần này",
+			"matrixGoal": "Mục tiêu",
+			"totalColumn": "Tổng",
+			"notesTitle": "Ghi chú"
 		},
 		"invalid": {
 			"title": "Link này không còn hiệu lực",
@@ -2276,7 +2289,6 @@
 			"description": "Chờ một chút rồi thử lại nhé.",
 			"retry": "Thử lại"
 		},
-		"footer": "Được chia sẻ bằng link giới hạn phạm vi. Chủ sở hữu có thể thu hồi bất kỳ lúc nào.",
 		"unsupported": "Loại tài nguyên này không hiển thị được ở đây.",
 		"capabilityLinks": "Link chia sẻ giới hạn",
 		"capabilityLinksHint": "Link giới hạn phạm vi cho dự án này. Khác với URL công khai ở trên, mỗi link cấp rõ quyền xem hoặc sửa và có thể thu hồi.",
@@ -2326,8 +2338,16 @@
 			"retry": "Thử lại",
 			"createFailed": "Không tạo được mục tiêu",
 			"toggleFailed": "Không cập nhật được check-in",
-			"saveFailed": "Không lưu được ghi chú"
+			"saveFailed": "Không lưu được ghi chú",
+			"deleteFailed": "Không xoá được mục tiêu"
 		},
-		"weeklyTarget": "Mục tiêu {{target}}/tuần"
+		"weeklyTarget": "Mục tiêu {{target}}/tuần",
+		"delete": {
+			"aria": "Xoá mục tiêu",
+			"title": "Xoá mục tiêu?",
+			"description": "Xoá vĩnh viễn \"{{name}}\" cùng toàn bộ lịch sử check-in và ghi chú. Không thể hoàn tác.",
+			"cancel": "Huỷ",
+			"action": "Xoá mục tiêu"
+		}
 	}
 }

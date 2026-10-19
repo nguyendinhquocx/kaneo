@@ -2237,7 +2237,16 @@
 			"loadFailed": "Could not load documents",
 			"retry": "Try again"
 		},
-		"archivedSection": "Archived"
+		"archivedSection": "Archived",
+		"deleteButton": "Delete",
+		"delete": {
+			"title": "Delete document?",
+			"description": "Permanently delete \"{{name}}\" and all of its comments. This cannot be undone.",
+			"cancel": "Cancel",
+			"action": "Delete document",
+			"success": "Document deleted",
+			"error": "Failed to delete document"
+		}
 	},
 	"share": {
 		"manage": "Share",
@@ -2255,7 +2264,6 @@
 		"copyHint": "Copy this link now — the token is shown only once.",
 		"copy": "Copy",
 		"copied": "Copied",
-		"editScopeNote": "This edit link can create and update basic task fields only. It cannot delete, assign people, or change project settings.",
 		"badge": "Shared",
 		"documentTitle": "Shared document",
 		"document": {
@@ -2263,9 +2271,14 @@
 			"rawHint": "Agents can fetch this document as plain Markdown at /raw."
 		},
 		"goal": {
-			"total": "{{total}}/{{target}} days completed",
-			"done": "done",
-			"notDone": "not done"
+			"totalAllTime": "{{total}} completions",
+			"perWeek": " · target {{target}}/week",
+			"prevWeek": "Previous week",
+			"nextWeek": "Next week",
+			"thisWeek": "This week",
+			"matrixGoal": "Goal",
+			"totalColumn": "Total",
+			"notesTitle": "Notes"
 		},
 		"invalid": {
 			"title": "This link is no longer valid",
@@ -2276,7 +2289,6 @@
 			"description": "Slow down a little and try again shortly.",
 			"retry": "Try again"
 		},
-		"footer": "Shared with a scoped link. The owner can revoke access at any time.",
 		"unsupported": "This resource type cannot be displayed here.",
 		"capabilityLinks": "Capability share links",
 		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
@@ -2326,8 +2338,16 @@
 			"retry": "Try again",
 			"createFailed": "Could not create the goal",
 			"toggleFailed": "Could not update the check-in",
-			"saveFailed": "Could not save the note"
+			"saveFailed": "Could not save the note",
+			"deleteFailed": "Failed to delete goal"
 		},
-		"weeklyTarget": "{{target}}/week target"
+		"weeklyTarget": "{{target}}/week target",
+		"delete": {
+			"aria": "Delete goal",
+			"title": "Delete goal?",
+			"description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
+			"cancel": "Cancel",
+			"action": "Delete goal"
+		}
 	}
 }

@@ -5,11 +5,21 @@ import {
   ChevronRight,
   NotebookPen,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import GoalDetailsSheet from "@/components/goals/goal-details-sheet";
 import ShareDialog from "@/components/share/share-dialog";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -25,6 +35,7 @@ import {
 import {
   type GoalType,
   useCreateGoal,
+  useDeleteGoal,
   useGetGoals,
   useSetGoalArchived,
   useToggleGoalCheckin,
@@ -64,6 +75,8 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
   const [showArchived, setShowArchived] = useState(false);
   const [newGoalName, setNewGoalName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const deleteGoal = useDeleteGoal();
+  const [deleteTarget, setDeleteTarget] = useState<GoalType | null>(null);
   const [noteTarget, setNoteTarget] = useState<{
     goal: GoalType;
     dateKey: string;
@@ -277,6 +290,9 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
                   {canWrite ? (
                     <TableHead className="w-12 min-w-12" aria-hidden />
                   ) : null}
+                  {canWrite ? (
+                    <TableHead className="w-12 min-w-12" aria-hidden />
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -367,6 +383,19 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
                           </Button>
                         </TableCell>
                       ) : null}
+                      {canWrite ? (
+                        <TableCell className="text-center">
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={t("delete.aria")}
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => setDeleteTarget(goal)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   );
                 })}
@@ -384,6 +413,49 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
           onClose={() => setNoteTarget(null)}
         />
       ) : null}
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("delete.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("delete.description", { name: deleteTarget?.name ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose>
+              <Button variant="outline" size="sm">
+                {t("delete.cancel")}
+              </Button>
+            </AlertDialogClose>
+            <AlertDialogClose
+              onClick={() => {
+                if (!deleteTarget) return;
+                deleteGoal.mutate(
+                  { goalId: deleteTarget.id },
+                  {
+                    onSuccess: () => setDeleteTarget(null),
+                    onError: () => toast.error(t("errors.deleteFailed")),
+                  },
+                );
+              }}
+            >
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteGoal.isPending}
+              >
+                {t("delete.action")}
+              </Button>
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

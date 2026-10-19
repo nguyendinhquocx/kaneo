@@ -22,7 +22,9 @@ const CAPABILITIES = {
   assignTasks: { task: ["assign"] },
   // SPEC-2026-10-08-kaneo-workspace-collaboration: documents are project work
   // content (task:update) and share-link management is project:share.
+  // R2-T4: hard-deleting a document needs task:delete (admin/owner).
   writeDocuments: { task: ["update"] },
+  deleteDocuments: { task: ["delete"] },
   manageShareLinks: { project: ["share"] },
   manageLabels: { label: ["create", "update", "delete"] },
   manageWorkspace: { workspace: ["update", "manage_settings"] },
@@ -106,6 +108,7 @@ export function useWorkspacePermission() {
       canManageTeam: () => can.manageTeam,
       canRemoveMembers: () => can.removeMembers,
       canWriteDocuments: () => can.writeDocuments,
+      canDeleteDocuments: () => can.deleteDocuments,
       canManageShareLinks: () => can.manageShareLinks,
       // Escape hatch for ad-hoc permission checks (uncached). Prefer adding
       // a capability above.
