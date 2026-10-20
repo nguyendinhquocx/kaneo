@@ -1086,19 +1086,23 @@ input:-webkit-autofill:active {
     outline: none;
   }
 
-  /* R2-T1: docs editor fills its reserved space — the whole area below the
-  title is part of the editable content and grows with it (no inner
-  scrollbar; the outer page scrolls). */
-  .kaneo-comment-editor-fill {
-    display: flex;
-    flex-direction: column;
-  }
-
+  /* R2-T1/R3-T1: docs editor content owns at least the lower viewport and
+  grows with its content in natural flow — no max-height clamp, no inner
+  scrollbar, no painting over the comments section. */
   .kaneo-comment-editor-fill .ProseMirror {
-    flex: 1 0 auto;
     min-height: 45vh;
     max-height: none;
     overflow: visible;
+  }
+
+  /* R3-T2: hidden scrollbars for feature views (docs editor, share pages,
+  public project) — native bars read as noise on the calm surfaces. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 
   .kaneo-comment-editor-shell-readonly .kaneo-comment-editor-content .ProseMirror {

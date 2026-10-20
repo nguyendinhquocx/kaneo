@@ -14,7 +14,7 @@ export function PublicListView({ project, onTaskClick }: PublicListViewProps) {
   const columns = project.columns ?? [];
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto">
+    <div className="scrollbar-none flex-1 min-h-0 overflow-y-auto">
       <div className="p-6 space-y-8 max-w-5xl mx-auto">
         {columns.map((column) => {
           return (

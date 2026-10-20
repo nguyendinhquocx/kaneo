@@ -113,7 +113,9 @@ export default function ShareDialog({
           <DialogTitle>{t("title")}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
+        {/* R3-T4: content padding mirrors the header (p-6) so rows and the
+        URL input never touch the rounded border. */}
+        <div className="space-y-3 p-6 pt-0">
           <div className="flex items-center gap-2">
             <div className="flex flex-1 gap-0.5 rounded-lg border border-border/80 bg-background p-0.5">
               <Button

@@ -59,7 +59,9 @@ function DocumentComments({ documentId }: { documentId: string }) {
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl space-y-3 px-4 pb-16">
+    // mt-auto pushes comments to the bottom edge for short documents while
+    // long documents simply flow and the page scrolls.
+    <section className="mx-auto mt-auto w-full max-w-3xl space-y-3 px-4 pb-16">
       <h2 className="text-sm font-semibold text-foreground">
         {t("comments.title")}{" "}
         <span className="font-normal text-muted-foreground">
@@ -429,12 +431,12 @@ export default function DocumentWorkspace({
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {/* UAT: the editor takes the remaining viewport space and comments
-        stay at the lower edge instead of crowding the document title. R2-T1:
-        the grow chain lets content expand past the viewport so the outer
-        container scrolls, while short content still fills the space. */}
-        <div className="mx-auto flex w-full max-w-3xl min-h-0 grow flex-col px-4 py-4">
+      <div className="scrollbar-none flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/* UAT: comments sit at the lower edge for short content and follow
+        below the content once it grows. R3-T1: the editor wrapper is natural
+        flow (no flex clamping) — content defines its own height, so it can
+        never paint over the comments section. */}
+        <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-4">
           <Input
             value={title}
             onChange={(event) => handleTitleChange(event.target.value)}
@@ -447,7 +449,7 @@ export default function DocumentWorkspace({
           />
           <div
             className={cn(
-              "flex grow flex-col",
+              "flex flex-col",
               !canWrite && "pointer-events-none opacity-80",
             )}
             onBlurCapture={(event) => {
@@ -465,8 +467,7 @@ export default function DocumentWorkspace({
               value={content}
               onChange={handleContentChange}
               placeholder={t("contentPlaceholder")}
-              className="flex min-h-[45vh] grow flex-col"
-              contentClassName="kaneo-comment-editor-fill grow"
+              contentClassName="kaneo-comment-editor-fill"
             />
           </div>
         </div>

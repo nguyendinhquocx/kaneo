@@ -2269,7 +2269,9 @@
 			"prevWeek": "Previous week",
 			"thisWeek": "This week",
 			"totalAllTime": "{{total}} completions",
-			"totalColumn": "Total"
+			"totalColumn": "Total",
+			"editHint": "Edit link: you can tick the cells directly.",
+			"viewHint": "This page is view-only. Ask the owner for an edit link to tick."
 		},
 		"invalid": {
 			"description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
@@ -2326,7 +2328,9 @@
 			"previousDay": "이전 날짜",
 			"today": "오늘",
 			"unsavedNote": "저장되지 않은 메모입니다. 날짜를 바꾸기 전에 저장하세요.",
-			"chooseDate": "날짜 선택"
+			"chooseDate": "날짜 선택",
+			"deleteNote": "Delete note",
+			"noteDeleted": "Note deleted"
 		},
 		"showActive": "Active goals",
 		"showArchived": "Archived",

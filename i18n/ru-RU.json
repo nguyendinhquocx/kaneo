@@ -2331,7 +2331,9 @@
 			"prevWeek": "Previous week",
 			"thisWeek": "This week",
 			"totalAllTime": "{{total}} completions",
-			"totalColumn": "Total"
+			"totalColumn": "Total",
+			"editHint": "Edit link: you can tick the cells directly.",
+			"viewHint": "This page is view-only. Ask the owner for an edit link to tick."
 		},
 		"invalid": {
 			"description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
@@ -2388,7 +2390,9 @@
 			"previousDay": "Предыдущий день",
 			"today": "Сегодня",
 			"unsavedNote": "Заметка не сохранена — сохраните её перед сменой дня.",
-			"chooseDate": "Выбрать дату"
+			"chooseDate": "Выбрать дату",
+			"deleteNote": "Delete note",
+			"noteDeleted": "Note deleted"
 		},
 		"showActive": "Active goals",
 		"showArchived": "Archived",

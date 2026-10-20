@@ -67,7 +67,7 @@ function RouteComponent() {
   return (
     <>
       <PageTitle title={t("publicProject:pageTitle")} />
-      <div className="h-svh w-full flex-col overflow-y-auto bg-background flex">
+      <div className="scrollbar-none h-svh w-full flex-col overflow-y-auto bg-background flex">
         <header className="border-b border-border sticky top-0 z-10 bg-background">
           <div className="px-6 py-2.5">
             <div className="flex items-center justify-between gap-4">

@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -138,6 +139,30 @@ export default function GoalDetailsSheet({
       syncedNoteRef.current = note;
       setConflict(false);
       toast.success(t("sheet.saved"));
+    } catch {
+      toast.error(t("errors.saveFailed"));
+    }
+  };
+
+  // R3-T5: deleting a note saves an empty note — the check-in row (and its
+  // completion state) survives, only the text goes away.
+  const handleDeleteNote = async () => {
+    if (!checkinForDate?.note) return;
+    try {
+      const result = await updateNote.mutateAsync({
+        checkinId: checkinForDate.id,
+        note: "",
+        noteRevision: revision,
+      });
+      if ("conflict" in result) {
+        setConflict(true);
+        return;
+      }
+      setRevision(result.noteRevision);
+      syncedNoteRef.current = "";
+      setNote("");
+      setConflict(false);
+      toast.success(t("sheet.noteDeleted"));
     } catch {
       toast.error(t("errors.saveFailed"));
     }
@@ -303,7 +328,19 @@ export default function GoalDetailsSheet({
                 }}
                 placeholder={t("sheet.notePlaceholder")}
               />
-              <div className="flex justify-end">
+              <div className="flex items-center justify-end gap-1.5">
+                {checkinForDate.note ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="min-h-11 gap-1.5 text-muted-foreground hover:text-destructive sm:min-h-8"
+                    disabled={updateNote.isPending || conflict}
+                    onClick={() => void handleDeleteNote()}
+                  >
+                    <Trash2 className="size-3.5" />
+                    {t("sheet.deleteNote")}
+                  </Button>
+                ) : null}
                 <Button
                   size="sm"
                   className="min-h-11 sm:min-h-8"

@@ -2278,7 +2278,9 @@
 			"thisWeek": "This week",
 			"matrixGoal": "Goal",
 			"totalColumn": "Total",
-			"notesTitle": "Notes"
+			"notesTitle": "Notes",
+			"editHint": "Edit link: you can tick the cells directly.",
+			"viewHint": "This page is view-only. Ask the owner for an edit link to tick."
 		},
 		"invalid": {
 			"title": "This link is no longer valid",
@@ -2331,7 +2333,9 @@
 			"today": "Today",
 			"history": "Note history",
 			"unsavedNote": "Unsaved note — save it before switching days.",
-			"chooseDate": "Choose date"
+			"chooseDate": "Choose date",
+			"noteDeleted": "Note deleted",
+			"deleteNote": "Delete note"
 		},
 		"errors": {
 			"loadFailed": "Could not load goals",

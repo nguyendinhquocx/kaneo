@@ -62,16 +62,13 @@ function ShareReader() {
   return (
     // R2-T3: the root layout clips at viewport height (overflow-y-hidden),
     // so this page owns its own scroll container instead of relying on the
-    // document flow (min-h-svh left long pages unreachable).
-    <div className="h-svh w-full overflow-y-auto bg-background">
+    // document flow (min-h-svh left long pages unreachable). R3-T2: no
+    // visible scrollbar, no header divider, no badge chrome.
+    <div className="scrollbar-none h-svh w-full overflow-y-auto bg-background">
       <meta name="robots" content="noindex, nofollow" />
       <meta name="referrer" content="no-referrer" />
-      <header className="sticky top-0 z-10 border-b border-border bg-background">
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-4 py-2.5">
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {t("badge")}
-          </span>
-          <div className="flex-1" />
+      <header className="sticky top-0 z-10 bg-background">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-end px-4 py-2.5">
           <ThemeToggle />
         </div>
       </header>
@@ -202,7 +199,6 @@ function GoalShareMatrix({
     [checkins],
   );
   const totalAllTime = checkins.filter((ci) => ci.completed).length;
-
   const weekStart = useMemo(() => {
     const start = startOfWeek(new Date());
     start.setDate(start.getDate() + weekOffset * 7);
@@ -259,9 +255,6 @@ function GoalShareMatrix({
     }
   };
 
-  const weekCompleted = days.filter(
-    (day) => byDate.get(formatDateKey(day))?.completed === true,
-  ).length;
   const notes = checkins
     .filter((ci) => ci.note)
     .sort((left, right) => right.checkInDate.localeCompare(left.checkInDate));
@@ -275,6 +268,11 @@ function GoalShareMatrix({
           {typeof data.targetPerWeek === "number"
             ? t("goal.perWeek", { target: data.targetPerWeek })
             : null}
+        </p>
+        {/* R3-T3: make the link scope obvious — an edit link can tick, a
+        view link cannot. */}
+        <p className="mt-1 text-xs text-muted-foreground">
+          {canEdit ? t("goal.editHint") : t("goal.viewHint")}
         </p>
       </div>
 
@@ -305,7 +303,7 @@ function GoalShareMatrix({
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border/80">
+      <div className="scrollbar-none overflow-x-auto rounded-lg border border-border/80">
         <table className="w-full min-w-max border-collapse text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -353,7 +351,7 @@ function GoalShareMatrix({
                 );
               })}
               <td className="px-2 py-2.5 text-center font-medium tabular-nums text-foreground">
-                {weekCompleted}
+                {totalAllTime}
               </td>
             </tr>
           </tbody>

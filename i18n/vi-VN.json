@@ -2278,7 +2278,9 @@
 			"thisWeek": "Tuần này",
 			"matrixGoal": "Mục tiêu",
 			"totalColumn": "Tổng",
-			"notesTitle": "Ghi chú"
+			"notesTitle": "Ghi chú",
+			"editHint": "Link sửa: bạn có thể tick trực tiếp vào các ô.",
+			"viewHint": "Trang này chỉ xem. Chủ sở hữu gửi link sửa để bạn tick được."
 		},
 		"invalid": {
 			"title": "Link này không còn hiệu lực",
@@ -2331,7 +2333,9 @@
 			"today": "Hôm nay",
 			"history": "Lịch sử ghi chú",
 			"unsavedNote": "Ghi chú chưa lưu — lưu trước khi chuyển ngày.",
-			"chooseDate": "Chọn ngày"
+			"chooseDate": "Chọn ngày",
+			"noteDeleted": "Đã xoá ghi chú",
+			"deleteNote": "Xoá ghi chú"
 		},
 		"errors": {
 			"loadFailed": "Không tải được mục tiêu",

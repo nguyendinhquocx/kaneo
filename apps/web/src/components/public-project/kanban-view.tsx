@@ -40,7 +40,7 @@ export function PublicKanbanView({
                   </div>
                 </div>
 
-                <div className="p-2 overflow-y-auto overflow-x-hidden flex-1 min-h-0 [-webkit-overflow-scrolling:touch]">
+                <div className="scrollbar-none p-2 overflow-y-auto overflow-x-hidden flex-1 min-h-0 [-webkit-overflow-scrolling:touch]">
                   <div className="flex flex-col gap-1.5">
                     {column.tasks.map((task) => (
                       <PublicTaskCard

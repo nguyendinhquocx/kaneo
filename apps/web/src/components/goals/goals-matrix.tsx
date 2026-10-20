@@ -23,7 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -401,7 +401,6 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
                 })}
               </TableBody>
             </Table>
-            <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </div>
       )}
