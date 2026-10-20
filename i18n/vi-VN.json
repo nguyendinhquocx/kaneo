@@ -2251,6 +2251,12 @@
 	"share": {
 		"manage": "Chia sẻ",
 		"title": "Chia sẻ",
+		"edit": "Sửa",
+		"doneEditing": "Xong",
+		"scope": {
+			"view": "Chỉ xem",
+			"edit": "Có quyền sửa"
+		},
 		"permission": {
 			"view": "Xem",
 			"edit": "Sửa"
@@ -2268,7 +2274,19 @@
 		"documentTitle": "Tài liệu được chia sẻ",
 		"document": {
 			"updated": "Cập nhật {{date}}",
-			"rawHint": "Agent có thể lấy tài liệu này dưới dạng Markdown thô tại /raw."
+			"editHint": "Link này cho phép sửa riêng tài liệu. Bấm Sửa để bắt đầu.",
+			"editingHint": "Đang sửa tài liệu. Lưu để áp dụng thay đổi.",
+			"viewHint": "Tài liệu này chỉ xem. Xin chủ sở hữu cấp link sửa nếu muốn thay đổi.",
+			"titleLabel": "Tiêu đề tài liệu",
+			"contentLabel": "Nội dung Markdown",
+			"contentPlaceholder": "Viết bằng Markdown…",
+			"conflict": "Có người đã lưu bản mới hơn của tài liệu này.",
+			"conflictReload": "Tải bản mới nhất",
+			"conflictKeepEditing": "Tiếp tục sửa",
+			"saveFailed": "Không lưu được tài liệu.",
+			"cancel": "Hủy",
+			"save": "Lưu thay đổi",
+			"saving": "Đang lưu…"
 		},
 		"goal": {
 			"totalAllTime": "Hoàn thành {{total}} lượt",
@@ -2279,8 +2297,46 @@
 			"matrixGoal": "Mục tiêu",
 			"totalColumn": "Tổng",
 			"notesTitle": "Ghi chú",
-			"editHint": "Link sửa: bạn có thể tick trực tiếp vào các ô.",
-			"viewHint": "Trang này chỉ xem. Chủ sở hữu gửi link sửa để bạn tick được."
+			"editHint": "Link này có quyền sửa. Bấm Sửa để bật check-in và sửa ghi chú.",
+			"viewHint": "Trang này chỉ xem. Xin chủ sở hữu cấp link sửa nếu muốn thay đổi.",
+			"noteCancel": "Hủy",
+			"noteConflict": "Ghi chú đã bị đổi ở nơi khác. Tải bản mới nhất trước khi lưu.",
+			"noteConflictDismiss": "Tải bản mới nhất, giữ nháp",
+			"noteReloadFailed": "Không tải được ghi chú mới nhất.",
+			"noteEditorAria": "Ghi chú check-in mục tiêu",
+			"noteSave": "Lưu ghi chú",
+			"noteSaveFailed": "Không lưu được ghi chú.",
+			"noteSaving": "Đang lưu…"
+		},
+		"project": {
+			"newTask": "Task mới",
+			"editHint": "Link này cho phép tạo/cập nhật task cơ bản. Bấm Sửa để bắt đầu.",
+			"editingHint": "Chọn task để sửa các trường cơ bản, hoặc tạo task mới.",
+			"viewHint": "Dự án này chỉ xem. Xin chủ sở hữu cấp link sửa nếu muốn đổi task.",
+			"boardView": "Bảng",
+			"listView": "Danh sách",
+			"noDescription": "Chưa có mô tả.",
+			"close": "Đóng",
+			"cancel": "Hủy",
+			"create": "Tạo task",
+			"descriptionLabel": "Mô tả",
+			"dueDateLabel": "Ngày đến hạn",
+			"editTaskTitle": "Sửa task",
+			"priorityLabel": "Độ ưu tiên",
+			"save": "Lưu thay đổi",
+			"saveFailed": "Không lưu được task này.",
+			"saved": "Đã lưu",
+			"saving": "Đang lưu…",
+			"startDateLabel": "Ngày bắt đầu",
+			"statusLabel": "Trạng thái",
+			"titleLabel": "Tiêu đề"
+		},
+		"legacy": {
+			"copyReplacement": "Tạo link thay thế",
+			"title": "Không thể khôi phục link này",
+			"description": "Không thể khôi phục URL ban đầu. Tạo link mới cùng phạm vi quyền. URL cũ không bị đổi; nếu còn hiệu lực, mày có thể thu hồi riêng sau khi kiểm tra link mới.",
+			"cancel": "Hủy",
+			"replace": "Tạo và sao chép link thay thế"
 		},
 		"invalid": {
 			"title": "Link này không còn hiệu lực",
@@ -2296,6 +2352,8 @@
 		"capabilityLinksHint": "Link giới hạn phạm vi cho dự án này. Khác với URL công khai ở trên, mỗi link cấp rõ quyền xem hoặc sửa và có thể thu hồi.",
 		"errors": {
 			"createFailed": "Không tạo được link chia sẻ",
+			"copyFailed": "Không sao chép được link",
+			"replaceFailed": "Không tạo được link thay thế",
 			"revokeFailed": "Không thu hồi được link"
 		}
 	},
@@ -2312,7 +2370,6 @@
 		"goalColumn": "Mục tiêu",
 		"totalColumn": "Tổng",
 		"matrixAria": "Ma trận mục tiêu tuần",
-		"privateBadge": "riêng tư",
 		"archive": "Lưu trữ",
 		"unarchive": "Khôi phục",
 		"noteAria": "Mở ghi chú chi tiết",

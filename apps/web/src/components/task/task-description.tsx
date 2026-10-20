@@ -1,3 +1,4 @@
+import { resolveApiBaseUrl } from "@kaneo/libs";
 import type { Editor } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -43,6 +44,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bundledLanguages, type Highlighter } from "shiki";
+import { CopyShareLinkButton } from "@/components/share/copy-share-link-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogPopup } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -66,6 +68,12 @@ import {
   isYouTubeUrl,
   normalizeUrl,
 } from "@/lib/editor-url-utils";
+import {
+  createMappedSelection,
+  getPastedFiles,
+  sanitizePastedHtml,
+  uploadFilesAtSelection,
+} from "@/lib/rich-content-paste";
 import { getSharedShikiHighlighter } from "@/lib/shiki-highlighter";
 import { toast } from "@/lib/toast";
 import { uploadTaskImage } from "@/lib/upload-task-image";
@@ -78,6 +86,10 @@ import {
 } from "./extensions/shiki-code-block";
 import { TaskItemWithCheckbox } from "./extensions/task-item-with-checkbox";
 import "tippy.js/dist/tippy.css";
+
+const editorApiBase = resolveApiBaseUrl(
+  import.meta.env.VITE_API_URL as string | undefined,
+);
 
 type TaskDescriptionProps = {
   taskId: string;
@@ -264,7 +276,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   const { t } = useTranslation();
   const { data: task } = useGetTask(taskId);
   const { mutateAsync: updateTaskDescription } = useUpdateTaskDescription();
-  const { canManageTasks } = useWorkspacePermission();
+  const { canManageTasks, canManageShareLinks } = useWorkspacePermission();
   const canEdit = canManageTasks();
 
   const editorShellRef = useRef<HTMLDivElement | null>(null);
@@ -349,18 +361,9 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     (
       activeEditor: Editor,
       asset: Awaited<ReturnType<typeof uploadTaskImage>>,
-      range?: SlashRange,
+      range: SlashRange,
     ) => {
-      const chain = activeEditor.chain().focus();
-
-      if (range) {
-        chain.deleteRange(range);
-      } else {
-        const { selection } = activeEditor.state;
-        if (!selection.empty) {
-          chain.setTextSelection(selection.to);
-        }
-      }
+      const chain = activeEditor.chain().focus().setTextSelection(range);
 
       if (asset.kind === "image") {
         chain
@@ -387,40 +390,49 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     [],
   );
 
-  const handleAssetFileUpload = useCallback(
-    async (file: File, targetEditor?: Editor | null, range?: SlashRange) => {
+  const handleAssetFilesUpload = useCallback(
+    async (files: File[], targetEditor?: Editor | null, range?: SlashRange) => {
       const activeEditor = targetEditor || lastEditorRef.current;
-
-      if (!activeEditor) {
-        toast.error(t("tasks:detail.editor.upload.failed"));
-        return;
-      }
-
+      if (!activeEditor || files.length === 0) return;
+      const mappedSelection = createMappedSelection(activeEditor, range);
       const loadingToast = toast.loading(
         t("tasks:detail.editor.upload.loading"),
       );
-
       try {
-        const uploadedAsset = await uploadTaskImage({
-          taskId,
-          surface: "description",
-          file,
+        await uploadFilesAtSelection({
+          editor: activeEditor,
+          files,
+          mappedSelection,
+          upload: (file) =>
+            uploadTaskImage({
+              taskId,
+              surface: "description",
+              file,
+            }),
+          insert: (asset, selection) => {
+            insertUploadedAsset(activeEditor, asset, selection);
+            toast.success(
+              asset.kind === "image"
+                ? t("tasks:detail.editor.upload.imageSuccess")
+                : t("tasks:detail.editor.upload.fileSuccess"),
+            );
+          },
+          onError: (error) =>
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : t("tasks:detail.editor.upload.failed"),
+            ),
         });
-        insertUploadedAsset(activeEditor, uploadedAsset, range);
-
-        toast.dismiss(loadingToast);
-        toast.success(
-          uploadedAsset.kind === "image"
-            ? t("tasks:detail.editor.upload.imageSuccess")
-            : t("tasks:detail.editor.upload.fileSuccess"),
-        );
       } catch (error) {
-        toast.dismiss(loadingToast);
+        mappedSelection.dispose();
         toast.error(
           error instanceof Error
             ? error.message
             : t("tasks:detail.editor.upload.failed"),
         );
+      } finally {
+        toast.dismiss(loadingToast);
       }
     },
     [insertUploadedAsset, t, taskId],
@@ -600,13 +612,13 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
         attributes: {
           class: "kaneo-tiptap-prose",
         },
+        transformPastedHTML: (html) => sanitizePastedHtml(html, editorApiBase),
         handlePaste: (view, event) => {
-          const pastedFiles = Array.from(event.clipboardData?.files || []);
-          const pastedFile = pastedFiles[0];
-
-          if (pastedFile) {
+          const pastedFiles = getPastedFiles(event.clipboardData);
+          if (pastedFiles.length > 0) {
             event.preventDefault();
-            void handleAssetFileUpload(pastedFile, editor);
+            const { from, to } = view.state.selection;
+            void handleAssetFilesUpload(pastedFiles, editor, { from, to });
             return true;
           }
 
@@ -675,10 +687,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
           return true;
         },
         handleDrop: (view, event) => {
-          const droppedFiles = Array.from(event.dataTransfer?.files || []);
-          const droppedFile = droppedFiles[0];
-
-          if (!droppedFile) return false;
+          const droppedFiles = getPastedFiles(event.dataTransfer);
+          if (droppedFiles.length === 0) return false;
 
           event.preventDefault();
           const coordinates = view.posAtCoords({
@@ -689,7 +699,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
             ? { from: coordinates.pos, to: coordinates.pos }
             : undefined;
 
-          void handleAssetFileUpload(droppedFile, editor, dropRange);
+          void handleAssetFilesUpload(droppedFiles, editor, dropRange);
           return true;
         },
         handleTextInput: (view, _from, _to, text) => {
@@ -757,7 +767,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
         debouncedUpdate(markdown);
       },
     },
-    [getOverlayPosition, handleAssetFileUpload, t, toShikiLanguage],
+    [getOverlayPosition, handleAssetFilesUpload, t, toShikiLanguage],
   );
 
   useEffect(() => {
@@ -1346,18 +1356,29 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
       onDragLeave={handleShellDragLeave}
       onDrop={handleShellDrop}
     >
+      {canManageShareLinks() ? (
+        <div className="flex justify-end">
+          <CopyShareLinkButton
+            resourceType="task_description"
+            resourceId={taskId}
+            canShare
+            label={t("share:copy")}
+          />
+        </div>
+      ) : null}
       <input
         ref={imageInputRef}
         type="file"
+        multiple
         className="sr-only"
         onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (!file) return;
+          const files = Array.from(event.target.files ?? []);
+          if (files.length === 0) return;
 
           const pendingInsert = pendingImageInsertRef.current;
           pendingImageInsertRef.current = null;
-          void handleAssetFileUpload(
-            file,
+          void handleAssetFilesUpload(
+            files,
             pendingInsert?.editor,
             pendingInsert?.range,
           );

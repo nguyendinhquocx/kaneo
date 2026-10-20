@@ -39,7 +39,7 @@ async function updateTaskDescription({
     await assertFullRunFieldsImmutable(tx, {
       taskId: id,
       nextDescription: description,
-      existingDescription: lockedTask.description,
+      existingDescription: lockedTask.description ?? "",
     });
 
     const [updated] = await tx

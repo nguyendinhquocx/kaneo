@@ -311,11 +311,6 @@ export default function GoalsMatrix({ workspaceId }: GoalsMatrixProps) {
                           <span className="truncate text-sm font-medium">
                             {goal.name}
                           </span>
-                          {goal.visibility === "private" ? (
-                            <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
-                              {t("privateBadge")}
-                            </span>
-                          ) : null}
                         </div>
                       </TableCell>
                       {weekDays.map((date) => {

@@ -2,6 +2,7 @@ import { and, eq, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import { isProjectAgentControlled } from "../project/controllers/public-project-dto";
+import { deleteOrphanedAssets } from "../storage/cleanup-assets";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
 import {
   assertValidPriority,
@@ -192,6 +193,11 @@ export async function publicUpdateTask(
     throw new HTTPException(404, { message: "Not found" });
   }
 
+  if (task.description !== updated.description) {
+    deleteOrphanedAssets(task.description, updated.description, {
+      taskId,
+    }).catch(() => {});
+  }
   await appendShareActionAudit(link, "task.update");
   return {
     id: updated.id,
@@ -235,6 +241,11 @@ export async function publicUpdateDocument(
     });
   }
 
+  if (document.content !== updated.content) {
+    deleteOrphanedAssets(document.content, updated.content, {
+      documentId: document.id,
+    }).catch(() => {});
+  }
   await appendShareActionAudit(link, "document.update");
   return {
     id: updated.id,
@@ -356,6 +367,7 @@ export async function publicToggleGoalCheckin(
 
   await appendShareActionAudit(link, "goal.checkin.toggle");
   return {
+    id: row.id,
     checkInDate: row.checkInDate,
     completed: row.completed,
     note: row.note,
@@ -401,6 +413,11 @@ export async function publicUpdateGoalNote(
     });
   }
 
+  if (checkin.note !== updated.note) {
+    deleteOrphanedAssets(checkin.note, updated.note, {
+      goalCheckinId: checkin.id,
+    }).catch(() => {});
+  }
   await appendShareActionAudit(link, "goal.checkin.note");
   return {
     checkInDate: updated.checkInDate,

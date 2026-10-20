@@ -1,3 +1,9 @@
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence } from "framer-motion";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
@@ -24,11 +30,13 @@ import useCreateTask from "@/hooks/mutations/task/use-create-task";
 import { useDeleteTask } from "@/hooks/mutations/task/use-delete-task";
 import { useUpdateTaskStatus } from "@/hooks/mutations/task/use-update-task-status";
 import useCreateTaskRelation from "@/hooks/mutations/task-relation/use-create-task-relation";
+import { useReorderSubtasks } from "@/hooks/mutations/task-relation/use-reorder-subtasks";
 import { useGetColumns } from "@/hooks/queries/column/use-get-columns";
 import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-relations";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
+import { moveTaskId } from "@/lib/subtask-order";
 import { toast } from "@/lib/toast";
 import queryClient from "@/query-client";
 import type Task from "@/types/task";
@@ -62,6 +70,7 @@ export default function TaskSubtasks({
   );
   const createTask = useCreateTask();
   const createRelation = useCreateTaskRelation();
+  const reorderSubtasks = useReorderSubtasks();
   const { mutateAsync: deleteTask } = useDeleteTask();
   const { mutateAsync: updateTaskStatus } = useUpdateTaskStatus();
   const { data: columns = [] } = useGetColumns(projectId);
@@ -86,7 +95,29 @@ export default function TaskSubtasks({
     .filter(
       (item): item is typeof item & { task: NonNullable<typeof item.task> } =>
         item.task !== null,
-    );
+    )
+    .sort((left, right) => left.relation.position - right.relation.position);
+
+  const orderedSubtaskIds = subtasks.map(({ task: subtask }) => subtask.id);
+  const saveSubtaskOrder = (ids: string[]) => {
+    if (ids.every((id, index) => id === orderedSubtaskIds[index])) return;
+    reorderSubtasks.mutate({
+      taskId,
+      projectId,
+      orderedTargetTaskIds: ids,
+    });
+  };
+  const moveSubtask = (id: string, offset: -1 | 1) =>
+    saveSubtaskOrder(moveTaskId(orderedSubtaskIds, id, offset));
+  const handleSubtaskDragEnd = (event: DragEndEvent) => {
+    const overId = event.over?.id;
+    if (overId === undefined || event.active.id === overId) return;
+    const from = orderedSubtaskIds.indexOf(String(event.active.id));
+    const to = orderedSubtaskIds.indexOf(String(overId));
+    if (from >= 0 && to >= 0) {
+      saveSubtaskOrder(arrayMove(orderedSubtaskIds, from, to));
+    }
+  };
 
   const completedCount = subtasks.filter((s) =>
     isCompleted(s.task.status),
@@ -343,51 +374,60 @@ export default function TaskSubtasks({
         </div>
 
         <CollapsibleContent>
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: keyboard nav managed via document listener */}
-          <div
-            ref={containerRef}
-            className="flex flex-col mt-1"
-            onMouseDown={() => {
-              if (focusedIndex === -1 && !hasSelection) {
-                setFocusedIndex(0);
-              }
-            }}
-          >
-            <AnimatePresence initial={false}>
-              {subtasks.map((subtask, index) => {
-                const taskObj = buildTaskObject(subtask);
-                const isSelected = selectedIds.has(subtask.task.id);
+          <DndContext onDragEnd={handleSubtaskDragEnd}>
+            <SortableContext
+              items={orderedSubtaskIds}
+              strategy={verticalListSortingStrategy}
+            >
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: keyboard nav managed via document listener */}
+              <div
+                ref={containerRef}
+                className="flex flex-col mt-1"
+                onMouseDown={() => {
+                  if (focusedIndex === -1 && !hasSelection) {
+                    setFocusedIndex(0);
+                  }
+                }}
+              >
+                <AnimatePresence initial={false}>
+                  {subtasks.map((subtask, index) => {
+                    const taskObj = buildTaskObject(subtask);
+                    const isSelected = selectedIds.has(subtask.task.id);
 
-                return (
-                  <SubtaskRow
-                    key={subtask.task.id}
-                    task={taskObj}
-                    tasks={getTargetTasks(taskObj)}
-                    projectId={projectId}
-                    workspaceId={workspace?.id ?? workspaceId}
-                    isSelected={isSelected}
-                    isFocused={focusedIndex === index}
-                    isCompleted={isCompleted(subtask.task.status)}
-                    canEdit={canEdit}
-                    selectionRadius={getSelectionRadius(index, isSelected)}
-                    assignee={getAssignee(subtask.task.userId)}
-                    onToggleComplete={() => handleToggleComplete(taskObj)}
-                    onNavigate={() =>
-                      navigate({
-                        to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
-                        params: {
-                          workspaceId,
-                          projectId,
-                          taskId: subtask.task.id,
-                        },
-                      })
-                    }
-                    onDeleteClick={() => setDeleteTaskId(subtask.task.id)}
-                  />
-                );
-              })}
-            </AnimatePresence>
-          </div>
+                    return (
+                      <SubtaskRow
+                        key={subtask.task.id}
+                        task={taskObj}
+                        tasks={getTargetTasks(taskObj)}
+                        projectId={projectId}
+                        workspaceId={workspace?.id ?? workspaceId}
+                        isSelected={isSelected}
+                        isFocused={focusedIndex === index}
+                        isCompleted={isCompleted(subtask.task.status)}
+                        canEdit={canEdit}
+                        selectionRadius={getSelectionRadius(index, isSelected)}
+                        assignee={getAssignee(subtask.task.userId)}
+                        onToggleComplete={() => handleToggleComplete(taskObj)}
+                        onNavigate={() =>
+                          navigate({
+                            to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
+                            params: {
+                              workspaceId,
+                              projectId,
+                              taskId: subtask.task.id,
+                            },
+                          })
+                        }
+                        onDeleteClick={() => setDeleteTaskId(subtask.task.id)}
+                        onMoveUp={() => moveSubtask(subtask.task.id, -1)}
+                        onMoveDown={() => moveSubtask(subtask.task.id, 1)}
+                      />
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            </SortableContext>
+          </DndContext>
 
           {isAdding && (
             <div className="flex items-center gap-2 mt-2">

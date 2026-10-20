@@ -12,6 +12,7 @@ import useExternalLinks from "@/hooks/queries/external-link/use-external-links";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-relations";
+import { getParentTaskRouteParams } from "@/lib/task-parent-route";
 import type { ExternalLink } from "@/types/external-link";
 import TaskDescription from "./task-description";
 import TaskExecutionPanel from "./task-execution-panel";
@@ -59,11 +60,12 @@ export default function TaskDetailsContent({
             onClick={() =>
               navigate({
                 to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
-                params: {
+                params: getParentTaskRouteParams({
                   workspaceId,
-                  projectId,
-                  taskId: parentTask.id,
-                },
+                  currentProjectId: projectId,
+                  parentTaskId: parentTask.id,
+                  parentProjectId: parentTask.projectId,
+                }),
               })
             }
           >

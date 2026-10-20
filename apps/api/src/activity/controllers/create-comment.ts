@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
   activityTable,
+  assetTable,
   projectTable,
   taskTable,
   userTable,
@@ -10,6 +11,7 @@ import {
 import { publishEvent } from "../../events";
 import { maybeSteerActiveRunFromComment } from "../../execution/service";
 import createNotification from "../../notification/controllers/create-notification";
+import { extractAssetIds } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
 async function createComment(taskId: string, userId: string, content: string) {
@@ -27,6 +29,20 @@ async function createComment(taskId: string, userId: string, content: string) {
     throw new HTTPException(500, {
       message: "Failed to create activity",
     });
+  }
+
+  const referencedAssetIds = [...extractAssetIds(content)];
+  if (referencedAssetIds.length > 0) {
+    await db
+      .update(assetTable)
+      .set({ activityId: activity.id })
+      .where(
+        and(
+          eq(assetTable.taskId, taskId),
+          eq(assetTable.surface, "comment"),
+          inArray(assetTable.id, referencedAssetIds),
+        ),
+      );
   }
 
   // SPEC-kaneo-wavefix-v0-2 (T11): a human comment on a task with a live

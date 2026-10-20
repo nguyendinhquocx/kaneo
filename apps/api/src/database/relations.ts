@@ -265,16 +265,20 @@ export const timeEntryTableRelations = relations(timeEntryTable, ({ one }) => ({
   }),
 }));
 
-export const activityTableRelations = relations(activityTable, ({ one }) => ({
-  task: one(taskTable, {
-    fields: [activityTable.taskId],
-    references: [taskTable.id],
+export const activityTableRelations = relations(
+  activityTable,
+  ({ one, many }) => ({
+    task: one(taskTable, {
+      fields: [activityTable.taskId],
+      references: [taskTable.id],
+    }),
+    user: one(userTable, {
+      fields: [activityTable.userId],
+      references: [userTable.id],
+    }),
+    assets: many(assetTable),
   }),
-  user: one(userTable, {
-    fields: [activityTable.userId],
-    references: [userTable.id],
-  }),
-}));
+);
 
 export const assetTableRelations = relations(assetTable, ({ one }) => ({
   workspace: one(workspaceTable, {
@@ -292,6 +296,18 @@ export const assetTableRelations = relations(assetTable, ({ one }) => ({
   activity: one(activityTable, {
     fields: [assetTable.activityId],
     references: [activityTable.id],
+  }),
+  document: one(documentTable, {
+    fields: [assetTable.documentId],
+    references: [documentTable.id],
+  }),
+  documentComment: one(documentCommentTable, {
+    fields: [assetTable.documentCommentId],
+    references: [documentCommentTable.id],
+  }),
+  goalCheckin: one(goalCheckinTable, {
+    fields: [assetTable.goalCheckinId],
+    references: [goalCheckinTable.id],
   }),
   creator: one(userTable, {
     fields: [assetTable.createdBy],
@@ -529,12 +545,13 @@ export const documentTableRelations = relations(
       references: [userTable.id],
     }),
     comments: many(documentCommentTable),
+    assets: many(assetTable),
   }),
 );
 
 export const documentCommentTableRelations = relations(
   documentCommentTable,
-  ({ one }) => ({
+  ({ one, many }) => ({
     document: one(documentTable, {
       fields: [documentCommentTable.documentId],
       references: [documentTable.id],
@@ -543,6 +560,7 @@ export const documentCommentTableRelations = relations(
       fields: [documentCommentTable.userId],
       references: [userTable.id],
     }),
+    assets: many(assetTable),
   }),
 );
 
@@ -564,7 +582,7 @@ export const goalTableRelations = relations(goalTable, ({ one, many }) => ({
 
 export const goalCheckinTableRelations = relations(
   goalCheckinTable,
-  ({ one }) => ({
+  ({ one, many }) => ({
     goal: one(goalTable, {
       fields: [goalCheckinTable.goalId],
       references: [goalTable.id],
@@ -573,6 +591,7 @@ export const goalCheckinTableRelations = relations(
       fields: [goalCheckinTable.checkedByUserId],
       references: [userTable.id],
     }),
+    assets: many(assetTable),
   }),
 );
 

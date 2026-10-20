@@ -1,6 +1,11 @@
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../../database";
+import {
+  deleteOrphanedAssets,
+  deleteS3Keys,
+  getGoalAssetKeys,
+} from "../../storage/cleanup-assets";
 import { hasUserWorkspacePermission } from "../../utils/require-workspace-permission";
 
 // SPEC-2026-10-08-kaneo-workspace-collaboration T5: goals are workspace-level
@@ -234,6 +239,7 @@ export async function deleteGoal(goalId: string, userId: string) {
   if (!allowed) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
+  const assetKeys = await getGoalAssetKeys(goalId);
   const [deleted] = await db
     .delete(schema.goalTable)
     .where(eq(schema.goalTable.id, goalId))
@@ -241,6 +247,7 @@ export async function deleteGoal(goalId: string, userId: string) {
   if (!deleted) {
     throw new HTTPException(404, { message: "Goal not found" });
   }
+  void deleteS3Keys(assetKeys).catch(() => {});
   return deleted;
 }
 
@@ -350,6 +357,7 @@ export async function updateCheckinNote(
   note: string,
   expectedRevision: number,
 ) {
+  const existing = await getGoalCheckin(checkinId);
   const [updated] = await db
     .update(schema.goalCheckinTable)
     .set({
@@ -369,5 +377,8 @@ export async function updateCheckinNote(
       message: "Note was modified by someone else",
     });
   }
+  void deleteOrphanedAssets(existing.note, note, {
+    goalCheckinId: checkinId,
+  }).catch(() => {});
   return updated;
 }

@@ -1,4 +1,6 @@
-import createImageUpload, {
+import {
+  type ContentAssetOwnerType,
+  createImageUpload,
   finalizeImageUpload,
 } from "@/fetchers/task/create-image-upload";
 
@@ -13,8 +15,6 @@ const allowedImageMimeTypes = new Set([
   "image/png",
   "image/webp",
 ]);
-
-type UploadSurface = "description" | "comment";
 
 export function isSupportedImageFile(file: File) {
   return allowedImageMimeTypes.has(file.type.toLowerCase());
@@ -35,50 +35,52 @@ export async function uploadTaskImage({
   taskId,
   surface,
   file,
+  ownerType,
+  ownerId,
 }: {
-  taskId: string;
-  surface: UploadSurface;
+  taskId?: string;
+  surface?: "description" | "comment";
   file: File;
+  ownerType?: ContentAssetOwnerType;
+  ownerId?: string;
 }) {
-  if (!isSupportedImageFile(file)) {
-    if (!isSupportedTaskAsset(file)) {
-      throw new Error("Only non-empty file uploads are supported.");
-    }
+  if (!isSupportedImageFile(file) && !isSupportedTaskAsset(file)) {
+    throw new Error("Only non-empty file uploads are supported.");
   }
 
-  const upload = await createImageUpload({
-    taskId,
-    filename: file.name || "image",
+  const resolvedOwnerType =
+    ownerType ??
+    (surface === "description" ? "task_description" : "task_comment");
+  const resolvedOwnerId = ownerId ?? taskId;
+  if (!resolvedOwnerId) throw new Error("An upload owner is required.");
+
+  const filename = file.name || "image";
+  const ticket = await createImageUpload({
+    ownerType: resolvedOwnerType,
+    ownerId: resolvedOwnerId,
+    filename,
     contentType: file.type,
     size: file.size,
-    surface,
   });
-
-  const response = await fetch(upload.uploadUrl, {
+  const uploadResponse = await fetch(ticket.uploadUrl, {
     method: "PUT",
-    headers: upload.headers,
+    headers: ticket.headers,
     body: file,
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to upload file to storage.");
-  }
+  if (!uploadResponse.ok) throw new Error("Failed to upload file to storage.");
 
   const asset = await finalizeImageUpload({
-    taskId,
-    key: upload.key,
-    filename: file.name || "image",
+    ownerType: resolvedOwnerType,
+    ownerId: resolvedOwnerId,
+    key: ticket.key,
+    filename,
     contentType: file.type,
     size: file.size,
-    surface,
   });
 
   return {
-    url: asset.url,
-    alt: getImageAltText(file.name || "image"),
-    filename: file.name || "file",
-    kind: isSupportedImageFile(file) ? "image" : "attachment",
-    mimeType: file.type,
-    size: file.size,
+    ...asset,
+    alt: getImageAltText(filename),
+    kind: asset.kind ?? (isSupportedImageFile(file) ? "image" : "attachment"),
   };
 }

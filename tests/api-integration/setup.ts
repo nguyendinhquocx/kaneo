@@ -67,6 +67,9 @@ assertTestDatabaseUrl(process.env.DATABASE_URL);
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_SECRET = "test-secret-with-at-least-32-chars";
+process.env.SHARE_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString(
+  "base64url",
+);
 process.env.KANEO_API_URL = "http://localhost:1337";
 process.env.KANEO_CLIENT_URL = "http://localhost:5173";
 process.env.DISABLE_GUEST_ACCESS = "false";

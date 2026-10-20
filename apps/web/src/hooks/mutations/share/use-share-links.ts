@@ -3,9 +3,10 @@ import {
   createShareLink,
   listShareLinks,
   revokeShareLink,
+  type ShareResourceType,
 } from "@/fetchers/share/share-api";
 
-export type ShareResourceType = "project" | "document" | "goal";
+export type { ShareResourceType } from "@/fetchers/share/share-api";
 
 export function useGetShareLinks(
   resourceType: ShareResourceType,

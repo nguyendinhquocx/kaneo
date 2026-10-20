@@ -2250,14 +2250,32 @@
 	},
 	"share": {
 		"badge": "Shared",
+		"edit": "Bearbeiten",
+		"doneEditing": "Fertig",
+		"scope": {
+			"view": "Nur ansehen",
+			"edit": "Bearbeiten"
+		},
 		"copied": "Copied",
 		"copy": "Copy",
 		"copyHint": "Copy this link now — the token is shown only once.",
 		"create": "Create link",
 		"creating": "Creating…",
 		"document": {
-			"rawHint": "Agents can fetch this document as plain Markdown at /raw.",
-			"updated": "Updated {{date}}"
+			"updated": "Aktualisiert {{date}}",
+			"editHint": "Dieser Link erlaubt nur die Bearbeitung dieses Dokuments. Wähle „Bearbeiten“, um zu beginnen.",
+			"editingHint": "Dokument wird bearbeitet. Speichere, um die Änderungen zu übernehmen.",
+			"viewHint": "Dieses Dokument ist schreibgeschützt. Bitte den Eigentümer um einen Bearbeitungslink.",
+			"titleLabel": "Dokumenttitel",
+			"contentLabel": "Markdown-Inhalt",
+			"contentPlaceholder": "In Markdown schreiben…",
+			"conflict": "Jemand hat eine neuere Version dieses Dokuments gespeichert.",
+			"conflictReload": "Neueste Version laden",
+			"conflictKeepEditing": "Weiter bearbeiten",
+			"saveFailed": "Dokument konnte nicht gespeichert werden.",
+			"cancel": "Abbrechen",
+			"save": "Änderungen speichern",
+			"saving": "Wird gespeichert…"
 		},
 		"documentTitle": "Shared document",
 		"expires": "Expires {{date}}",
@@ -2270,8 +2288,46 @@
 			"thisWeek": "This week",
 			"totalAllTime": "{{total}} completions",
 			"totalColumn": "Total",
-			"editHint": "Edit link: you can tick the cells directly.",
-			"viewHint": "This page is view-only. Ask the owner for an edit link to tick."
+			"editHint": "Bearbeitungslink: Wähle „Bearbeiten“, um Check-ins und Notizen freizuschalten.",
+			"viewHint": "Diese Seite ist schreibgeschützt. Bitte den Eigentümer um einen Bearbeitungslink.",
+			"noteCancel": "Abbrechen",
+			"noteConflict": "Diese Notiz wurde an anderer Stelle geändert. Lade die neueste Version vor dem Speichern.",
+			"noteConflictDismiss": "Neu laden, Entwurf behalten",
+			"noteReloadFailed": "Neueste Notiz konnte nicht geladen werden.",
+			"noteEditorAria": "Ziel-Check-in-Notiz",
+			"noteSave": "Notiz speichern",
+			"noteSaveFailed": "Notiz konnte nicht gespeichert werden.",
+			"noteSaving": "Wird gespeichert…"
+		},
+		"project": {
+			"newTask": "Neue Aufgabe",
+			"editHint": "Dieser Link kann einfache Aufgaben erstellen und bearbeiten. Wähle „Bearbeiten“, um zu beginnen.",
+			"editingHint": "Wähle eine Aufgabe zum Bearbeiten oder erstelle eine neue.",
+			"viewHint": "Dieses Projekt ist schreibgeschützt. Bitte den Eigentümer um einen Bearbeitungslink.",
+			"boardView": "Board",
+			"listView": "Liste",
+			"noDescription": "Keine Beschreibung.",
+			"close": "Schließen",
+			"cancel": "Abbrechen",
+			"create": "Aufgabe erstellen",
+			"descriptionLabel": "Beschreibung",
+			"dueDateLabel": "Fälligkeitsdatum",
+			"editTaskTitle": "Aufgabe bearbeiten",
+			"priorityLabel": "Priorität",
+			"save": "Änderungen speichern",
+			"saveFailed": "Aufgabe konnte nicht gespeichert werden.",
+			"saved": "Gespeichert",
+			"saving": "Wird gespeichert…",
+			"startDateLabel": "Startdatum",
+			"statusLabel": "Status",
+			"titleLabel": "Titel"
+		},
+		"legacy": {
+			"copyReplacement": "Ersatzlink erstellen",
+			"title": "Dieser Link kann nicht wiederhergestellt werden",
+			"description": "Die ursprüngliche URL kann nicht wiederhergestellt werden. Erstelle einen neuen Link mit denselben Rechten. Die alte URL wird nicht geändert; falls sie noch gültig ist, kannst du sie nach Prüfung separat widerrufen.",
+			"cancel": "Abbrechen",
+			"replace": "Ersatzlink erstellen und kopieren"
 		},
 		"invalid": {
 			"description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
@@ -2296,6 +2352,8 @@
 		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
 		"errors": {
 			"createFailed": "Could not create the share link",
+			"copyFailed": "Could not copy the link",
+			"replaceFailed": "Could not create the replacement link",
 			"revokeFailed": "Could not revoke the link"
 		}
 	},
@@ -2310,7 +2368,6 @@
 		"noteAria": "Open note details",
 		"pageTitle": "Goals",
 		"previousWeek": "Previous week",
-		"privateBadge": "private",
 		"sheet": {
 			"completed": "done",
 			"conflict": "This note changed elsewhere. Reload to get the latest version, then re-apply your edit.",

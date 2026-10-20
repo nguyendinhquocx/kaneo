@@ -3,7 +3,10 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
-import { assertFinalTaskStatusGate, assertFullRunFieldsImmutable } from "../../execution/finalization-gate";
+import {
+  assertFinalTaskStatusGate,
+  assertFullRunFieldsImmutable,
+} from "../../execution/finalization-gate";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import { assertValidTaskStatus } from "../validate-task-fields";
@@ -46,7 +49,7 @@ async function updateTask(
       nextTitle: title,
       nextDescription: description,
       existingTitle: lockedTask.title,
-      existingDescription: lockedTask.description,
+      existingDescription: lockedTask.description ?? "",
     });
 
     await assertValidTaskStatus(status, projectId);

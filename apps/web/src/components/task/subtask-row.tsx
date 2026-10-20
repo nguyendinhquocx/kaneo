@@ -1,4 +1,7 @@
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { motion, useReducedMotion } from "framer-motion";
+import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import TaskCardContextMenuContent from "@/components/kanban-board/task-card-context-menu/task-card-context-menu-content";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,6 +29,8 @@ type SubtaskRowProps = {
   onToggleComplete: () => void;
   onNavigate: () => void;
   onDeleteClick: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 };
 
 export default function SubtaskRow({
@@ -42,12 +47,29 @@ export default function SubtaskRow({
   onToggleComplete,
   onNavigate,
   onDeleteClick,
+  onMoveUp,
+  onMoveDown,
 }: SubtaskRowProps) {
   const reduceMotion = useReducedMotion();
   const { t } = useTranslation();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id, disabled: !canEdit });
 
   return (
     <motion.div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.6 : 1,
+      }}
       layout
       initial={
         reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0, scale: 0.98 }
@@ -65,6 +87,43 @@ export default function SubtaskRow({
           <div
             className={`group flex items-center gap-2 py-1 px-2 ${selectionRadius} transition-colors cursor-default ${isSelected ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-accent/50"} ${isFocused ? "ring-1 ring-inset ring-ring/50" : ""}`}
           >
+            {canEdit ? (
+              <div className="flex shrink-0 items-center gap-0.5">
+                <button
+                  type="button"
+                  ref={setActivatorNodeRef}
+                  className="flex size-8 items-center justify-center rounded text-muted-foreground hover:bg-accent sm:size-7"
+                  aria-label={t("tasks:subtasks.drag", { title: task.title })}
+                  {...attributes}
+                  {...listeners}
+                >
+                  <GripVertical className="size-3.5" aria-hidden="true" />
+                </button>
+                <div className="hidden flex-col sm:flex">
+                  <button
+                    type="button"
+                    className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent"
+                    onClick={onMoveUp}
+                    aria-label={t("tasks:subtasks.moveUp", {
+                      title: task.title,
+                    })}
+                  >
+                    <ArrowUp className="size-3" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent"
+                    onClick={onMoveDown}
+                    aria-label={t("tasks:subtasks.moveDown", {
+                      title: task.title,
+                    })}
+                  >
+                    <ArrowDown className="size-3" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {/* Completion — toggles the subtask done/undone and persists it. */}
             <Checkbox
               checked={isCompleted}

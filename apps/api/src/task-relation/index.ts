@@ -15,6 +15,7 @@ import { workspaceAccess } from "../utils/workspace-access-middleware";
 import createTaskRelation from "./controllers/create-task-relation";
 import deleteTaskRelation from "./controllers/delete-task-relation";
 import getTaskRelations from "./controllers/get-task-relations";
+import { reorderSubtasks } from "./controllers/reorder-subtasks";
 
 function hasTaskReadScope(
   apiKey: { permissions: Record<string, string[]> | null } | undefined,
@@ -31,6 +32,7 @@ const taskRelationSchema = v.object({
   sourceTaskId: v.string(),
   targetTaskId: v.string(),
   relationType: v.string(),
+  position: v.number(),
   createdAt: v.date(),
 });
 
@@ -136,6 +138,45 @@ const taskRelation = new Hono<{
         workspaceId: c.get("workspaceId"),
       });
       return c.json(relation);
+    },
+  )
+  .put(
+    "/subtasks/:taskId/order",
+    describeRoute({
+      operationId: "reorderTaskSubtasks",
+      tags: ["Task Relations"],
+      description:
+        "Persist subtask order and synchronize the sibling card order within each status lane",
+      responses: {
+        200: {
+          description: "Ordered subtask relations",
+          content: { "application/json": { schema: resolver(v.any()) } },
+        },
+      },
+    }),
+    validator("param", v.object({ taskId: v.string() })),
+    validator("json", v.object({ orderedTargetTaskIds: v.array(v.string()) })),
+    workspaceAccess.fromTaskId("taskId"),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c) => {
+      const { taskId } = c.req.valid("param");
+      const { orderedTargetTaskIds } = c.req.valid("json");
+      const actorIsAgent = requestActorIsAgent(c);
+
+      for (const targetTaskId of orderedTargetTaskIds) {
+        await assertRelationTargetsGuard(db, {
+          sourceTaskId: taskId,
+          targetTaskId,
+          actorIsAgent,
+        });
+      }
+
+      const relations = await reorderSubtasks({
+        parentTaskId: taskId,
+        orderedTargetTaskIds,
+        workspaceId: c.get("workspaceId"),
+      });
+      return c.json(relations);
     },
   )
   .delete(

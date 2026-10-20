@@ -513,3 +513,434 @@ Owner UAT on the r2 deployment surfaced 8 findings. Scope of this revision:
 6. R3-T6 — Public goal matrix "Tổng" column now shows the all-time total, matching the in-app matrix.
 
 Deploy receipt round 3 (2026-10-20): image `ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-31bf27be-uat-repair-3@sha256:07dabd10075530092417900c06e205b5a98b8fc7cdfdd9eb59a052403e85f283` built no-cache from commit `31bf27be` and pushed to private GHCR; production Compose sha `5d391625c597c009396c25737783c0b139b9c636c6c520c48e47a8843619e021`. ProDesk guarded rollout PASS: adapter repin (backup-verify +uat-repair-3 identity, migration-verify compose/image pin head 51 unchanged, sync-recovery-metadata rev `31bf27be…`/wrapper `e4d3ac48…`, wrapper pair rotation PREVIOUS=uat-repair-2/CANDIDATE=uat-repair-3). Strict backup verify PASS pre-deploy (`kaneo-20261019T142933Z`) and post-snapshot (`kaneo-20261020T023031Z`); migration/schema verify PASS; container healthy with the pinned digest; public smoke `https://kaneo.quoc.app/api/health` → 200. Rollback pin: `2.14.0-candidate-5db17094-uat-repair-2@sha256:3e0d5a61…`. Verify totals: web 37/37, Biome clean, i18n sync; overlap fix verified with an instrumented local browser session (no overlap at short/long content, page scrolls). Gaps unchanged: Docker Scout not re-run; R2 mirror of `kaneo-20261020T023031Z` pending; credential rotation still outstanding.
+
+## Revision 4 — UAT follow-up (2026-10-20, owner review pending)
+
+This is an append-only UAT revision of this living spec; R1–R3 receipts remain historical evidence. R4 supersedes the earlier exclusions on Docs attachments and individual public comment reads, but does not add anonymous comment writing or change other security boundaries. Owner approved this revision and both decisions in “Owner Decisions” on 2026-10-20; source changes are now authorized, production deploy remains a separate gate.
+
+### Context Snapshot
+
+- Project/module: Kaneo web + API; production revision R3 is deployed. Source checkout was clean at `08b5a4cf` before this spec edit.
+- Stack/runtime: pnpm monorepo; React/TanStack/Tiptap/Tailwind v4 web, Hono/Drizzle/PostgreSQL API, private R2 object storage.
+- Relevant current behavior and confirmed root causes:
+  - Upload routes are task-bound (`taskId`, `description|comment`); Docs and Goal note call `CommentEditor` without a task ID/`ensureTaskId`, which emits the exact “only upload files on saved tasks” toast. The create-task modal already has a draft-task ensure path, but the task editor and shared editor duplicate upload/paste logic.
+  - Both Tiptap paste handlers inspect only `clipboardData.files[0]`; clipboard image `items` can be missed, while rich HTML falls through to Tiptap and keeps incidental webpage logos. Drop/paste also processes only the first file.
+  - Server upload validation currently checks non-empty content type and size/max bytes, not a MIME allowlist. Non-image files are already stored as `attachment`, but public downloads must always use safe attachment headers and never trust uploaded MIME for inline rendering.
+  - `assetTable` is task/project-oriented and requires `projectId`; a goal may have no project. Cleanup currently scans task description/comment bodies only. `/asset/:id` has no share-token authorization; anonymous capability links need a separate resource-scoped route.
+  - The public document API has `PUT /share/document/:token`, but `ShareReader` always renders the document as read-only Markdown and ignores `scope`. The token ShareReader has no project branch, and the legacy public-project page is read-only. Thus the edit link can be valid while the page still has no visible editing control.
+  - Share-link rows store only `tokenHash`; authorized list responses intentionally return metadata, not URL. The dialog shows copy only for the newly-created URL and has only revoke on existing rows. A one-way hash cannot recreate an old token.
+  - `task_relation` has no position field and relation reads have no explicit order. `getTaskRelations` does return the parent task’s `projectId`, but the breadcrumb navigates using the child’s `projectId`; a cross-project parent therefore gets the wrong route.
+  - The execution panel renders expanded unconditionally. `rawHint` is rendered on the shared document page; `privateBadge` is rendered in the goals matrix.
+- UI references: `apps/web/DESIGN.md`; existing Docs surface brief; owner UAT screenshots `20261020112417.png`, `20261020113711.png`, `20261020113724.png`, `20261020113935.png`, `20261020113947.png` under `D:/pcloud/workspace/obsidian/archive/images/`.
+- Constraints: preserve workspace RBAC and share-token scope; no public workspace membership, user identity, agent-control, task deletion, or project settings; keep storage private; no broad redesign. Reuse the current design system and R2 upload path.
+
+### Objective
+
+- Tạo được nội dung có ảnh/file thật trong mô tả task, Docs, comment và ghi chú goal; ảnh dán/upload nằm đúng chỗ con trỏ, còn file thường hiện thành attachment có tên và tải được.
+- Link sửa phải có chỗ bấm sửa thật; link xem vẫn chỉ xem. Owner có thể copy lại link đang dùng, và có thể gửi riêng mô tả task hoặc một comment cho người không đăng nhập mà không lộ cả task/workspace.
+- Kéo thứ tự công việc con, mở được công việc cha, và giấu phần trạng thái thực thi tới lúc cần — không còn mấy mảng UI cướp chỗ mà không giúp làm việc.
+
+### UX Baseline (inherited)
+
+Inherits the 8-item `UX Baseline` above (keyboard, focus, a11y, viewport, states, consistency, platform, copy). R4 additionally requires that edit affordances are visible, attachment feedback stays at the content being edited, and public pages never leak adjacent resources or identity.
+
+### Scope
+
+- In:
+  - Mở rộng private asset pipeline cho task description, task comments, Docs body/comments và goal check-in notes; upload qua picker, paste ảnh, drop file; image inline, file khác thành attachment card.
+  - Làm sạch rich paste từ web: giữ text/format/link, bỏ ảnh trang trí/remote logo; paste ảnh bitmap thật từ clipboard vẫn upload inline.
+  - Public view link cho đúng một task description hoặc một activity comment; tải được đúng các file mà nội dung đó tham chiếu, không cần đăng nhập.
+  - Thực thi UI cho `edit` link đã có (project/document/goal), link view không có control sửa; không hỗ trợ resource nếu chưa có edit UI thật.
+  - Copy link đang tồn tại trong Share dialog; thêm copy-link action ở task description và từng comment; bỏ hint `/raw` khỏi trang share và bỏ chữ `riêng tư` khỏi goals UI.
+  - Persist thứ tự subtask, đồng bộ thứ tự card trong cùng status lane, sửa breadcrumb cha dùng đúng project; execution panel collapsed mặc định, thông báo tải lỗi dùng text trung tính.
+  - Cập nhật README và environment setup để self-host owner biết content-share, file attachments và secret `SHARE_TOKEN_ENCRYPTION_KEY` cần giữ ổn định.
+- Out:
+  - Anonymous comment creation/edit/delete; public share cả activity thread; share workspace/project/membership/integration/agent-control data; public sửa/xóa task hoặc thay đổi assignee/permission/agent state.
+  - Public link cho task thuộc project/task đang được agent-control quản lý nếu description có thể chứa execution envelope; không làm weak sanitization để cố lách chặn này.
+  - Public raw object URL hoặc public bucket; đổi auth model, đăng ký account, visual identity, hoặc cách deploy.
+  - Anonymous upload file qua bearer edit link; upload mới vẫn cần workspace permission, tránh storage-abuse endpoint.
+  - Tự ý nới giới hạn dung lượng/file policy ngoài acceptance được owner duyệt.
+
+### Thuật ngữ
+
+- **Content asset**: ảnh/file được upload và gắn với đúng một vùng nội dung (task description, comment, document, hoặc goal check-in note); không phải file public tự do.
+- **Inline image**: ảnh được chèn thành node ảnh ngay tại vị trí caret/drop, không chỉ nằm cuối bài hay trong danh sách attachment.
+- **Attachment card**: node hiển thị tên/loại file và hành động mở/tải; chỉ dùng cho file không phải ảnh.
+- **Scoped public link**: bearer URL cấp quyền xem/sửa đúng resource đã chọn; ai có URL đều có quyền đó nhưng URL không xác minh danh tính thật.
+- **Legacy share link**: link được tạo trước R4, hiện chỉ còn hash token trong DB nên server không thể khôi phục URL gốc.
+
+### Assumptions
+
+1. User request hiện tại là chủ động cho phép tạo no-login **view link** cho đúng một task description hoặc một activity comment; comment link không cho sửa và không lộ email/avatar/user ID.
+2. Image/file chỉ public khi được tham chiếu từ đúng content item mà link cấp quyền; biết `assetId` một mình không đủ để tải.
+3. Giữ expiry hiện tại: view link không hết hạn mặc định nhưng revoke được; edit link hết hạn sau 30 ngày. Link mới vẫn đi qua rate limit, audit và `no-referrer` hiện có.
+4. Ảnh clipboard bitmap là nội dung có chủ đích; `<img>` từ HTML webpage là noise mặc định, nên không import ảnh remote khi dán đoạn văn bản từ web.
+5. Với content của agent-managed task, fail closed thay vì cố lọc JSON envelope bằng heuristic.
+
+### Owner Decisions (2026-10-20)
+
+- **Copy link cũ:** owner chọn mã hóa token mới bằng AEAD + `SHARE_TOKEN_ENCRYPTION_KEY`, để copy lại giữa các lần mở/thiết bị. Link legacy chỉ còn `tokenHash` vẫn hoạt động nhưng không thể giải mã; muốn copy phải tạo URL thay thế sau xác nhận, không tự thu hồi URL cũ.
+- **Thứ tự subtask:** owner chọn `task_relation.position` làm thứ tự chuẩn; reorder cập nhật trong transaction và đồng bộ `task.position` giữa sibling cùng status lane, giữ relative order của task không liên quan. Khác status thì parent list có thứ tự chung, board phản ánh relative order riêng trong từng lane.
+- Production rollout cần provision và bảo vệ `SHARE_TOKEN_ENCRYPTION_KEY`; không ghi key vào repo, spec, log hoặc hỏi user paste vào chat.
+
+### Pre-lock flow delta
+
+- Current: dán ảnh/file → chỉ nhánh `clipboardData.files` được nhận; editor Docs/goal không có task ID để gọi API upload. Dán HTML từ web → ProseMirror có thể giữ logo remote. Copy link mới thì được, quay lại link cũ thì không còn URL.
+- Proposed: paste/drop/picker gom về một upload path → file được gắn đúng owner → ảnh/file chèn ở caret/drop position → lưu Markdown. Dán HTML giữ nội dung chữ/link nhưng bỏ remote image. Copy icon copy URL hiện có; nếu là legacy hash-only thì nói rõ cần tạo lại, không giả báo đã copy.
+- Public path: mở URL không login → server xác thực token + resource + asset owner → chỉ trả đúng nội dung/attachment; edit link lộ nút `Chỉnh sửa` trước khi người nhận cần tìm control, còn view link không có nút đó.
+- Task path: kéo handle/Move up/down trong list con → thứ tự lưu → sibling cards cùng status phản ánh đúng; bấm breadcrumb cha → route theo project thật của cha. Execution details chỉ tải/hiện khi bung mục.
+
+### Approach
+
+- Mở rộng asset ownership bằng quan hệ rõ ràng tới content owner; giữ object private trong R2 và presigned upload. Model phải hỗ trợ goal không có project; không giả task/project ID.
+- Public asset GET dùng route qua share token; API xác minh resource link còn hiệu lực, asset thuộc đúng content owner, MIME/disposition an toàn và read rate limit. Link bị revoke thì cả nội dung lẫn file route đều fail closed. Public link không upload binary mới; upload mới cần workspace permission.
+- Thêm share resource types `task_description` và `activity_comment`, đều view-only; task description trả title + Markdown, comment trả đúng một body + timestamp. Không trả author email/avatar/user ID, workspace ID, sibling comments hay task execution fields. Chặn link description ở agent-managed task/project theo boundary cũ.
+- Sửa public edit UI theo từng type: project dùng đúng basic task mutations T7; document dùng title/body + revision CAS; goal dùng check-in/note controls. Mỗi edit page có nút `Chỉnh sửa` nhìn thấy được; type chưa có UI thật thì không được hiện permission `edit`.
+- Giữ action Copy trực tiếp và gọn; token mới lưu mã hóa theo Owner Decision ở trên, legacy link cần explicit replacement.
+- Reorder dùng relation order làm chuẩn và đồng bộ task-card positions theo Owner Decision ở trên. Breadcrumb dùng `parentTask.projectId`; execution section dùng `Collapsible` hiện có.
+
+### API Interface Contract (parent API ↔ frontend worker)
+
+- Authenticated asset upload: `PUT /content-asset/upload` accepts `{ownerType, ownerId, filename, contentType, size}` and returns `{uploadUrl, headers, key}`; `POST /content-asset/finalize` accepts the same fields plus `key` and returns `{id, url, filename, mimeType, size, kind}`. `ownerType` is `task_description | task_comment | document | document_comment | goal_checkin`; task-comment uses task ID, document-comment uses document ID, goal-checkin uses an existing check-in ID. New binaries are never uploaded through anonymous edit links.
+- Share management keeps existing paths. `POST /share-manage` adds resource types `task_description` and `activity_comment` (view-only); `GET /share-manage?resourceType&resourceId` adds `url: string | null` to each row. URL is only returned to a caller with `project:share`; null means a legacy hash-only link that cannot be reconstructed.
+- Public reader: `GET /share/project/:token` includes `scope`; `GET /share/document/:token` includes `scope`; new `GET /share/task_description/:token` returns `{title, content}`; new `GET /share/activity_comment/:token` returns `{content, createdAt}` only. Each referenced asset is rewritten by web to `GET /share/:resourceType/:token/asset/:assetId`; API verifies both capability and exact content reference before streaming.
+- Task subtask reorder: `PUT /task-relation/subtasks/:taskId/order` accepts `{orderedTargetTaskIds}` and returns ordered relations with `position`; cross-workspace, foreign, missing or non-child IDs fail closed.
+- Existing public write routes remain the only mutation contract: project task create/update, document CAS update, and goal check-in/note update. Public link types `task_description` and `activity_comment` cannot write.
+
+### Diagram
+
+```mermaid
+sequenceDiagram
+  participant E as Editor
+  participant A as API
+  participant D as DB
+  participant R as Private R2
+  participant V as Viewer
+  E->>A: Upload với owner scope
+  A->>D: Kiểm tra quyền và resource
+  A->>R: Ghi object private
+  A->>D: Lưu asset owner
+  A-->>E: assetId và URL nội bộ
+  E->>D: Lưu Markdown tham chiếu asset
+  V->>A: GET public link + asset
+  A->>D: Kiểm tra token, scope, owner
+  A->>R: Đọc object nếu đúng owner
+  A-->>V: Nội dung và file an toàn
+```
+
+### Task List
+
+#### R4-T1 — Asset owner và upload API cho mọi content surface
+
+- Acceptance:
+  - Một upload được gắn chính xác vào task description, activity comment, Docs body/comment hoặc goal check-in note; resource owner và workspace permission được kiểm tra server-side ở cả presign lẫn finalize. Goal không có project vẫn upload được bằng workspace/goal owner scope.
+  - Dùng R2 private; ảnh chỉ render inline nếu MIME nằm trong safe-inline raster whitelist. File khác luôn download dưới `application/octet-stream` + attachment/nosniff. Giữ max-size hiện hành; kiểm tra content type/filename ở server, không inline HTML/SVG/script.
+  - Xóa asset khỏi content hoặc xóa owner không để lại metadata/blob mồ côi; không thể gắn lại upload key của resource khác.
+  - Upload trong draft chưa có ID được giữ chờ/đảm bảo resource tồn tại trước khi finalize; không mất nội dung hay hiện “chỉ có thể tải tệp lên trên công việc đã lưu”.
+- Reproduce: `pnpm --filter @kaneo/api test:integration` và `pnpm --filter @kaneo/api test:unit`.
+- Files:
+  - `apps/api/src/database/schema.ts` — `assetTable`, `documentTable`, `goalCheckinTable`; dùng FK/index/cascade hiện có làm pattern.
+  - `apps/api/src/task/index.ts` — `/image-upload/:id` + `/finalize` là upload/finalize pattern cần generalize.
+  - `apps/api/src/index.ts` — `/asset/:id` hiện kiểm tra task/project và quyền đọc; không mở public bypass.
+  - `apps/api/src/storage/cleanup-assets.ts` — cleanup private objects theo content owner.
+  - `apps/api/src/activity/controllers/create-comment.ts` — liên kết asset draft với activity sau khi comment được tạo.
+  - `tests/api-integration/task-image-upload.test.ts`, `tests/api-integration/document.test.ts`, `tests/api-integration/goal.test.ts` — regression patterns; thêm test content-owner isolation.
+- Verify: migration clean install + upgrade test DB; upload allowed owner PASS, wrong workspace/owner/key FAIL, cleanup metadata+R2 object PASS.
+
+#### R4-T2 — Paste, upload, drop và chèn đúng vị trí
+
+- Acceptance:
+  - Task description, task comment, Docs body/comment và goal note có cùng khả năng chọn file, paste ảnh clipboard và drag/drop file.
+  - Ảnh bitmap từ clipboard/picker/drop được upload rồi chèn inline đúng selection/drop position; file khác chèn thành `AttachmentCard` tại đó. Nhiều item giữ đúng thứ tự clipboard.
+  - Async upload giữ bookmark/caret; không chèn nhầm vào vị trí mới sau khi user tiếp tục gõ.
+  - Dán HTML từ webpage giữ chữ/format/link nhưng bỏ remote `<img>`/logo trang trí; không lưu `D:\...`/file path thành Markdown image broken. Ảnh clipboard thật vẫn hoạt động.
+  - Progress/failure nói rõ trạng thái, retry được; không báo thành công trước khi object + metadata + content reference đã lưu.
+- UX Contract:
+  - Default action là dán ảnh hoặc bấm kẹp giấy; không cần gõ đường dẫn Markdown hay tự tải ảnh lên chỗ khác.
+  - Ảnh xuất hiện ngay tại caret; file thường là một card gọn với tên, loại và mở/tải.
+  - Keyboard focus và paste không cướp focus; lỗi upload không xóa draft.
+- Skills: `flow`, `frontend-taste-chatgpt`, `mobile-responsive`.
+- Visual Ref: `apps/web/DESIGN.md`; `apps/web/src/components/activity/comment-editor.tsx`; UAT paste screenshots `20261020113711.png`/`20261020113724.png`.
+- Reproduce: `pnpm --filter @kaneo/web test && pnpm --filter @kaneo/web typecheck`; browser smoke bằng dev API/Web với ảnh clipboard, HTML text có logo, PDF attachment.
+- Files:
+  - `apps/web/src/components/task/task-description.tsx` — hiện chỉ đọc `clipboardData.files[0]`; chuẩn hóa `handlePaste`/drop.
+  - `apps/web/src/components/activity/comment-editor.tsx` — shared Tiptap editor + attachment nodes.
+  - `apps/web/src/components/docs/document-workspace.tsx` — Docs body/comment editor không có task ID.
+  - `apps/web/src/components/goals/goal-details-sheet.tsx` — goal note editor không có task ID.
+  - `apps/web/src/components/task/extensions/attachment-card.tsx`, `apps/web/src/lib/upload-task-image.ts` — node/upload result pattern; đổi tên helper nếu phù hợp.
+
+#### R4-T3 — Scoped public links và asset delivery cho mô tả/comment
+
+- Acceptance:
+  - Owner có thể copy link no-login cho đúng một task description hoặc một activity comment; link comment chỉ trả đúng comment được chọn, không trả thread.
+  - Asset của Docs, task, comment và goal note chỉ tải qua share token còn hiệu lực và chỉ nếu asset được owner resource tham chiếu. Không dùng URL R2 công khai; biết asset ID hoặc URL nội bộ không đủ quyền.
+  - Token sai/hết hạn/revoked/resource mismatch trả cùng generic not-found; rate limit, `no-referrer`, `noindex`, safe Content-Disposition/nosniff và audit cho public writes đều được giữ.
+  - Public comment DTO không lộ email/avatar/user ID/workspace ID; task description DTO không lộ assignee, project settings, execution fields. Agent-managed task/project không tạo public description/edit link.
+  - Comment link và task-description link mặc định view-only; public link không cho anonymous tạo/sửa comment hoặc upload binary.
+  - Direct `/asset/:id` không được nới công khai; share-token asset endpoint phải xác minh owner reference. Direct API tests bắt IDOR, asset cross-owner, revoke, expiry, view→write denial, unsafe inline MIME, và download sau revoke.
+- Reproduce: `pnpm --filter @kaneo/api test:integration && pnpm --filter @kaneo/api test:unit`.
+- Files:
+  - `apps/api/src/share/resolve-share-link.ts` — generic fail-closed scope/expiry/revoke/rate-limit contract.
+  - `apps/api/src/share/manage.ts`, `apps/api/src/share/index.ts`, `apps/api/src/share/public-write.ts` — add exact resource kinds and handlers; do not weaken wildcard auth.
+  - `apps/api/src/index.ts` — private `/asset/:id`; add share-token asset route or equivalent scoped path.
+  - `apps/api/src/project/controllers/public-project-dto.ts` — reuse agent-managed refusal/data-minimization rules.
+  - `apps/web/src/routes/share/$resourceType/$token.tsx`, `apps/web/src/components/public-project/markdown-renderer.tsx` — public reader/sanitized Markdown patterns.
+  - `tests/api-integration/public-share.test.ts`, `tests/api-integration/share-link-write.test.ts` — extend capability matrix.
+
+#### R4-T4 — Public edit links phải có affordance và sửa được thật
+
+- Acceptance:
+  - Share page kiểm tra `scope`: `view` chỉ xem; `edit` hiện nút `Chỉnh sửa` thấy ngay, mở controls thật và có save/pending/error/conflict feedback phù hợp.
+  - Document edit cập nhật title/body bằng revision CAS; goal edit bật check-in/note controls; project edit tạo/cập nhật đúng basic fields đã chốt ở T7. Không edit thì không có quyền qua API dù tự gọi endpoint.
+  - Nếu một type chưa có editor UI, ShareDialog không cho tạo link `edit` cho type đó; không có “edit” chỉ bằng một dòng hint.
+  - Không public edit task deletion/assignee/member/settings/agent-control; project/task agent-managed vẫn view-only hoặc bị từ chối như T7.
+- UX Contract:
+  - Nút `Chỉnh sửa` là affordance trực tiếp trên public page, không bắt đoán checkbox nào có thể bấm.
+  - Sau khi vào edit, action chính và trạng thái lưu nằm cạnh nội dung; view link không có nút mồ côi/disabled giả.
+  - Mobile 320–1440 không tràn ngang; matrix được scroll bên trong.
+- Skills: `flow`, `frontend-taste-chatgpt`, `mobile-responsive`.
+- Visual Ref: `apps/web/DESIGN.md`; `apps/web/src/routes/share/$resourceType/$token.tsx`; public project `task-detail-modal.tsx`/`task-card.tsx`.
+- Reproduce: `pnpm --filter @kaneo/web test && pnpm --filter @kaneo/web typecheck && pnpm --filter @kaneo/api test:integration`; UAT view/edit bằng browser không login.
+- Files:
+  - `apps/web/src/routes/share/$resourceType/$token.tsx` — currently document branch is read-only regardless of scope; add actual editor/controls.
+  - `apps/web/src/routes/public-project.$projectId.tsx`, `apps/web/src/components/public-project/task-detail-modal.tsx` — legacy read-only route; keep separate from token capability boundary.
+  - `apps/web/src/components/share/share-dialog.tsx`, `apps/web/src/fetchers/share/share-api.ts`, `apps/web/src/hooks/mutations/share/use-share-links.ts` — only advertise edit where route supports it.
+  - `apps/api/src/share/public-write.ts` — existing task/document/goal mutation allowlist; preserve field limits and CAS.
+
+#### R4-T5 — Copy lại link cũ và icon copy trong danh sách
+
+- Acceptance:
+  - Mỗi row link hiện có trong Share dialog có icon copy nằm bên trái thùng rác; thành công đổi sang tick khoảng 1.5–2 giây rồi trở lại, clipboard lỗi thì báo rõ/fallback chọn URL khi có thể.
+  - Link mới có một thao tác copy trực tiếp; nút copy cho comment/task description tạo hoặc reuse link view đang hoạt động, không tạo bản trùng mỗi lần bấm. Comment copy action hiện cho người có `project:share`, không bị khóa theo quyền sửa/xóa comment (`canEdit`).
+  - Token mới được lưu mã hóa theo Owner Decision; endpoint list chỉ trả URL cho người có `project:share`, response `no-store`, token không đi vào logs/analytics.
+  - Link legacy không thể phục hồi phải được nhận diện; không giả copy thành công, không tự vô hiệu URL đang được dùng. Cách tạo lại/rotate chỉ chạy sau xác nhận rõ hậu quả.
+- UX Contract:
+  - Copy icon dễ thấy và có accessible label; success dùng icon tick tại chỗ, không toast.
+  - Legacy item giải thích ngắn “Không khôi phục được link cũ” và chỉ đưa action tạo lại sau khi owner xác nhận.
+  - Không thêm copy warning/paragraph dài vào đầu Share dialog.
+- Skills: `flow`, `frontend-taste-chatgpt`, `mobile-responsive`.
+- Visual Ref: `apps/web/DESIGN.md`; `apps/web/src/components/share/share-dialog.tsx` (row hiện có permission/expiry + revoke).
+- Reproduce: `pnpm --filter @kaneo/web test && pnpm --filter @kaneo/web typecheck && pnpm --filter @kaneo/api test:integration`.
+- Files:
+  - `apps/api/src/database/schema.ts` — `shareLinkTable.tokenHash`; add ciphertext/key version only after owner approves.
+  - `apps/api/src/share/token.ts`, `apps/api/src/share/manage.ts` — one-time token + owner-only listing/revoke.
+  - `apps/web/src/components/share/share-dialog.tsx` — existing rows currently have only Trash2.
+  - `apps/web/src/fetchers/share/share-api.ts`, `apps/web/src/hooks/mutations/share/use-share-links.ts` — list/copy/cache behavior.
+  - `apps/web/src/components/activity/comment-card.tsx`, `apps/web/src/components/task/task-description.tsx` — direct scoped Copy link actions.
+
+#### R4-T6 — Bỏ copy thừa, giữ nguyên semantics quyền
+
+- Acceptance:
+  - Bỏ dòng `rawHint` khỏi HTML public share page và locale keys; giữ `GET /document/:token/raw` cho agent đã có URL.
+  - Bỏ chữ/badge `riêng tư` khỏi goal row; private visibility và server-side access checks không đổi.
+  - Tất cả locale pass sync/coverage; không còn key chết nếu chỉ phục vụ các copy đã bỏ.
+- UX Contract:
+  - Không thay bằng badge/hint khác; giao diện chỉ còn nội dung và control cần dùng.
+- Skills: `flow`, `frontend-taste-chatgpt`, `mobile-responsive`.
+- Visual Ref: `apps/web/DESIGN.md`; `apps/web/src/routes/share/$resourceType/$token.tsx`; `apps/web/src/components/goals/goals-matrix.tsx`.
+- Reproduce: `pnpm i18n:check && pnpm i18n:coverage && pnpm --filter @kaneo/web test`.
+- Files:
+  - `apps/web/src/routes/share/$resourceType/$token.tsx` — `document.rawHint` render.
+  - `apps/web/src/components/goals/goals-matrix.tsx` — `privateBadge` render.
+  - `i18n/*.json` — synced locale keys.
+
+#### R4-T7 — Thứ tự công việc con được kéo và lưu
+
+- Acceptance:
+  - Drag handle cho child row; thứ tự persist sau reload và server trả cùng thứ tự cho parent.
+  - Reorder transaction kiểm tra parent relation + toàn bộ child IDs trong đúng workspace; request stale/foreign ID fail closed.
+  - Theo Owner Decision: relation order là nguồn chuẩn và task cards được đồng bộ trong cùng status lane; non-sibling task giữ relative order.
+  - Board/List invalidation/cache cập nhật ngay; không cần tải lại trang để thấy card ngoài đổi chỗ.
+  - Keyboard reorder có nút Move up/down hoặc dnd-kit keyboard sensor, không chỉ drag chuột; không đụng relation type khác.
+- UX Contract:
+  - Handle riêng, không bắt kéo checkbox/status popover; vị trí drag được báo rõ bằng focus/drag state.
+  - Row sau reorder giữ task details/status/assignee; move feedback không che nội dung.
+- Skills: `flow`, `frontend-taste-chatgpt`, `mobile-responsive`.
+- Visual Ref: `apps/web/DESIGN.md`; `apps/web/src/components/task/task-subtasks.tsx`, `subtask-row.tsx`, `apps/web/src/components/kanban-board` drag pattern.
+- Reproduce: `pnpm --filter @kaneo/api test:integration && pnpm --filter @kaneo/web test && pnpm --filter @kaneo/web typecheck`.
+- Files:
+  - `apps/api/src/database/schema.ts` — `taskRelationTable` currently has no position.
+  - `apps/api/src/task-relation/index.ts`, `controllers/get-task-relations.ts` — relation authorization/read ordering.
+  - New reorder controller/test under `apps/api/src/task-relation/**`; mirror existing `assertRelationTargetsGuard` + `task:update` checks.
+  - `apps/web/src/components/task/task-subtasks.tsx`, `subtask-row.tsx` — current mapped child list and drag target.
+  - `apps/web/src/components/kanban-board/index.tsx`, `task-card.tsx`, `apps/web/src/components/list-view/task-row.tsx` — `task.position` ordering/cache pattern.
+
+#### R4-T8 — Breadcrumb mở đúng công việc cha
+
+- Acceptance:
+  - Khi parent ở cùng project hoặc project khác trong cùng workspace, breadcrumb route dùng `parentTask.projectId` và đúng workspace.
+  - Reproduce riêng screenshot crash và lấy lỗi thực từ browser/test; chỉ sửa projectId là chưa đủ nếu lỗi còn tái diễn ở cùng project. Regression test cover parent/child khác project và case crash tái hiện được.
+  - Nếu relation/parent đã bị xóa hoặc không còn quyền đọc, lỗi nêu được recovery thay vì màn trắng.
+- UX Contract:
+  - Breadcrumb vẫn là một link gọn ngay trên title; click đổi task nhưng giữ detail flow hợp lý.
+- Skills: `flow`, `mobile-responsive`.
+- Visual Ref: owner screenshot `20261020113935.png`/`20261020113947.png`; `apps/web/DESIGN.md`.
+- Reproduce: `pnpm --filter @kaneo/web test && pnpm --filter @kaneo/web typecheck`; browser smoke trên hai task ở hai project trong cùng workspace.
+- Files:
+  - `apps/web/src/components/task/task-details-content.tsx` — relation có `sourceTask.projectId`, navigation hiện dùng projectId của child.
+  - `apps/api/src/task-relation/controllers/get-task-relations.ts` — parent `projectId` response contract.
+  - Task route under `apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/` — route boundary/regression.
+
+#### R4-T9 — Execution panel collapsed, lỗi không gào đỏ
+
+- Acceptance:
+  - Section “Thực thi” dùng Collapsible, mặc định đóng; khi mở vẫn giữ đầy đủ run/evidence/review controls.
+  - “Không thể tải trạng thái thực thi” dùng foreground trung tính (không destructive đỏ), có retry nếu query hỗ trợ; lỗi thật khác không bị nuốt.
+  - Open/closed state keyboard operable, heading có `aria-expanded` và focus visible.
+- UX Contract:
+  - Default task detail ưu tiên mô tả, subtasks, relations, activity; execution chỉ bung khi owner cần xem.
+  - Header section gọn; lỗi không chiếm diện tích card khi đóng.
+- Skills: `flow`, `frontend-taste-chatgpt`, `mobile-responsive`.
+- Visual Ref: `apps/web/DESIGN.md`; owner screenshot `20261020112417.png`; `apps/web/src/components/task/task-subtasks.tsx` và `task-relations.tsx` collapsible pattern.
+- Reproduce: `pnpm --filter @kaneo/web test && pnpm --filter @kaneo/web typecheck`; add component tests for default collapsed/error/retry/expanded.
+- Files:
+  - `apps/web/src/components/task/task-execution-panel.tsx` — always-expanded section and error rendering.
+  - `apps/web/src/components/task/task-execution-panel.test.tsx` — existing test harness.
+  - `apps/web/src/components/task/task-subtasks.tsx`, `task-relations.tsx` — Collapsible pattern.
+
+#### R4-T10 — README và cấu hình self-host không bị thiếu key
+
+- Acceptance:
+  - README mô tả đúng content attachments và scoped task-description/comment links, không biến README thành tài liệu API dài.
+  - Environment guide và `.env.sample` khai báo `SHARE_TOKEN_ENCRYPTION_KEY` là secret 32-byte base64url cần cho share-link re-copy; hướng dẫn generate/store/backup, tuyệt đối không có giá trị thật trong repo.
+  - Ghi rõ mất key không làm hỏng link cũ đang hoạt động, nhưng không thể copy ciphertext links; link hash-only legacy cần tạo lại như owner đã duyệt.
+- Reproduce: đối chiếu các tên env trong `turbo.json`, code và `.env.sample`; `pnpm i18n:check` không áp dụng cho README.
+- Files:
+  - `README.md` — update đúng block Workspace collaboration.
+  - `ENVIRONMENT_SETUP.md` — add feature-specific key setup beside other secrets.
+  - `.env.sample` — add blank commented key line and safe generation guidance.
+  - `turbo.json` — `globalPassThroughEnv` already carries the secret without cache hashing.
+
+### Checkpoints
+
+- After T1–T2: upload+reload test on task description, Docs, activity comment and goal note; prove inline placement, attachment open/download, no clipboard logo noise, no orphan object.
+- After T3–T5: unauthenticated browser tests for exact resource and every referenced asset; verify `view/edit`, re-copy, legacy-token handling, revoke/expiry, agent-managed refusal, and no identity/neighbor leakage.
+- After T6–T9: drag and reload verify board/list ordering, cross-project parent navigation, execution section default closed/error recovery.
+- Before any production deploy: migration clean-install/upgrade, API adversarial tests, web build/typecheck/test, i18n checks, 320–1440 overflow screenshots, owner UAT, and existing canonical R10e lane. No shortcut deploy.
+
+### External Review Brief
+
+#### Reviewer cần phán
+
+- Is the new resource-asset ownership model strong enough for task/docs/goal surfaces without turning `/asset/:id` or the R2 bucket public?
+- Do individual task-description/comment links expose exactly the selected content and attached assets, and fail closed for revoked/expired/wrong-owner tokens?
+- Does edit mode have real, visible controls for every resource type offering `edit`, while preserving T7 field/agent-control boundaries?
+- Is encrypted token retrieval worth a new secret/rotation burden, and is legacy-link recovery honest/safe?
+- Does relation-position + per-status card synchronization avoid reordering unrelated tasks or drift after concurrent writes?
+- Does rich paste preserve useful text while eliminating unwanted remote logos and still importing bitmap clipboard images?
+
+#### Reviewer nên đọc trước
+
+- `apps/api/src/share/{index.ts,manage.ts,public-write.ts,resolve-share-link.ts}`, `apps/api/src/index.ts` asset route, `apps/api/src/database/schema.ts` asset/share/relation tables.
+- `apps/web/src/routes/share/$resourceType/$token.tsx`, `components/share/share-dialog.tsx`, `components/activity/comment-editor.tsx`, `components/task/task-description.tsx`, `components/task/task-subtasks.tsx`, `components/task/task-details-content.tsx`, `components/task/task-execution-panel.tsx`.
+- `apps/web/DESIGN.md`, Docs surface brief, the five owner screenshots listed above.
+
+#### Reviewer không cần phán
+
+- Thay visual identity hoặc dựng lại Docs/Goals.
+- Thêm anonymous comments, workspace membership hoặc agent-control actions.
+- Tự thay quyết định key/hash/legacy rotation mà chưa ghi owner approval vào spec.
+
+### Implementation Handoff
+
+#### Delegation Decision
+
+- Mode: Worktree parallel — một GLM web worker + parent giữ API/security/schema/migration và nghiệm thu.
+- Dùng `agent-loop-orchestration`: yes — UAT revision có nhánh UI nhiều component, ownership tách `apps/web` khỏi API critical.
+- Parent giữ: asset-owner schema/upload, public share authorization/token encryption, share asset streaming, reorder API/migration, adversarial API tests, README/environment setup, final verify/integration.
+- W1 (GLM) làm: frontend/editor/share UI, i18n, subtask reorder UI, breadcrumb, execution panel; không sửa backend/API/security/docs.
+
+#### Worker Suitability
+
+- Acceptance rõ: yes — R4-T2, frontend portion of T4/T5, T6, frontend portion of T7, T8, T9.
+- Verify gate: `pnpm --filter @kaneo/web test && pnpm --filter @kaneo/web typecheck && pnpm i18n:check && pnpm i18n:coverage`.
+- Files allowed/forbidden rõ: yes — `apps/web/src/**`, `i18n/*.json`; backend/schema/migration/API tests/spec forbidden.
+- Risk: T2 frontend only. All auth/token/storage/schema decisions remain parent-owned.
+- Context pack: current design, UAT screenshots, API Interface Contract in this revision.
+
+#### Execution Manifest
+
+```
+execution_manifest:
+  mode: worktree_parallel
+  max_concurrent: 1
+  base_ref: 08b5a4cfc8d47b0ca560bb9f29e4d316a92f774f
+  integration_branch: kaneo/prodesk-production
+  tasks:
+    - id: W1
+      wave: 1
+      depends_on: []
+      worker: W1
+      writes:
+        - apps/web/src/**
+        - i18n/*.json
+      reads:
+        - apps/api/src/share/**
+        - apps/api/src/task/**
+        - apps/api/src/task-relation/**
+      forbidden:
+        - apps/api/**
+        - tests/api-integration/**
+        - apps/api/drizzle/**
+        - docs/specs/**
+        - package.json
+        - pnpm-lock.yaml
+      tests:
+        - pnpm --filter @kaneo/web test
+        - pnpm --filter @kaneo/web typecheck
+        - pnpm i18n:check
+        - pnpm i18n:coverage
+      risk: T2
+```
+
+#### Integration Plan
+
+- W1 dùng worktree riêng từ base `08b5a4cf`; API contracts ở section trên là interface freeze. Frontend calls tới route mới dùng local typed `fetch` wrapper để không phụ thuộc API client types chưa có trong base.
+- Parent chỉ sửa `apps/api/**`, `apps/api/drizzle/**`, `tests/api-integration/**` khi W1 đang chạy; không đụng `apps/web/**`/`i18n/**` tới lúc W1 trả diff.
+- Merge order: parent review W1 diff + web tests → integrate API parent slice và W1 commit theo repo branch convention → full verify trên integration branch. Conflict owner = parent; không worker tự merge.
+- Gates: worker web tests/typecheck/i18n; parent API integration/unit+migration clean/upgrade; sau integration chạy monorepo checks, browser desktop/mobile, `/verify`, UAT.
+- Rollback: giữ base SHA `08b5a4cf...`; nếu W1 UI slice phá acceptance sau tích hợp, revert riêng commit W1, giữ API/backend slice đã verify.
+- Resume: lỗi worker thì feedback một lần với failure log; không spawn worker thay thế cùng scope nếu chưa soi diff/artifact.
+
+#### Worker Slice W1
+
+- OBJECTIVE: implement R4 frontend contract in `apps/web/src/**` + `i18n/*.json`; no backend changes.
+- FILES ALLOWED: `apps/web/src/**`, `i18n/*.json`.
+- FILES FORBIDDEN: `apps/api/**`, `tests/api-integration/**`, `apps/api/drizzle/**`, `docs/specs/**`, package/config/lock files.
+- STEPS: implement image/file paste UI and location preservation using API Interface Contract; actual public edit controls and scoped readers; copy/re-copy UI using URL field/null legacy state; remove `rawHint` and `privateBadge`; reorder UI calling the contract endpoint; parent breadcrumb route; collapsible execution UI + focused tests.
+- VERIFY: commands from Execution Manifest; report browser-only states not verified as `MANUAL_SMOKE_NEEDED`.
+- Worker report required: `STATUS/ROLE/SCOPE/FILES_READ/FILES_TOUCHED/COMMANDS_RUN/EVIDENCE/RISKS/GAPS/NEXT_ACTION/DIFF_SCOPE/VERIFY_RESULTS/MANUAL_SMOKE_NEEDED/SCOPE_DEVIATIONS/OUT_OF_SPEC_ADDITIONS/SKILLS_READ`.
+
+### User Test
+
+| Hành động | Kết quả kỳ vọng | Chuẩn nhìn |
+|---|---|---|
+| Dán screenshot tại giữa mô tả task rồi lưu/mở lại | Ảnh nằm đúng chỗ, còn sau reload | Không có đường dẫn Windows hay logo website lạc vào nội dung |
+| Chọn PDF ở Docs hoặc kéo file vào ghi chú goal | File card xuất hiện tại vị trí chèn và tải/mở được | Tên file đọc được; không tràn ngang; lỗi upload không mất draft |
+| Dán đoạn văn từ web có favicon/logo | Chữ và link còn, logo trang trí biến mất | Nội dung không có icon rác hoặc ảnh broken |
+| Mở edit link trong cửa sổ private | Có nút `Chỉnh sửa`, vào được control đúng scope và lưu được | View link không có nút sửa; edit link không chỉ hiện hint |
+| Bấm copy ở một comment | Clipboard có URL mở đúng một comment + ảnh/file, không login | Không thấy email/avatar hay comment lân cận |
+| Bấm copy ở link đã có trong popup | URL được copy lại, tick hiện ngay cạnh row | Icon copy nằm trái thùng rác; không tạo row/link mới |
+| Kéo một công việc con lên trên sibling | Thứ tự giữ sau reload và card cùng status đổi tương ứng | Task không liên quan không bị nhảy vị trí |
+| Bấm breadcrumb công việc cha khác project | Mở đúng task cha | Không có trang “Something went wrong” |
+| Mở task có execution section | Nội dung task hiện trước; “Thực thi” đang đóng | Khi bung mới thấy lỗi/tác vụ; thông báo tải lỗi màu chữ trung tính |
+| Mở share doc/goal | Nội dung gọn | Không có dòng `/raw` hoặc chữ “riêng tư” thừa |
+
+Năm câu Y/N:
+
+1. Mọi màn hình/attachment có dùng được ở viewport 320–1440px mà không tràn ngang hoặc cắt nội dung không?
+2. Paste, upload, drag, copy, reorder và mở breadcrumb thao tác được bằng phương thức phù hợp (keyboard/mouse/touch) không?
+3. Focus, upload progress, edit mode và copy-success có nhìn thấy đúng nơi không?
+4. Khi upload/link/reorder lỗi hoặc conflict, UI có nói rõ nguyên nhân và cách phục hồi không?
+5. Public link có đúng scope và hình thức gọn như design system hiện tại không?
+
+### Completion Gates
+
+- [ ] Owner approved Rev4 choices: encrypted token storage + explicit legacy replacement, and relation-position ordering synchronized to sibling cards by status lane.
+- [ ] `SHARE_TOKEN_ENCRYPTION_KEY` is provisioned through the approved secret channel and backed up outside the repository before production deploy.
+- [ ] API integration/unit tests pass for resource owner, upload, IDOR, capability scope, edit/view, token recovery, rate limit, expiry/revocation, agent-managed refusal, and cleanup.
+- [ ] Migration applies to a clean test DB and upgrades the existing test DB; schema/asset cleanup reviewed before production.
+- [ ] Web test/typecheck/build + `pnpm i18n:check && pnpm i18n:coverage` pass.
+- [ ] UI evidence at desktop and 320/375/414/768/1024/1280/1440; overflow check passes, public view/edit and upload states captured, changed targets pass Impeccable detector review.
+- [ ] Browser UAT confirms image/file persistence, scoped no-login links, visible edit controls, exact copy/revoke behavior, subtask order, parent route and collapsed execution panel.
+- [ ] `/verify` PASS; only then proceed to owner-approved canonical R10e deploy. Do not rotate existing or agent-control credentials as part of this revision.

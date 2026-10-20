@@ -4,11 +4,14 @@ import {
   activityTable,
   assetTable,
   commentTable,
+  documentCommentTable,
+  documentTable,
+  goalCheckinTable,
   taskTable,
 } from "../database/schema";
 import { deleteS3Object } from "./s3";
 
-const ASSET_URL_PATTERN = /\/api\/asset\/([a-z0-9]+)/gi;
+const ASSET_URL_PATTERN = /\/(?:api\/)?asset\/([a-z0-9]+)/gi;
 
 export function extractAssetIds(
   content: string | null | undefined,
@@ -35,56 +38,97 @@ export function contentReferencesAsset(
   return extractAssetIds(content).has(assetId);
 }
 
-export interface AssetCleanupScope {
-  taskId: string;
-}
+export type AssetCleanupScope =
+  | { taskId: string }
+  | { documentId: string }
+  | { goalCheckinId: string };
 
-/**
- * Check whether an asset ID is still referenced in any content belonging to
- * the same task (description, comments, or activity comments).
- */
 async function isAssetReferencedElsewhere(
   assetId: string,
-  taskId: string,
+  scope: AssetCleanupScope,
 ): Promise<boolean> {
-  const pattern = `%/api/asset/${assetId}%`;
+  const pattern = `%/asset/${assetId}%`;
 
-  const [taskRef] = await db
-    .select({ description: taskTable.description })
-    .from(taskTable)
-    .where(and(eq(taskTable.id, taskId), like(taskTable.description, pattern)))
-    .limit(1);
+  if ("taskId" in scope) {
+    const [taskRef] = await db
+      .select({ description: taskTable.description })
+      .from(taskTable)
+      .where(
+        and(
+          eq(taskTable.id, scope.taskId),
+          like(taskTable.description, pattern),
+        ),
+      )
+      .limit(1);
+    if (contentReferencesAsset(taskRef?.description, assetId)) return true;
 
-  if (contentReferencesAsset(taskRef?.description, assetId)) return true;
+    const commentRefs = await db
+      .select({ content: commentTable.content })
+      .from(commentTable)
+      .where(
+        and(
+          eq(commentTable.taskId, scope.taskId),
+          like(commentTable.content, pattern),
+        ),
+      );
+    if (
+      commentRefs.some((ref) => contentReferencesAsset(ref.content, assetId))
+    ) {
+      return true;
+    }
 
-  const commentRefs = await db
-    .select({ content: commentTable.content })
-    .from(commentTable)
-    .where(
-      and(eq(commentTable.taskId, taskId), like(commentTable.content, pattern)),
+    const activityRefs = await db
+      .select({ content: activityTable.content })
+      .from(activityTable)
+      .where(
+        and(
+          eq(activityTable.taskId, scope.taskId),
+          like(activityTable.content, pattern),
+        ),
+      );
+    return activityRefs.some((ref) =>
+      contentReferencesAsset(ref.content, assetId),
     );
-
-  if (commentRefs.some((ref) => contentReferencesAsset(ref.content, assetId))) {
-    return true;
   }
 
-  const activityRefs = await db
-    .select({ content: activityTable.content })
-    .from(activityTable)
+  if ("documentId" in scope) {
+    const [documentRef] = await db
+      .select({ content: documentTable.content })
+      .from(documentTable)
+      .where(
+        and(
+          eq(documentTable.id, scope.documentId),
+          like(documentTable.content, pattern),
+        ),
+      )
+      .limit(1);
+    if (contentReferencesAsset(documentRef?.content, assetId)) return true;
+
+    const commentRefs = await db
+      .select({ content: documentCommentTable.content })
+      .from(documentCommentTable)
+      .where(
+        and(
+          eq(documentCommentTable.documentId, scope.documentId),
+          like(documentCommentTable.content, pattern),
+        ),
+      );
+    return commentRefs.some((ref) =>
+      contentReferencesAsset(ref.content, assetId),
+    );
+  }
+
+  const [checkinRef] = await db
+    .select({ note: goalCheckinTable.note })
+    .from(goalCheckinTable)
     .where(
       and(
-        eq(activityTable.taskId, taskId),
-        like(activityTable.content, pattern),
+        eq(goalCheckinTable.id, scope.goalCheckinId),
+        like(goalCheckinTable.note, pattern),
       ),
-    );
-
-  if (
-    activityRefs.some((ref) => contentReferencesAsset(ref.content, assetId))
-  ) {
-    return true;
-  }
-
-  return false;
+    )
+    .limit(1);
+  return contentReferencesAsset(checkinRef?.note, assetId);
 }
 
 export async function deleteOrphanedAssets(
@@ -98,22 +142,20 @@ export async function deleteOrphanedAssets(
   const removedIds = [...oldIds].filter((id) => !newIds.has(id));
   if (removedIds.length === 0) return;
 
+  const ownerCondition =
+    "taskId" in scope
+      ? eq(assetTable.taskId, scope.taskId)
+      : "documentId" in scope
+        ? eq(assetTable.documentId, scope.documentId)
+        : eq(assetTable.goalCheckinId, scope.goalCheckinId);
   const assets = await db
     .select({ id: assetTable.id, objectKey: assetTable.objectKey })
     .from(assetTable)
-    .where(
-      and(
-        inArray(assetTable.id, removedIds),
-        eq(assetTable.taskId, scope.taskId),
-      ),
-    );
+    .where(and(inArray(assetTable.id, removedIds), ownerCondition));
 
   const assetsToDelete: typeof assets = [];
   for (const asset of assets) {
-    const stillReferenced = await isAssetReferencedElsewhere(
-      asset.id,
-      scope.taskId,
-    );
+    const stillReferenced = await isAssetReferencedElsewhere(asset.id, scope);
     if (!stillReferenced) {
       assetsToDelete.push(asset);
     }
@@ -141,6 +183,28 @@ export async function getTaskAssetKeys(taskId: string): Promise<string[]> {
     .where(eq(assetTable.taskId, taskId));
 
   return assets.map((a) => a.objectKey);
+}
+
+export async function getDocumentAssetKeys(
+  documentId: string,
+): Promise<string[]> {
+  const assets = await db
+    .select({ objectKey: assetTable.objectKey })
+    .from(assetTable)
+    .where(eq(assetTable.documentId, documentId));
+  return assets.map((asset) => asset.objectKey);
+}
+
+export async function getGoalAssetKeys(goalId: string): Promise<string[]> {
+  const assets = await db
+    .select({ objectKey: assetTable.objectKey })
+    .from(assetTable)
+    .innerJoin(
+      goalCheckinTable,
+      eq(assetTable.goalCheckinId, goalCheckinTable.id),
+    )
+    .where(eq(goalCheckinTable.goalId, goalId));
+  return assets.map((asset) => asset.objectKey);
 }
 
 export async function deleteS3Keys(

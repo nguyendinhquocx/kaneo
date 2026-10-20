@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, max, or } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
@@ -93,14 +93,37 @@ async function createTaskRelation({
     });
   }
 
-  const [relation] = await db
-    .insert(taskRelationTable)
-    .values({
-      sourceTaskId,
-      targetTaskId,
-      relationType,
-    })
-    .returning();
+  const [relation] = await db.transaction(async (tx) => {
+    let position = 0;
+    if (relationType === "subtask") {
+      await tx
+        .select({ id: taskTable.id })
+        .from(taskTable)
+        .where(eq(taskTable.id, sourceTaskId))
+        .for("update")
+        .limit(1);
+      const [maxPosition] = await tx
+        .select({ value: max(taskRelationTable.position) })
+        .from(taskRelationTable)
+        .where(
+          and(
+            eq(taskRelationTable.sourceTaskId, sourceTaskId),
+            eq(taskRelationTable.relationType, "subtask"),
+          ),
+        );
+      position = (maxPosition?.value ?? -1) + 1;
+    }
+
+    return tx
+      .insert(taskRelationTable)
+      .values({
+        sourceTaskId,
+        targetTaskId,
+        relationType,
+        position,
+      })
+      .returning();
+  });
 
   if (!relation) {
     throw new HTTPException(500, {

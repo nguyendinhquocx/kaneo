@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyKeyPrefix,
+  assertContentAssetKeyMatchesContext,
   assertStorageConfigured,
   assertTaskImageKeyMatchesContext,
+  buildContentAssetKeyPrefix,
+  buildContentAssetObjectKey,
   buildObjectKey,
   buildObjectKeyPrefix,
+  createContentAssetUploadUrl,
   createTaskImageUploadUrl,
   getFileExtension,
   isImageContentType,
@@ -141,6 +145,64 @@ describe("S3 helpers", () => {
         surface: "comment",
       }),
     ).toBe(true);
+  });
+
+  it("builds content asset keys that do not require a project ID", () => {
+    const context = {
+      workspaceId: "Workspace 1",
+      ownerType: "goal_checkin" as const,
+      ownerId: "Check-in 2",
+      filename: "practice notes.pdf",
+      contentType: "application/pdf",
+    };
+    const key = buildContentAssetObjectKey(context);
+
+    expect(buildContentAssetKeyPrefix(context)).toBe(
+      "workspace/workspace-1/content/goal_checkin/check-in-2",
+    );
+    expect(key).toMatch(
+      /^workspace\/workspace-1\/content\/goal_checkin\/check-in-2\/practice-notes-[0-9]+-[a-z0-9]+\.pdf$/,
+    );
+
+    process.env.S3_ENDPOINT = "https://storage.example.test";
+    process.env.S3_BUCKET = "kaneo";
+    delete process.env.S3_KEY_PREFIX;
+    expect(
+      assertContentAssetKeyMatchesContext(key, {
+        workspaceId: context.workspaceId,
+        ownerType: context.ownerType,
+        ownerId: context.ownerId,
+      }),
+    ).toBe(true);
+    expect(
+      assertContentAssetKeyMatchesContext(key, {
+        workspaceId: context.workspaceId,
+        ownerType: context.ownerType,
+        ownerId: "another-checkin",
+      }),
+    ).toBe(false);
+  });
+
+  it("creates presigned content-asset URLs without checksum query params", async () => {
+    process.env.S3_ENDPOINT = "https://storage.example.test";
+    process.env.S3_BUCKET = "kaneo";
+    process.env.S3_ACCESS_KEY_ID = "test-access-key";
+    process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
+    delete process.env.S3_KEY_PREFIX;
+
+    const upload = await createContentAssetUploadUrl({
+      workspaceId: "workspace-1",
+      ownerType: "document",
+      ownerId: "document-1",
+      filename: "notes.pdf",
+      contentType: "application/pdf",
+    });
+    const searchParams = new URL(upload.uploadUrl).searchParams;
+    expect(upload.key).toContain(
+      "workspace/workspace-1/content/document/document-1/",
+    );
+    expect(searchParams.has("x-amz-checksum-crc32")).toBe(false);
+    expect(searchParams.has("x-amz-sdk-checksum-algorithm")).toBe(false);
   });
 
   it("applyKeyPrefix prepends prefix and trims trailing slashes", () => {

@@ -1,8 +1,11 @@
+import { createId } from "@paralleldrive/cuid2";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
 import { resetShareRateLimits } from "../../apps/api/src/share/rate-limit";
+import { hashShareToken } from "../../apps/api/src/share/token";
+import * as s3 from "../../apps/api/src/storage/s3";
 import { mockAnonymousSession, mockAuthenticatedSession } from "./helpers/auth";
 import { resetTestDatabase } from "./helpers/database";
 import {
@@ -74,6 +77,7 @@ describe("API integration: public share boundary", () => {
   afterEach(() => {
     delete process.env.SHARE_RATE_LIMIT_READ;
     delete process.env.SHARE_RATE_LIMIT_WRITE;
+    vi.restoreAllMocks();
   });
 
   it("anonymous legacy public-project returns minimized DTO without identity or integration data", async () => {
@@ -363,6 +367,254 @@ describe("API integration: public share boundary", () => {
     expect(third.headers.get("retry-after")).toBeTruthy();
     const body = (await third.json()) as { message?: string };
     expect(body.message).toBeTruthy();
+  });
+
+  it("creates scoped task-description/comment view links and lists copyable URLs", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const task = await seedTask(project.id, {
+      title: "Private task title",
+      description: "Only this task description is shared.",
+    });
+    const [comment] = await db
+      .insert(schema.activityTable)
+      .values({
+        taskId: task.id,
+        userId: member.user.id,
+        type: "comment",
+        content: "Only this comment is shared.",
+      })
+      .returning();
+    if (!comment) throw new Error("Failed to create comment fixture");
+
+    mockAuthenticatedSession(member.user);
+    let { app } = createApp();
+    const taskLinkResponse = await createShareLinkViaApi(app, {
+      resourceType: "task_description",
+      resourceId: task.id,
+      permission: "view",
+    });
+    expect(taskLinkResponse.status).toBe(200);
+    const taskLink = (await taskLinkResponse.json()) as {
+      id: string;
+      token: string;
+      url: string;
+    };
+
+    const commentLinkResponse = await createShareLinkViaApi(app, {
+      resourceType: "activity_comment",
+      resourceId: comment.id,
+      permission: "view",
+    });
+    expect(commentLinkResponse.status).toBe(200);
+    const commentLink = (await commentLinkResponse.json()) as {
+      token: string;
+      url: string;
+    };
+
+    const listed = await app.request(
+      `/api/share-manage?resourceType=task_description&resourceId=${task.id}`,
+    );
+    expect(listed.status).toBe(200);
+    const listedLinks = (await listed.json()) as Array<{
+      id: string;
+      url: string | null;
+    }>;
+    expect(listedLinks.find((link) => link.id === taskLink.id)?.url).toBe(
+      taskLink.url,
+    );
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const taskRead = await app.request(
+      `/api/share/task_description/${taskLink.token}`,
+    );
+    expect(taskRead.status).toBe(200);
+    const taskPayload = (await taskRead.json()) as Record<string, unknown>;
+    expect(taskPayload.title).toBe(task.title);
+    expect(taskPayload.content).toBe(task.description);
+    expect(taskPayload).not.toHaveProperty("workspaceId");
+    expect(taskPayload).not.toHaveProperty("assigneeId");
+
+    const commentRead = await app.request(
+      `/api/share/activity_comment/${commentLink.token}`,
+    );
+    expect(commentRead.status).toBe(200);
+    const commentPayload = (await commentRead.json()) as Record<
+      string,
+      unknown
+    >;
+    expect(commentPayload.content).toBe(comment.content);
+    expect(commentPayload).not.toHaveProperty("userId");
+    expect(commentPayload).not.toHaveProperty("userImage");
+    expect(commentPayload).not.toHaveProperty("workspaceId");
+
+    mockAuthenticatedSession(member.user);
+    const { app: editApp } = createApp();
+    const editComment = await createShareLinkViaApi(editApp, {
+      resourceType: "activity_comment",
+      resourceId: comment.id,
+      permission: "edit",
+    });
+    expect(editComment.status).toBe(400);
+  });
+
+  it("streams only assets referenced by the exact public comment", async () => {
+    const getPrivateObject = vi
+      .spyOn(s3, "getPrivateObject")
+      .mockResolvedValue({
+        body: new Uint8Array([1, 2, 3]),
+        contentType: "image/png",
+        contentLength: 3,
+        etag: "asset-etag",
+        lastModified: new Date("2026-10-20T00:00:00.000Z"),
+      });
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const task = await seedTask(project.id);
+    const assetId = createId();
+    const otherAssetId = createId();
+    const [comment] = await db
+      .insert(schema.activityTable)
+      .values({
+        taskId: task.id,
+        userId: member.user.id,
+        type: "comment",
+        content: `![proof](http://kaneo.test/api/asset/${assetId})`,
+      })
+      .returning();
+    if (!comment) throw new Error("Failed to create comment fixture");
+
+    await db.insert(schema.assetTable).values([
+      {
+        id: assetId,
+        workspaceId: member.workspace.id,
+        projectId: project.id,
+        taskId: task.id,
+        activityId: comment.id,
+        objectKey: "private/comment-proof.png",
+        filename: "proof.png",
+        mimeType: "image/png",
+        size: 3,
+        kind: "image",
+        surface: "comment",
+      },
+      {
+        id: otherAssetId,
+        workspaceId: member.workspace.id,
+        projectId: project.id,
+        taskId: task.id,
+        objectKey: "private/unreferenced.png",
+        filename: "unreferenced.png",
+        mimeType: "image/png",
+        size: 3,
+        kind: "image",
+        surface: "comment",
+      },
+    ]);
+
+    mockAuthenticatedSession(member.user);
+    let { app } = createApp();
+    const createResponse = await createShareLinkViaApi(app, {
+      resourceType: "activity_comment",
+      resourceId: comment.id,
+      permission: "view",
+    });
+    expect(createResponse.status).toBe(200);
+    const link = (await createResponse.json()) as { id: string; token: string };
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const allowed = await app.request(
+      `/api/share/activity_comment/${link.token}/asset/${assetId}`,
+    );
+    expect(allowed.status).toBe(200);
+    expect(allowed.headers.get("content-type")).toBe("image/png");
+    expect(allowed.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(new Uint8Array(await allowed.arrayBuffer())).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    expect(getPrivateObject).toHaveBeenCalledTimes(1);
+
+    const unrelated = await app.request(
+      `/api/share/activity_comment/${link.token}/asset/${otherAssetId}`,
+    );
+    expect(unrelated.status).toBe(404);
+
+    mockAuthenticatedSession(member.user);
+    ({ app } = createApp());
+    const revoke = await app.request(`/api/share-manage/${link.id}`, {
+      method: "DELETE",
+    });
+    expect(revoke.status).toBe(200);
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const revoked = await app.request(
+      `/api/share/activity_comment/${link.token}/asset/${assetId}`,
+    );
+    expect(revoked.status).toBe(404);
+  });
+
+  it("keeps legacy hash-only links readable but cannot recover their URL", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const legacyToken = "A".repeat(43);
+    await db.insert(schema.shareLinkTable).values({
+      resourceType: "project",
+      resourceId: project.id,
+      permission: "view",
+      tokenHash: hashShareToken(legacyToken),
+      tokenCiphertext: null,
+      workspaceId: member.workspace.id,
+      createdByUserId: member.user.id,
+      expiresAt: null,
+    });
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+    const listed = await app.request(
+      `/api/share-manage?resourceType=project&resourceId=${project.id}`,
+    );
+    expect(listed.status).toBe(200);
+    const links = (await listed.json()) as Array<{ url: string | null }>;
+    expect(links).toHaveLength(1);
+    expect(links[0]?.url).toBeNull();
+
+    mockAnonymousSession();
+    const { app: publicApp } = createApp();
+    const stillWorks = await publicApp.request(
+      `/api/share/project/${legacyToken}`,
+    );
+    expect(stillWorks.status).toBe(200);
+  });
+
+  it("refuses task-description links after a project becomes agent-controlled", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const task = await seedTask(project.id, { description: "ENVELOPE data" });
+    await db.insert(schema.executionManifestTable).values({
+      projectId: project.id,
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+      verificationProfile: "test",
+    });
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+    const response = await createShareLinkViaApi(app, {
+      resourceType: "task_description",
+      resourceId: task.id,
+      permission: "view",
+    });
+    expect(response.status).toBe(403);
   });
 
   it("share-manage requires authentication and valid permission", async () => {

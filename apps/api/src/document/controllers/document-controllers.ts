@@ -1,6 +1,11 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../../database";
+import {
+  deleteOrphanedAssets,
+  deleteS3Keys,
+  getDocumentAssetKeys,
+} from "../../storage/cleanup-assets";
 
 // SPEC-2026-10-08-kaneo-workspace-collaboration T3: project documents are
 // plain Markdown entities with a CAS revision counter. Save conflicts are
@@ -72,6 +77,7 @@ export async function updateDocument(
   content: string,
   expectedRevision: number,
 ) {
+  const existing = await getDocument(documentId);
   const [updated] = await db
     .update(schema.documentTable)
     .set({
@@ -93,6 +99,9 @@ export async function updateDocument(
       message: "Document was modified by someone else",
     });
   }
+  void deleteOrphanedAssets(existing.content, content, {
+    documentId,
+  }).catch(() => {});
   return updated;
 }
 
@@ -125,6 +134,7 @@ export async function unarchiveDocument(documentId: string) {
 // R2-T4: hard delete. Comments cascade via the document_comment FK; callers
 // gate this behind task:delete (workspace admin/owner).
 export async function deleteDocument(documentId: string) {
+  const assetKeys = await getDocumentAssetKeys(documentId);
   const [deleted] = await db
     .delete(schema.documentTable)
     .where(eq(schema.documentTable.id, documentId))
@@ -133,5 +143,6 @@ export async function deleteDocument(documentId: string) {
   if (!deleted) {
     throw new HTTPException(404, { message: "Document not found" });
   }
+  void deleteS3Keys(assetKeys).catch(() => {});
   return deleted;
 }

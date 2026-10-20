@@ -1,68 +1,57 @@
-import { client } from "@kaneo/libs";
+import { resolveApiBaseUrl } from "@kaneo/libs";
 
-async function createImageUpload({
-  taskId,
-  filename,
-  contentType,
-  size,
-  surface,
-}: {
-  taskId: string;
+export type ContentAssetOwnerType =
+  | "task_description"
+  | "task_comment"
+  | "document"
+  | "document_comment"
+  | "goal_checkin";
+
+export type ContentAsset = {
+  id: string;
+  url: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  kind: "image" | "attachment";
+};
+
+type UploadTicket = {
+  uploadUrl: string;
+  headers: Record<string, string>;
+  key: string;
+};
+
+const apiBase = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
+
+async function requestJson<T>(path: string, body: unknown, method: string) {
+  const response = await fetch(`${apiBase}${path}`, {
+    method,
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return (await response.json()) as T;
+}
+
+export async function createImageUpload(input: {
+  ownerType: ContentAssetOwnerType;
+  ownerId: string;
   filename: string;
   contentType: string;
   size: number;
-  surface: "description" | "comment";
 }) {
-  const response = await client.task["image-upload"][":id"].$put({
-    param: { id: taskId },
-    json: {
-      filename,
-      contentType,
-      size,
-      surface,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error);
-  }
-
-  return response.json();
+  return requestJson<UploadTicket>("/content-asset/upload", input, "PUT");
 }
 
-export async function finalizeImageUpload({
-  taskId,
-  key,
-  filename,
-  contentType,
-  size,
-  surface,
-}: {
-  taskId: string;
+export async function finalizeImageUpload(input: {
+  ownerType: ContentAssetOwnerType;
+  ownerId: string;
   key: string;
   filename: string;
   contentType: string;
   size: number;
-  surface: "description" | "comment";
 }) {
-  const response = await client.task["image-upload"][":id"].finalize.$post({
-    param: { id: taskId },
-    json: {
-      key,
-      filename,
-      contentType,
-      size,
-      surface,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error);
-  }
-
-  return response.json();
+  return requestJson<ContentAsset>("/content-asset/finalize", input, "POST");
 }
-
-export default createImageUpload;

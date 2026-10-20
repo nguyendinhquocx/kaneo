@@ -1,21 +1,29 @@
+import { createId } from "@paralleldrive/cuid2";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import db, { schema } from "../database";
+import { isProjectAgentControlled } from "../project/controllers/public-project-dto";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import {
   isSharePermission,
   isShareResourceType,
   type ShareResourceType,
 } from "./resolve-share-link";
-import { generateShareToken, hashShareToken } from "./token";
+import {
+  decryptShareToken,
+  encryptShareToken,
+  generateShareToken,
+  hashShareToken,
+  shareLinkTokenAad,
+} from "./token";
 
-// SPEC-2026-10-08-kaneo-workspace-collaboration T2: authenticated share-link
-// management. Creating or revoking a capability link requires the workspace
-// `project:share` permission (API keys need the matching scope). The raw
-// token is returned exactly once, at creation; it is never stored or logged.
+// Authenticated share-link management. Creating, listing and revoking a
+// capability link requires `project:share` (API keys need the matching scope).
+// Raw tokens are never stored in plaintext or logged; R4 stores AEAD ciphertext
+// and returns a decrypted URL only to an authorized share manager.
 
 const EDIT_LINK_TTL_DAYS = 30;
 
@@ -27,6 +35,7 @@ const shareLinkSchema = v.object({
   expiresAt: v.nullable(v.string()),
   revokedAt: v.nullable(v.string()),
   createdAt: v.string(),
+  url: v.nullable(v.string()),
 });
 
 async function lookupResourceWorkspaceId(
@@ -53,10 +62,43 @@ async function lookupResourceWorkspaceId(
       .limit(1);
     return row?.workspaceId ?? null;
   }
+  if (resourceType === "goal") {
+    const [row] = await db
+      .select({ workspaceId: schema.goalTable.workspaceId })
+      .from(schema.goalTable)
+      .where(eq(schema.goalTable.id, resourceId))
+      .limit(1);
+    return row?.workspaceId ?? null;
+  }
+  if (resourceType === "task_description") {
+    const [row] = await db
+      .select({ workspaceId: schema.projectTable.workspaceId })
+      .from(schema.taskTable)
+      .innerJoin(
+        schema.projectTable,
+        eq(schema.taskTable.projectId, schema.projectTable.id),
+      )
+      .where(eq(schema.taskTable.id, resourceId))
+      .limit(1);
+    return row?.workspaceId ?? null;
+  }
   const [row] = await db
-    .select({ workspaceId: schema.goalTable.workspaceId })
-    .from(schema.goalTable)
-    .where(eq(schema.goalTable.id, resourceId))
+    .select({ workspaceId: schema.projectTable.workspaceId })
+    .from(schema.activityTable)
+    .innerJoin(
+      schema.taskTable,
+      eq(schema.activityTable.taskId, schema.taskTable.id),
+    )
+    .innerJoin(
+      schema.projectTable,
+      eq(schema.taskTable.projectId, schema.projectTable.id),
+    )
+    .where(
+      and(
+        eq(schema.activityTable.id, resourceId),
+        eq(schema.activityTable.type, "comment"),
+      ),
+    )
     .limit(1);
   return row?.workspaceId ?? null;
 }
@@ -67,6 +109,10 @@ const shareManage = new Hono<{
     workspaceId: string;
   };
 }>()
+  .use("*", async (c, next) => {
+    c.header("Cache-Control", "no-store");
+    await next();
+  })
   .post(
     "/",
     describeRoute({
@@ -84,7 +130,13 @@ const shareManage = new Hono<{
     validator(
       "json",
       v.object({
-        resourceType: v.picklist(["project", "document", "goal"]),
+        resourceType: v.picklist([
+          "project",
+          "document",
+          "goal",
+          "task_description",
+          "activity_comment",
+        ]),
         resourceId: v.string(),
         permission: v.picklist(["view", "edit"]),
       }),
@@ -92,6 +144,16 @@ const shareManage = new Hono<{
     async (c) => {
       const { resourceType, resourceId, permission } = c.req.valid("json");
       const userId = c.get("userId");
+
+      if (
+        (resourceType === "task_description" ||
+          resourceType === "activity_comment") &&
+        permission !== "view"
+      ) {
+        throw new HTTPException(400, {
+          message: "This share resource only supports view links",
+        });
+      }
 
       const workspaceId = await lookupResourceWorkspaceId(
         resourceType,
@@ -107,7 +169,47 @@ const shareManage = new Hono<{
       });
       await permissionMiddleware(c, async () => {});
 
+      if (
+        resourceType === "project" &&
+        permission === "edit" &&
+        (await isProjectAgentControlled(resourceId))
+      ) {
+        throw new HTTPException(403, {
+          message: "Agent-controlled projects do not support public edit links",
+        });
+      }
+
+      if (resourceType === "task_description") {
+        const [task] = await db
+          .select({ projectId: schema.taskTable.projectId })
+          .from(schema.taskTable)
+          .where(eq(schema.taskTable.id, resourceId))
+          .limit(1);
+        if (!task || (await isProjectAgentControlled(task.projectId))) {
+          throw new HTTPException(403, {
+            message: "This task does not support public description links",
+          });
+        }
+      }
+
       const rawToken = generateShareToken();
+      const linkId = createId();
+      let tokenCiphertext: string;
+      try {
+        tokenCiphertext = encryptShareToken(
+          rawToken,
+          shareLinkTokenAad({
+            id: linkId,
+            resourceType,
+            resourceId,
+            permission,
+          }),
+        );
+      } catch {
+        throw new HTTPException(503, {
+          message: "Share-link encryption is not configured",
+        });
+      }
       const expiresAt =
         permission === "edit"
           ? new Date(Date.now() + EDIT_LINK_TTL_DAYS * 24 * 60 * 60 * 1000)
@@ -116,10 +218,12 @@ const shareManage = new Hono<{
       const created = await db
         .insert(schema.shareLinkTable)
         .values({
+          id: linkId,
           resourceType,
           resourceId,
           permission,
           tokenHash: hashShareToken(rawToken),
+          tokenCiphertext,
           workspaceId,
           createdByUserId: userId || null,
           expiresAt,
@@ -166,7 +270,13 @@ const shareManage = new Hono<{
     validator(
       "query",
       v.object({
-        resourceType: v.picklist(["project", "document", "goal"]),
+        resourceType: v.picklist([
+          "project",
+          "document",
+          "goal",
+          "task_description",
+          "activity_comment",
+        ]),
         resourceId: v.string(),
         includeRevoked: v.optional(v.string()),
       }),
@@ -209,18 +319,53 @@ const shareManage = new Hono<{
           expiresAt: schema.shareLinkTable.expiresAt,
           revokedAt: schema.shareLinkTable.revokedAt,
           createdAt: schema.shareLinkTable.createdAt,
+          tokenHash: schema.shareLinkTable.tokenHash,
+          tokenCiphertext: schema.shareLinkTable.tokenCiphertext,
         })
         .from(schema.shareLinkTable)
         .where(and(...conditions))
         .orderBy(desc(schema.shareLinkTable.createdAt));
 
+      const clientUrl = (
+        process.env.KANEO_CLIENT_URL || "http://localhost:5173"
+      ).replace(/\/$/, "");
+
       return c.json(
-        links.map((link) => ({
-          ...link,
-          expiresAt: link.expiresAt ? link.expiresAt.toISOString() : null,
-          revokedAt: link.revokedAt ? link.revokedAt.toISOString() : null,
-          createdAt: link.createdAt.toISOString(),
-        })),
+        links.map((link) => {
+          const active =
+            link.revokedAt === null &&
+            (link.expiresAt === null || link.expiresAt.getTime() > Date.now());
+          let url: string | null = null;
+          if (active && link.tokenCiphertext) {
+            try {
+              const rawToken = decryptShareToken(
+                link.tokenCiphertext,
+                link.tokenHash,
+                shareLinkTokenAad({
+                  id: link.id,
+                  resourceType: link.resourceType,
+                  resourceId: link.resourceId,
+                  permission: link.permission,
+                }),
+              );
+              url = `${clientUrl}/share/${link.resourceType}/${rawToken}`;
+            } catch {
+              throw new HTTPException(503, {
+                message: "Share-link encryption is unavailable",
+              });
+            }
+          }
+          return {
+            id: link.id,
+            resourceType: link.resourceType,
+            resourceId: link.resourceId,
+            permission: link.permission,
+            expiresAt: link.expiresAt ? link.expiresAt.toISOString() : null,
+            revokedAt: link.revokedAt ? link.revokedAt.toISOString() : null,
+            createdAt: link.createdAt.toISOString(),
+            url,
+          };
+        }),
       );
     },
   )

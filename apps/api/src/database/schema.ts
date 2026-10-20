@@ -1252,20 +1252,30 @@ export const assetTable = pgTable(
         onDelete: "cascade",
         onUpdate: "cascade",
       }),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projectTable.id, {
-        onDelete: "cascade",
-        onUpdate: "cascade",
-      }),
+    projectId: text("project_id").references(() => projectTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
     taskId: text("task_id").references(() => taskTable.id, {
       onDelete: "cascade",
       onUpdate: "cascade",
     }),
     activityId: text("activity_id").references(() => activityTable.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    documentId: text("document_id").references(() => documentTable.id, {
       onDelete: "cascade",
       onUpdate: "cascade",
     }),
+    documentCommentId: text("document_comment_id").references(
+      () => documentCommentTable.id,
+      { onDelete: "set null", onUpdate: "cascade" },
+    ),
+    goalCheckinId: text("goal_checkin_id").references(
+      () => goalCheckinTable.id,
+      { onDelete: "cascade", onUpdate: "cascade" },
+    ),
     objectKey: text("object_key").notNull().unique(),
     filename: text("filename").notNull(),
     mimeType: text("mime_type").notNull(),
@@ -1283,6 +1293,9 @@ export const assetTable = pgTable(
     index("asset_projectId_idx").on(table.projectId),
     index("asset_taskId_idx").on(table.taskId),
     index("asset_activityId_idx").on(table.activityId),
+    index("asset_documentId_idx").on(table.documentId),
+    index("asset_documentCommentId_idx").on(table.documentCommentId),
+    index("asset_goalCheckinId_idx").on(table.goalCheckinId),
     index("asset_createdBy_idx").on(table.createdBy),
   ],
 );
@@ -1629,8 +1642,10 @@ export const shareLinkTable = pgTable(
     resourceType: text("resource_type").notNull(),
     resourceId: text("resource_id").notNull(),
     permission: text("permission").notNull(),
-    // SHA-256 hex of the bearer token; raw token never stored or logged.
+    // SHA-256 hex remains the lookup value; recoverable copy is AEAD ciphertext,
+    // never plaintext. null marks legacy hash-only links.
     tokenHash: text("token_hash").notNull().unique(),
+    tokenCiphertext: text("token_ciphertext"),
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaceTable.id, {
@@ -1847,6 +1862,7 @@ export const taskRelationTable = pgTable(
         onUpdate: "cascade",
       }),
     relationType: text("relation_type").notNull(),
+    position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => [

@@ -2318,8 +2318,20 @@
 		"create": "Create link",
 		"creating": "Creating…",
 		"document": {
-			"rawHint": "Agents can fetch this document as plain Markdown at /raw.",
-			"updated": "Updated {{date}}"
+			"updated": "Updated {{date}}",
+			"cancel": "Cancel",
+			"conflict": "Someone saved a newer version of this document.",
+			"conflictKeepEditing": "Keep editing",
+			"conflictReload": "Reload latest",
+			"contentLabel": "Markdown content",
+			"contentPlaceholder": "Write in Markdown…",
+			"editingHint": "You are editing this document. Save to publish your changes.",
+			"save": "Save changes",
+			"saveFailed": "Could not save the document.",
+			"saving": "Saving…",
+			"titleLabel": "Document title",
+			"viewHint": "This document is read-only. Ask the owner for an edit link to change it.",
+			"editHint": "This link lets you edit this document only. Choose Edit to start."
 		},
 		"documentTitle": "Shared document",
 		"expires": "Expires {{date}}",
@@ -2333,7 +2345,15 @@
 			"totalAllTime": "{{total}} completions",
 			"totalColumn": "Total",
 			"editHint": "Edit link: you can tick the cells directly.",
-			"viewHint": "This page is view-only. Ask the owner for an edit link to tick."
+			"viewHint": "This page is view-only. Ask the owner for an edit link to tick.",
+			"noteCancel": "Cancel",
+			"noteConflict": "This note changed elsewhere. Reload the latest note before saving.",
+			"noteConflictDismiss": "Reload latest, keep my draft",
+			"noteEditorAria": "Goal check-in note",
+			"noteReloadFailed": "Could not reload the latest note.",
+			"noteSave": "Save note",
+			"noteSaveFailed": "Could not save the note.",
+			"noteSaving": "Saving…"
 		},
 		"invalid": {
 			"description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
@@ -2358,7 +2378,45 @@
 		"capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
 		"errors": {
 			"createFailed": "Could not create the share link",
-			"revokeFailed": "Could not revoke the link"
+			"revokeFailed": "Could not revoke the link",
+			"copyFailed": "Could not copy the link",
+			"replaceFailed": "Could not create the replacement link"
+		},
+		"doneEditing": "Done editing",
+		"edit": "Edit",
+		"legacy": {
+			"cancel": "Cancel",
+			"copyReplacement": "Create replacement link",
+			"description": "The original URL cannot be recovered. Create a new link with the same access level. The old URL is not changed; revoke it separately if it is still active.",
+			"replace": "Create and copy replacement",
+			"title": "This link cannot be recovered"
+		},
+		"project": {
+			"boardView": "Board",
+			"cancel": "Cancel",
+			"close": "Close",
+			"create": "Create task",
+			"descriptionLabel": "Description",
+			"dueDateLabel": "Due date",
+			"editHint": "This link can create and update basic tasks. Choose Edit to begin.",
+			"editingHint": "Choose a task to edit its basic fields, or create a task.",
+			"editTaskTitle": "Edit task",
+			"listView": "List",
+			"newTask": "New task",
+			"noDescription": "No description.",
+			"priorityLabel": "Priority",
+			"save": "Save changes",
+			"saved": "Saved",
+			"saveFailed": "Could not save this task.",
+			"saving": "Saving…",
+			"startDateLabel": "Start date",
+			"statusLabel": "Status",
+			"titleLabel": "Title",
+			"viewHint": "This project is read-only. Ask the owner for an edit link to change tasks."
+		},
+		"scope": {
+			"edit": "Edit",
+			"view": "View only"
 		}
 	},
 	"goals": {
@@ -2372,7 +2430,6 @@
 		"noteAria": "Open note details",
 		"pageTitle": "Goals",
 		"previousWeek": "Previous week",
-		"privateBadge": "private",
 		"sheet": {
 			"completed": "done",
 			"conflict": "This note changed elsewhere. Reload to get the latest version, then re-apply your edit.",

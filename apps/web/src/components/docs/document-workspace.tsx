@@ -115,6 +115,7 @@ function DocumentComments({ documentId }: { documentId: string }) {
           onChange={setDraft}
           placeholder={t("comments.placeholder")}
           onSubmitShortcut={handleSubmit}
+          uploadOwner={{ ownerType: "document_comment", ownerId: documentId }}
         />
         <div className="mt-2 flex justify-end">
           <Button
@@ -468,6 +469,7 @@ export default function DocumentWorkspace({
               onChange={handleContentChange}
               placeholder={t("contentPlaceholder")}
               contentClassName="kaneo-comment-editor-fill"
+              uploadOwner={{ ownerType: "document", ownerId: document.id }}
             />
           </div>
         </div>

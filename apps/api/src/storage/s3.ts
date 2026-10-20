@@ -33,6 +33,21 @@ export function isImageContentType(contentType: string) {
 
 type UploadSurface = "description" | "comment";
 
+export type ContentAssetOwnerType =
+  | "task_description"
+  | "task_comment"
+  | "document"
+  | "document_comment"
+  | "goal_checkin";
+
+export type ContentAssetUploadContext = {
+  workspaceId: string;
+  ownerType: ContentAssetOwnerType;
+  ownerId: string;
+  filename: string;
+  contentType: string;
+};
+
 type StorageConfig = {
   endpoint: string;
   region: string;
@@ -61,7 +76,7 @@ type TaskImageUploadUrl = {
   headers: Record<string, string>;
 };
 
-type AssetObject = {
+export type AssetObject = {
   body: unknown;
   contentType: string | undefined;
   contentLength: number | undefined;
@@ -259,6 +274,28 @@ export function buildObjectKey(context: TaskImageUploadContext) {
   return `${objectKeyPrefix}/${fileName}`;
 }
 
+export function buildContentAssetKeyPrefix(
+  context: Omit<ContentAssetUploadContext, "filename" | "contentType">,
+) {
+  return [
+    "workspace",
+    sanitizePathSegment(context.workspaceId),
+    "content",
+    sanitizePathSegment(context.ownerType),
+    sanitizePathSegment(context.ownerId),
+  ].join("/");
+}
+
+export function buildContentAssetObjectKey(context: ContentAssetUploadContext) {
+  const extension = getFileExtension(context.filename);
+  const prefix = buildContentAssetKeyPrefix(context);
+  const baseName = sanitizePathSegment(
+    context.filename.replace(/\.[^/.]+$/, "") || "file",
+  ).slice(0, 64);
+  const suffix = `${Date.now()}-${createId()}`;
+  return `${prefix}/${extension ? `${baseName}-${suffix}.${extension}` : `${baseName}-${suffix}`}`;
+}
+
 export function applyKeyPrefix(prefix: string, key: string) {
   if (!prefix) return key;
   const trimmed = prefix.replace(/\/+$/, "");
@@ -313,8 +350,40 @@ export async function createTaskImageUploadUrl(
   };
 }
 
+export async function createContentAssetUploadUrl(
+  context: ContentAssetUploadContext,
+): Promise<TaskImageUploadUrl> {
+  const config = getStorageConfig();
+  const client = getClient(config);
+  const rawKey = buildContentAssetObjectKey(context);
+  const key = applyKeyPrefix(config.keyPrefix, rawKey);
+  const command = new PutObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+    ContentType: context.contentType,
+  });
+  const uploadUrl = await getSignedUrl(client, command, {
+    expiresIn: config.presignTtlSeconds,
+  });
+  return {
+    key,
+    uploadUrl,
+    headers: { "Content-Type": context.contentType },
+  };
+}
+
 export function assertStorageConfigured() {
   return getStorageConfig();
+}
+
+export function assertContentAssetKeyMatchesContext(
+  key: string,
+  context: Omit<ContentAssetUploadContext, "filename" | "contentType">,
+) {
+  const config = getStorageConfig();
+  const prefix = buildContentAssetKeyPrefix(context);
+  const fullPrefix = `${applyKeyPrefix(config.keyPrefix, prefix)}/`;
+  return key.startsWith(fullPrefix);
 }
 
 export function assertTaskImageKeyMatchesContext(

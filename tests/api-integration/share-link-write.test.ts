@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { eq, inArray } from "drizzle-orm";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
 import { resetShareRateLimits } from "../../apps/api/src/share/rate-limit";
@@ -9,6 +9,16 @@ import {
   createProjectFixture,
   createWorkspaceMember,
 } from "./helpers/fixtures";
+
+const storageMocks = vi.hoisted(() => ({
+  deleteS3Object: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../../apps/api/src/storage/s3", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../apps/api/src/storage/s3")>();
+  return { ...actual, deleteS3Object: storageMocks.deleteS3Object };
+});
 
 async function seedTask(
   projectId: string,
@@ -98,6 +108,7 @@ describe("API integration: anonymous share writes (adversarial)", () => {
   beforeEach(async () => {
     await resetTestDatabase();
     resetShareRateLimits();
+    storageMocks.deleteS3Object.mockClear();
   });
 
   it("project edit link creates and updates basic task fields", async () => {
@@ -157,6 +168,10 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       workspaceId: admin.workspace.id,
     });
     const task = await seedTask(project.id);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const editLink = await createLink(app, "project", project.id, "edit");
     await db.insert(schema.executionManifestTable).values({
       projectId: project.id,
       repositoryOwner: "owner",
@@ -164,13 +179,28 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       verificationProfile: "test",
     });
 
-    mockAuthenticatedSession(admin.user);
-    let { app } = createApp();
-    const editLink = await createLink(app, "project", project.id, "edit");
+    const newEditLink = await app.request("/api/share-manage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        resourceType: "project",
+        resourceId: project.id,
+        permission: "edit",
+      }),
+    });
+    expect(newEditLink.status).toBe(403);
     const viewLink = await createLink(app, "project", project.id, "view");
 
     mockAnonymousSession();
     ({ app } = createApp());
+
+    const existingEditRead = await app.request(
+      `/api/share/project/${editLink.token}`,
+    );
+    expect(existingEditRead.status).toBe(200);
+    expect(((await existingEditRead.json()) as { scope: string }).scope).toBe(
+      "view",
+    );
 
     // Agent-controlled refusal even with an edit link.
     const refused = await app.request(
@@ -254,6 +284,145 @@ describe("API integration: anonymous share writes (adversarial)", () => {
     expect(readB.status).toBe(404);
   });
 
+  it("public edits clean unreferenced task, document and goal-note assets", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const assetIds = ["taskasset123", "documentasset123", "goalasset123"];
+    const objectKeys = assetIds.map(
+      (assetId) =>
+        `workspace/${admin.workspace.id}/content/smoke/${assetId}.png`,
+    );
+    const task = await seedTask(project.id, {
+      description: `![task](/api/asset/${assetIds[0]})`,
+    });
+    const document = await seedDocument(project.id, {
+      content: `![document](/api/asset/${assetIds[1]})`,
+    });
+    const goal = await seedGoal(admin.workspace.id, admin.user.id);
+    const [checkin] = await db
+      .insert(schema.goalCheckinTable)
+      .values({
+        goalId: goal.id,
+        checkInDate: "2026-10-20",
+        completed: true,
+        note: `![goal](/api/asset/${assetIds[2]})`,
+        noteRevision: 1,
+      })
+      .returning();
+    if (!checkin) throw new Error("Failed to seed goal check-in");
+
+    await db.insert(schema.assetTable).values([
+      {
+        id: assetIds[0],
+        workspaceId: admin.workspace.id,
+        projectId: project.id,
+        taskId: task.id,
+        activityId: null,
+        documentId: null,
+        documentCommentId: null,
+        goalCheckinId: null,
+        objectKey: objectKeys[0],
+        filename: "task.png",
+        mimeType: "image/png",
+        size: 128,
+        kind: "image",
+        surface: "description",
+        createdBy: admin.user.id,
+      },
+      {
+        id: assetIds[1],
+        workspaceId: admin.workspace.id,
+        projectId: project.id,
+        taskId: null,
+        activityId: null,
+        documentId: document.id,
+        documentCommentId: null,
+        goalCheckinId: null,
+        objectKey: objectKeys[1],
+        filename: "document.png",
+        mimeType: "image/png",
+        size: 128,
+        kind: "image",
+        surface: "document",
+        createdBy: admin.user.id,
+      },
+      {
+        id: assetIds[2],
+        workspaceId: admin.workspace.id,
+        projectId: null,
+        taskId: null,
+        activityId: null,
+        documentId: null,
+        documentCommentId: null,
+        goalCheckinId: checkin.id,
+        objectKey: objectKeys[2],
+        filename: "goal.png",
+        mimeType: "image/png",
+        size: 128,
+        kind: "image",
+        surface: "goal_note",
+        createdBy: admin.user.id,
+      },
+    ]);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const projectLink = await createLink(app, "project", project.id, "edit");
+    const documentLink = await createLink(app, "document", document.id, "edit");
+    const goalLink = await createLink(app, "goal", goal.id, "edit");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const taskSave = await app.request(
+      `/api/share/project/${projectLink.token}/task/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ description: "Task attachment removed" }),
+      },
+    );
+    const documentSave = await app.request(
+      `/api/share/document/${documentLink.token}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: document.title,
+          content: "# Document attachment removed",
+          revision: document.revision,
+        }),
+      },
+    );
+    const goalSave = await app.request(
+      `/api/share/goal/${goalLink.token}/checkin/${checkin.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          note: "Goal attachment removed",
+          noteRevision: 1,
+        }),
+      },
+    );
+    expect(taskSave.status).toBe(200);
+    expect(documentSave.status).toBe(200);
+    expect(goalSave.status).toBe(200);
+
+    await vi.waitFor(async () => {
+      expect(storageMocks.deleteS3Object).toHaveBeenCalledTimes(3);
+      const remaining = await db
+        .select({ id: schema.assetTable.id })
+        .from(schema.assetTable)
+        .where(inArray(schema.assetTable.id, assetIds));
+      expect(remaining).toHaveLength(0);
+    });
+    expect(storageMocks.deleteS3Object.mock.calls.map(([key]) => key)).toEqual(
+      expect.arrayContaining(objectKeys),
+    );
+  });
+
   it("goal edit link toggles check-ins and updates notes only", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
     const goal = await seedGoal(admin.workspace.id, admin.user.id);
@@ -275,9 +444,11 @@ describe("API integration: anonymous share writes (adversarial)", () => {
     );
     expect(toggled.status).toBe(200);
     const row = (await toggled.json()) as {
+      id: string;
       completed: boolean;
       noteRevision: number;
     };
+    expect(row.id).toBeTruthy();
     expect(row.completed).toBe(true);
 
     // Anonymous writes are not attributed to any workspace user.
@@ -289,33 +460,17 @@ describe("API integration: anonymous share writes (adversarial)", () => {
     expect(persisted[0]?.checkedByUserId).toBeNull();
 
     const noted = await app.request(
-      `/api/share/goal/${editLink.token}/checkin`,
+      `/api/share/goal/${editLink.token}/checkin/${row.id}`,
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ note: "From link", noteRevision: 1 }),
+        body: JSON.stringify({
+          note: "From link",
+          noteRevision: row.noteRevision,
+        }),
       },
     );
-    // checkin id unknown to the caller: the note endpoint is bound by id and
-    // the read endpoint exposes it — use the id from the read payload.
-    const read = await app.request(`/api/share/goal/${editLink.token}`);
-    const readBody = (await read.json()) as {
-      checkins: Array<{ id: string; noteRevision: number }>;
-    };
-    const checkinId = readBody.checkins[0]?.id as string;
-    const notedRetry =
-      noted.status === 200
-        ? noted
-        : await app.request(
-            `/api/share/goal/${editLink.token}/checkin/${checkinId}`,
-            {
-              method: "PUT",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ note: "From link", noteRevision: 1 }),
-            },
-          );
-    expect(notedRetry.status).toBe(200);
-    void row.noteRevision;
+    expect(noted.status).toBe(200);
   });
 
   it("archived goal refuses anonymous writes", async () => {
@@ -447,6 +602,10 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       workspaceId: admin.workspace.id,
     });
     const task = await seedTask(project.id);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "edit");
     await db.insert(schema.taskRunTable).values({
       taskId: task.id,
       manifestVersion: 1,
@@ -463,10 +622,6 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       leaseTokenHash: "test-lease-hash",
       leaseExpiresAt: new Date(Date.now() + 3_600_000),
     });
-
-    mockAuthenticatedSession(admin.user);
-    let { app } = createApp();
-    const link = await createLink(app, "project", project.id, "edit");
 
     mockAnonymousSession();
     ({ app } = createApp());

@@ -1,6 +1,10 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../../database";
+import {
+  deleteOrphanedAssets,
+  extractAssetIds,
+} from "../../storage/cleanup-assets";
 
 // SPEC-2026-10-08-kaneo-workspace-collaboration T3: document comments are
 // member-authored records on their own table (the task `activity` table
@@ -18,6 +22,20 @@ export async function createDocumentComment(
 
   if (!comment) {
     throw new HTTPException(500, { message: "Failed to create comment" });
+  }
+
+  const referencedAssetIds = [...extractAssetIds(content)];
+  if (referencedAssetIds.length > 0) {
+    await db
+      .update(schema.assetTable)
+      .set({ documentCommentId: comment.id })
+      .where(
+        and(
+          eq(schema.assetTable.documentId, documentId),
+          eq(schema.assetTable.surface, "document_comment"),
+          inArray(schema.assetTable.id, referencedAssetIds),
+        ),
+      );
   }
   return comment;
 }
@@ -73,6 +91,10 @@ export async function deleteDocumentComment(
         eq(schema.documentCommentTable.documentId, comment.documentId),
       ),
     );
+
+  void deleteOrphanedAssets(comment.content, null, {
+    documentId: comment.documentId,
+  }).catch(() => {});
 
   return { success: true };
 }

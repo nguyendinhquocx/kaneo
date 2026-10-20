@@ -1,18 +1,24 @@
 import { resolveApiBaseUrl } from "@kaneo/libs";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-  LinkIcon,
-  ShieldAlert,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { FileText, LinkIcon, ShieldAlert } from "lucide-react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { MarkdownRenderer } from "@/components/public-project/markdown-renderer";
 import { ThemeToggle } from "@/components/public-project/theme-toggle";
+import DocumentShareReader from "@/components/share/document-share-reader";
+import GoalShareReader, {
+  type GoalShareData,
+  SharedMarkdown,
+  ShareScopeBadge,
+} from "@/components/share/goal-share-reader";
+import ProjectShareReader from "@/components/share/project-share-reader";
 import { Button } from "@/components/ui/button";
+import type { SharedDocumentPayload } from "@/fetchers/share/share-public-api";
+
+type ProjectShareData =
+  import("@/types/public-project").PublicProjectPayload & {
+    scope?: "view" | "edit";
+  };
 
 // SPEC-2026-10-08-kaneo-workspace-collaboration: public capability reader.
 // Anyone holding the URL can read exactly the linked resource — no login,
@@ -44,6 +50,8 @@ async function fetchShareResource(resourceType: string, token: string) {
 function ShareReader() {
   const { t } = useTranslation("share");
   const { resourceType, token } = Route.useParams();
+  const pageWidthClass =
+    resourceType === "project" ? "max-w-[1600px]" : "max-w-3xl";
   const { data, error, isLoading, refetch } = useQuery({
     queryKey: ["share", resourceType, token],
     queryFn: () => fetchShareResource(resourceType, token),
@@ -68,12 +76,14 @@ function ShareReader() {
       <meta name="robots" content="noindex, nofollow" />
       <meta name="referrer" content="no-referrer" />
       <header className="sticky top-0 z-10 bg-background">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-end px-4 py-2.5">
+        <div
+          className={`mx-auto flex w-full ${pageWidthClass} items-center justify-end px-4 py-2.5`}
+        >
           <ThemeToggle />
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
+      <main className={`mx-auto w-full ${pageWidthClass} flex-1 px-4 py-6`}>
         {isLoading ? (
           <div className="space-y-3">
             <div className="h-8 w-2/3 animate-pulse rounded bg-muted" />
@@ -103,31 +113,58 @@ function ShareReader() {
             </Button>
           </div>
         ) : data ? (
-          resourceType === "document" ? (
-            <article className="space-y-4">
-              <h1 className="text-2xl font-semibold text-foreground">
-                {String(data.title ?? "")}
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                {t("document.updated", {
-                  date: data.updatedAt
-                    ? new Date(String(data.updatedAt)).toLocaleString(
-                        undefined,
-                        { dateStyle: "medium", timeStyle: "short" },
-                      )
-                    : "",
-                })}
-              </p>
-              <MarkdownRenderer content={String(data.content ?? "")} />
-              <p className="pt-4 text-[11px] text-muted-foreground">
-                {t("document.rawHint")}
-              </p>
-            </article>
+          resourceType === "project" ? (
+            <ProjectShareReader
+              data={data as unknown as ProjectShareData}
+              token={token}
+            />
+          ) : resourceType === "document" ? (
+            <DocumentShareReader
+              data={data as unknown as SharedDocumentPayload}
+              token={token}
+            />
           ) : resourceType === "goal" ? (
-            <GoalShareMatrix
+            <GoalShareReader
               data={data as unknown as GoalShareData}
               token={token}
             />
+          ) : resourceType === "task_description" ? (
+            <article className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold text-foreground">
+                  {String(data.title ?? "")}
+                </h1>
+                {/* R4-T4: description links are view-only by contract — show
+                the scope chip instead of fake edit affordances. */}
+                <ShareScopeBadge scope="view" />
+              </div>
+              <SharedMarkdown
+                content={String(data.content ?? "")}
+                resourceType={resourceType}
+                token={token}
+              />
+            </article>
+          ) : resourceType === "activity_comment" ? (
+            <article className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {data.createdAt
+                    ? new Date(String(data.createdAt)).toLocaleString(
+                        undefined,
+                        { dateStyle: "medium", timeStyle: "short" },
+                      )
+                    : ""}
+                </span>
+                <ShareScopeBadge scope="view" />
+              </div>
+              {/* R4-T4: a comment link grants exactly this comment — no
+              author identity, no avatar, no neighboring thread. */}
+              <SharedMarkdown
+                content={String(data.content ?? "")}
+                resourceType={resourceType}
+                token={token}
+              />
+            </article>
           ) : (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <LinkIcon className="size-8 text-muted-foreground" />
@@ -146,236 +183,5 @@ function ShareReader() {
         )}
       </main>
     </div>
-  );
-}
-
-type GoalShareCheckin = {
-  checkInDate: string;
-  completed: boolean;
-  note: string;
-};
-
-type GoalShareData = {
-  name: string;
-  archivedAt: string | null;
-  scope: "view" | "edit";
-  targetPerWeek: number | null;
-  checkins: GoalShareCheckin[];
-};
-
-// Monday-based week start, matching the in-app matrix.
-function startOfWeek(date: Date): Date {
-  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  day.setDate(day.getDate() - ((day.getDay() + 6) % 7));
-  return day;
-}
-
-function formatDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-// R2-T8: the shared goal renders the same horizontal weekly matrix as the
-// authenticated app — Mon–Sun columns, week navigation, an all-time total.
-// Edit links toggle check-ins through the audited capability endpoint; view
-// links get a read-only grid.
-function GoalShareMatrix({
-  data,
-  token,
-}: {
-  data: GoalShareData;
-  token: string;
-}) {
-  const { t } = useTranslation("share");
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [checkins, setCheckins] = useState<GoalShareCheckin[]>(data.checkins);
-  const [pendingDate, setPendingDate] = useState<string | null>(null);
-  const canEdit = data.scope === "edit" && data.archivedAt === null;
-
-  const byDate = useMemo(
-    () => new Map(checkins.map((ci) => [ci.checkInDate, ci])),
-    [checkins],
-  );
-  const totalAllTime = checkins.filter((ci) => ci.completed).length;
-  const weekStart = useMemo(() => {
-    const start = startOfWeek(new Date());
-    start.setDate(start.getDate() + weekOffset * 7);
-    return start;
-  }, [weekOffset]);
-  const days = useMemo(
-    () =>
-      Array.from({ length: 7 }, (_, index) => {
-        const day = new Date(weekStart);
-        day.setDate(day.getDate() + index);
-        return day;
-      }),
-    [weekStart],
-  );
-  const weekdayFormatter = new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-  });
-  const rangeFormatter = new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-  });
-
-  const toggle = async (dateKey: string) => {
-    if (!canEdit || pendingDate) return;
-    const existing = byDate.get(dateKey);
-    const nextCompleted = !(existing?.completed === true);
-    setCheckins((current) =>
-      existing
-        ? current.map((ci) =>
-            ci.checkInDate === dateKey
-              ? { ...ci, completed: nextCompleted }
-              : ci,
-          )
-        : [...current, { checkInDate: dateKey, completed: true, note: "" }],
-    );
-    setPendingDate(dateKey);
-    try {
-      const response = await fetch(`${apiBase}/share/goal/${token}/checkin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: dateKey }),
-      });
-      if (!response.ok) {
-        throw new Error("toggle failed");
-      }
-    } catch {
-      setCheckins((current) =>
-        existing
-          ? current.map((ci) => (ci.checkInDate === dateKey ? existing : ci))
-          : current.filter((ci) => ci.checkInDate !== dateKey),
-      );
-    } finally {
-      setPendingDate(null);
-    }
-  };
-
-  const notes = checkins
-    .filter((ci) => ci.note)
-    .sort((left, right) => right.checkInDate.localeCompare(left.checkInDate));
-
-  return (
-    <article className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">{data.name}</h1>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t("goal.totalAllTime", { total: totalAllTime })}
-          {typeof data.targetPerWeek === "number"
-            ? t("goal.perWeek", { target: data.targetPerWeek })
-            : null}
-        </p>
-        {/* R3-T3: make the link scope obvious — an edit link can tick, a
-        view link cannot. */}
-        <p className="mt-1 text-xs text-muted-foreground">
-          {canEdit ? t("goal.editHint") : t("goal.viewHint")}
-        </p>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon-xs"
-          aria-label={t("goal.prevWeek")}
-          onClick={() => setWeekOffset((value) => value - 1)}
-        >
-          <ChevronLeft className="size-3.5" />
-        </Button>
-        <span className="text-sm font-medium text-foreground">
-          {rangeFormatter.format(days[0])} – {rangeFormatter.format(days[6])}
-        </span>
-        <Button
-          variant="outline"
-          size="icon-xs"
-          aria-label={t("goal.nextWeek")}
-          onClick={() => setWeekOffset((value) => value + 1)}
-        >
-          <ChevronRight className="size-3.5" />
-        </Button>
-        {weekOffset !== 0 ? (
-          <Button variant="ghost" size="xs" onClick={() => setWeekOffset(0)}>
-            {t("goal.thisWeek")}
-          </Button>
-        ) : null}
-      </div>
-
-      <div className="scrollbar-none overflow-x-auto rounded-lg border border-border/80">
-        <table className="w-full min-w-max border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border/80">
-              <th className="bg-card px-3 py-2 text-start text-xs font-medium text-muted-foreground">
-                {t("goal.matrixGoal")}
-              </th>
-              {days.map((day) => (
-                <th
-                  key={formatDateKey(day)}
-                  scope="col"
-                  className="w-14 px-2 py-2 text-center"
-                >
-                  <span className="block text-[10px] font-normal text-muted-foreground">
-                    {weekdayFormatter.format(day)}
-                  </span>
-                  <span className="block text-xs font-medium text-foreground">
-                    {day.getDate()}
-                  </span>
-                </th>
-              ))}
-              <th className="w-16 px-2 py-2 text-center text-xs font-medium text-muted-foreground">
-                {t("goal.totalColumn")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="max-w-48 truncate px-3 py-2.5 font-medium text-foreground">
-                {data.name}
-              </td>
-              {days.map((day) => {
-                const key = formatDateKey(day);
-                const completed = byDate.get(key)?.completed === true;
-                return (
-                  <td key={key} className="px-2 py-2.5 text-center">
-                    <input
-                      type="checkbox"
-                      checked={completed}
-                      disabled={!canEdit || pendingDate !== null}
-                      onChange={() => void toggle(key)}
-                      aria-label={`${data.name} — ${key}`}
-                      className="size-4 accent-[var(--primary)]"
-                    />
-                  </td>
-                );
-              })}
-              <td className="px-2 py-2.5 text-center font-medium tabular-nums text-foreground">
-                {totalAllTime}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {notes.length > 0 ? (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">
-            {t("goal.notesTitle")}
-          </h2>
-          {notes.map((ci) => (
-            <div
-              key={ci.checkInDate}
-              className="rounded-lg border border-border/80 p-2.5"
-            >
-              <span className="text-xs text-muted-foreground">
-                {ci.checkInDate}
-              </span>
-              <MarkdownRenderer content={ci.note} />
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </article>
   );
 }

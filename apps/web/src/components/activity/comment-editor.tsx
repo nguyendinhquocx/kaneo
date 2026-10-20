@@ -1,3 +1,4 @@
+import { resolveApiBaseUrl } from "@kaneo/libs";
 import type { Editor } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -69,6 +70,12 @@ import {
   isYouTubeUrl,
   normalizeUrl,
 } from "@/lib/editor-url-utils";
+import {
+  createMappedSelection,
+  getPastedFiles,
+  sanitizePastedHtml,
+  uploadFilesAtSelection,
+} from "@/lib/rich-content-paste";
 import { getSharedShikiHighlighter } from "@/lib/shiki-highlighter";
 import { toast } from "@/lib/toast";
 import { uploadTaskImage } from "@/lib/upload-task-image";
@@ -89,10 +96,18 @@ type CommentEditorProps = {
   onCancelShortcut?: () => void;
   taskId?: string;
   uploadSurface?: "description" | "comment";
+  uploadOwner?: {
+    ownerType: "document" | "document_comment" | "goal_checkin";
+    ownerId: string;
+  };
   ensureTaskId?: () => Promise<string | null>;
   showQuickAttachButton?: boolean;
   onAttachActionChange?: (attach: (() => void) | null) => void;
 };
+
+const editorApiBase = resolveApiBaseUrl(
+  import.meta.env.VITE_API_URL as string | undefined,
+);
 
 type SlashRange = { from: number; to: number };
 
@@ -182,6 +197,7 @@ export default function CommentEditor({
   onCancelShortcut,
   taskId,
   uploadSurface = "comment",
+  uploadOwner,
   ensureTaskId,
   showQuickAttachButton = true,
   onAttachActionChange,
@@ -213,6 +229,7 @@ export default function CommentEditor({
   const taskIdRef = useRef(taskId);
   const ensureTaskIdRef = useRef(ensureTaskId);
   const uploadSurfaceRef = useRef(uploadSurface);
+  const uploadOwnerRef = useRef(uploadOwner);
   const onSubmitShortcutRef = useRef(onSubmitShortcut);
   const onCancelShortcutRef = useRef(onCancelShortcut);
   onSubmitShortcutRef.current = onSubmitShortcut;
@@ -286,24 +303,16 @@ export default function CommentEditor({
     taskIdRef.current = taskId;
     ensureTaskIdRef.current = ensureTaskId;
     uploadSurfaceRef.current = uploadSurface;
-  }, [ensureTaskId, taskId, uploadSurface]);
+    uploadOwnerRef.current = uploadOwner;
+  }, [ensureTaskId, taskId, uploadSurface, uploadOwner]);
 
   const insertUploadedAsset = useCallback(
     (
       activeEditor: Editor,
       asset: Awaited<ReturnType<typeof uploadTaskImage>>,
-      range?: SlashRange,
+      range: SlashRange,
     ) => {
-      const chain = activeEditor.chain().focus();
-
-      if (range) {
-        chain.deleteRange(range);
-      } else {
-        const { selection } = activeEditor.state;
-        if (!selection.empty) {
-          chain.setTextSelection(selection.to);
-        }
-      }
+      const chain = activeEditor.chain().focus().setTextSelection(range);
 
       if (asset.kind === "image") {
         chain
@@ -330,48 +339,67 @@ export default function CommentEditor({
     [],
   );
 
-  const handleAssetFileUpload = useCallback(
-    async (file: File, targetEditor?: Editor | null, range?: SlashRange) => {
+  const handleAssetFilesUpload = useCallback(
+    async (files: File[], targetEditor?: Editor | null, range?: SlashRange) => {
       const activeEditor = targetEditor || lastEditorRef.current;
-      const resolvedTaskId =
-        taskIdRef.current ?? (await ensureTaskIdRef.current?.());
-
-      if (!activeEditor || !resolvedTaskId) {
-        toast.error(t("activity:comment.editor.uploadsOnlyOnSavedTasks"));
-        return;
-      }
-
+      if (!activeEditor || files.length === 0) return;
+      const mappedSelection = createMappedSelection(activeEditor, range);
       const loadingToast = toast.loading(
         t("activity:comment.editor.uploadingFile"),
       );
 
       try {
-        const uploadedAsset = await uploadTaskImage({
-          taskId: resolvedTaskId,
-          surface: uploadSurfaceRef.current,
-          file,
+        const owner = uploadOwnerRef.current;
+        const resolvedTaskId = owner
+          ? null
+          : (taskIdRef.current ?? (await ensureTaskIdRef.current?.()));
+        if (!owner && !resolvedTaskId) {
+          throw new Error(t("activity:comment.editor.uploadsOnlyOnSavedTasks"));
+        }
+        await uploadFilesAtSelection({
+          editor: activeEditor,
+          files,
+          mappedSelection,
+          upload: (file) =>
+            uploadTaskImage({
+              file,
+              ...(owner
+                ? { ownerType: owner.ownerType, ownerId: owner.ownerId }
+                : {
+                    taskId: resolvedTaskId as string,
+                    surface: uploadSurfaceRef.current,
+                  }),
+            }),
+          insert: (asset, selection) => {
+            insertUploadedAsset(activeEditor, asset, selection);
+            toast.success(
+              asset.kind === "image"
+                ? t("activity:comment.editor.imageUploaded")
+                : t("activity:comment.editor.fileAttached"),
+            );
+          },
+          onError: (error) =>
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : t("activity:comment.editor.failedToUploadFile"),
+            ),
         });
-        insertUploadedAsset(activeEditor, uploadedAsset, range);
-
-        toast.dismiss(loadingToast);
-        toast.success(
-          uploadedAsset.kind === "image"
-            ? t("activity:comment.editor.imageUploaded")
-            : t("activity:comment.editor.fileAttached"),
-        );
       } catch (error) {
-        toast.dismiss(loadingToast);
+        mappedSelection.dispose();
         toast.error(
           error instanceof Error
             ? error.message
             : t("activity:comment.editor.failedToUploadFile"),
         );
+      } finally {
+        toast.dismiss(loadingToast);
       }
     },
     [insertUploadedAsset, t],
   );
 
-  const canUploadFiles = Boolean(taskId || ensureTaskId);
+  const canUploadFiles = Boolean(taskId || ensureTaskId || uploadOwner);
 
   const openImagePicker = useCallback(
     (activeEditor?: Editor | null, range?: SlashRange) => {
@@ -655,15 +683,15 @@ export default function CommentEditor({
             readOnly && "kaneo-comment-editor-prose-readonly",
           ),
         },
+        transformPastedHTML: (html) => sanitizePastedHtml(html, editorApiBase),
         handlePaste: (view, event) => {
           if (readOnly || disabled) return false;
 
-          const pastedFiles = Array.from(event.clipboardData?.files || []);
-          const pastedFile = pastedFiles[0];
-
-          if (pastedFile) {
+          const pastedFiles = getPastedFiles(event.clipboardData);
+          if (pastedFiles.length > 0) {
             event.preventDefault();
-            void handleAssetFileUpload(pastedFile, editor);
+            const { from, to } = view.state.selection;
+            void handleAssetFilesUpload(pastedFiles, editor, { from, to });
             return true;
           }
 
@@ -733,22 +761,19 @@ export default function CommentEditor({
         handleDrop: (view, event) => {
           if (readOnly || disabled) return false;
 
-          const droppedFiles = Array.from(event.dataTransfer?.files || []);
-          const droppedFile = droppedFiles[0];
-
-          if (!droppedFile) return false;
+          const droppedFiles = getPastedFiles(event.dataTransfer);
+          if (droppedFiles.length === 0) return false;
 
           event.preventDefault();
           const coordinates = view.posAtCoords({
             left: event.clientX,
             top: event.clientY,
           });
-
           const dropRange = coordinates
             ? { from: coordinates.pos, to: coordinates.pos }
             : undefined;
 
-          void handleAssetFileUpload(droppedFile, editor, dropRange);
+          void handleAssetFilesUpload(droppedFiles, editor, dropRange);
           return true;
         },
         handleTextInput: (view, _from, _to, text) => {
@@ -894,7 +919,7 @@ export default function CommentEditor({
         onChange(markdown);
       },
     },
-    [handleAssetFileUpload, resolvedPlaceholder, toShikiLanguage],
+    [handleAssetFilesUpload, resolvedPlaceholder, toShikiLanguage],
   );
 
   useEffect(() => {
@@ -1445,15 +1470,16 @@ export default function CommentEditor({
         <input
           ref={imageInputRef}
           type="file"
+          multiple
           className="sr-only"
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
+            const files = Array.from(event.target.files ?? []);
+            if (files.length === 0) return;
 
             const pendingInsert = pendingImageInsertRef.current;
             pendingImageInsertRef.current = null;
-            void handleAssetFileUpload(
-              file,
+            void handleAssetFilesUpload(
+              files,
               pendingInsert?.editor,
               pendingInsert?.range,
             );

@@ -34,6 +34,11 @@ For development, you'll need at minimum:
 
 If your app uses a device client ID that is not included in the defaults, set `DEVICE_AUTH_CLIENT_IDS` to the full comma-separated list of allowed IDs (including any defaults you still need), so it includes the client ID your app sends to `/api/auth/device/code`.
 
+### Share-Link Token Encryption
+
+- `SHARE_TOKEN_ENCRYPTION_KEY` - Required to create or re-copy scoped share links. Generate a 32-byte base64url value with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` and store it as a secret; never commit or paste the value into chat/logs.
+- Keep this key stable and back it up separately from the database. Losing it does not invalidate links, but the app cannot reconstruct their URLs; legacy hash-only links cannot be recovered and must be replaced explicitly.
+
 ### Development-Specific Variables
 
 For local development, the web app also supports:

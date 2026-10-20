@@ -109,6 +109,16 @@ describe("TaskExecutionPanel", () => {
 
     expect(screen.getByText("tasks:detail.execution.title")).toBeVisible();
     expect(
+      screen.queryByRole("button", {
+        name: "tasks:detail.execution.review.approve",
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "tasks:detail.execution.toggle",
+      }),
+    );
+    expect(
       screen.getByRole("button", {
         name: "tasks:detail.execution.review.approve",
       }),
@@ -195,6 +205,11 @@ describe("TaskExecutionPanel", () => {
     });
 
     render(<TaskExecutionPanel taskId="task-1" projectId="project-1" />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "tasks:detail.execution.toggle",
+      }),
+    );
 
     expect(
       screen.getByText("tasks:detail.execution.agentsError"),

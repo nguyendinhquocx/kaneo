@@ -1,9 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import * as v from "valibot";
 import db, { schema } from "../database";
-import { buildPublicProjectPayload } from "../project/controllers/public-project-dto";
+import {
+  buildPublicProjectPayload,
+  isProjectAgentControlled,
+} from "../project/controllers/public-project-dto";
+import { buildAssetResponse } from "../storage/asset-response";
+import { contentReferencesAsset } from "../storage/cleanup-assets";
+import { getPrivateObject } from "../storage/s3";
 import {
   publicCreateTask,
   publicToggleGoalCheckin,
@@ -14,6 +20,8 @@ import {
 import {
   applyShareSecurityHeaders,
   assertShareRateLimit,
+  isShareResourceType,
+  type ResolvedShareLink,
   resolveShareLink,
 } from "./resolve-share-link";
 import { hashShareToken } from "./token";
@@ -39,8 +47,16 @@ app.get("/project/:token", async (c) => {
   const payload = await buildPublicProjectPayload(link.resourceId, {
     requirePublic: false,
   });
+  const isReadOnly =
+    link.permission === "edit" &&
+    (await isProjectAgentControlled(link.resourceId));
 
-  return c.json(payload);
+  return c.json({
+    ...payload,
+    // Existing edit links may predate agent control; never advertise an edit
+    // affordance when the public write routes will refuse the operation.
+    scope: isReadOnly ? "view" : link.permission,
+  });
 });
 
 // SPEC-2026-10-08-kaneo-workspace-collaboration T3/T4: capability-scoped
@@ -67,6 +83,7 @@ app.get("/document/:token", async (c) => {
   const token = c.req.param("token");
   assertShareRateLimit(c, "read", hashShareToken(token));
 
+  const link = await resolveShareLink(token, "document", "view");
   const document = await getPublicDocument(token);
   return c.json({
     id: document.id,
@@ -74,7 +91,237 @@ app.get("/document/:token", async (c) => {
     content: document.content,
     revision: document.revision,
     updatedAt: document.updatedAt,
+    scope: link.permission,
   });
+});
+
+async function getPublicTaskDescription(token: string) {
+  const link = await resolveShareLink(token, "task_description", "view");
+  const [task] = await db
+    .select({
+      id: schema.taskTable.id,
+      projectId: schema.taskTable.projectId,
+      title: schema.taskTable.title,
+      description: schema.taskTable.description,
+    })
+    .from(schema.taskTable)
+    .where(eq(schema.taskTable.id, link.resourceId))
+    .limit(1);
+  if (!task || (await isProjectAgentControlled(task.projectId))) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+  return { link, task };
+}
+
+async function getPublicActivityComment(token: string) {
+  const link = await resolveShareLink(token, "activity_comment", "view");
+  const [comment] = await db
+    .select({
+      id: schema.activityTable.id,
+      taskId: schema.activityTable.taskId,
+      content: schema.activityTable.content,
+      createdAt: schema.activityTable.createdAt,
+    })
+    .from(schema.activityTable)
+    .where(
+      and(
+        eq(schema.activityTable.id, link.resourceId),
+        eq(schema.activityTable.type, "comment"),
+      ),
+    )
+    .limit(1);
+  if (!comment) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+  return { link, comment };
+}
+
+app.get("/task_description/:token", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+  const { link, task } = await getPublicTaskDescription(token);
+  return c.json({
+    title: task.title,
+    content: task.description,
+    scope: link.permission,
+  });
+});
+
+app.get("/activity_comment/:token", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+  const { link, comment } = await getPublicActivityComment(token);
+  return c.json({
+    content: comment.content,
+    createdAt: comment.createdAt,
+    scope: link.permission,
+  });
+});
+
+async function canShareReadAsset(
+  link: ResolvedShareLink,
+  asset: {
+    id: string;
+    projectId: string | null;
+    taskId: string | null;
+    activityId: string | null;
+    surface: string;
+    documentId: string | null;
+    goalCheckinId: string | null;
+  },
+): Promise<boolean> {
+  if (link.resourceType === "project") {
+    if (
+      asset.projectId !== link.resourceId ||
+      !asset.taskId ||
+      asset.surface !== "description"
+    ) {
+      return false;
+    }
+    const payload = await buildPublicProjectPayload(link.resourceId, {
+      requirePublic: false,
+    });
+    return [
+      ...payload.columns.flatMap((column) => column.tasks),
+      ...payload.archivedTasks,
+      ...payload.plannedTasks,
+    ].some(
+      (task) =>
+        task.id === asset.taskId &&
+        task.description !== null &&
+        contentReferencesAsset(task.description, asset.id),
+    );
+  }
+
+  if (link.resourceType === "document") {
+    if (asset.documentId !== link.resourceId || asset.surface !== "document") {
+      return false;
+    }
+    const document = await getPublicDocumentFromId(link.resourceId);
+    return contentReferencesAsset(document.content, asset.id);
+  }
+
+  if (link.resourceType === "goal") {
+    if (!asset.goalCheckinId || asset.surface !== "goal_note") return false;
+    const [checkin] = await db
+      .select({
+        goalId: schema.goalCheckinTable.goalId,
+        note: schema.goalCheckinTable.note,
+      })
+      .from(schema.goalCheckinTable)
+      .where(eq(schema.goalCheckinTable.id, asset.goalCheckinId))
+      .limit(1);
+    return Boolean(
+      checkin &&
+        checkin.goalId === link.resourceId &&
+        contentReferencesAsset(checkin.note, asset.id),
+    );
+  }
+
+  if (link.resourceType === "task_description") {
+    if (asset.taskId !== link.resourceId || asset.surface !== "description") {
+      return false;
+    }
+    const { task } = await getPublicTaskDescriptionFromId(link.resourceId);
+    return contentReferencesAsset(task.description, asset.id);
+  }
+
+  const { comment } = await getPublicActivityCommentById(link.resourceId);
+  if (
+    asset.taskId !== comment.taskId ||
+    asset.surface !== "comment" ||
+    (asset.activityId !== null && asset.activityId !== comment.id)
+  ) {
+    return false;
+  }
+  return contentReferencesAsset(comment.content, asset.id);
+}
+
+async function getPublicDocumentFromId(documentId: string) {
+  const [document] = await db
+    .select()
+    .from(schema.documentTable)
+    .where(eq(schema.documentTable.id, documentId))
+    .limit(1);
+  if (!document || document.archivedAt !== null) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+  return document;
+}
+
+async function getPublicTaskDescriptionFromId(taskId: string) {
+  const [task] = await db
+    .select({
+      id: schema.taskTable.id,
+      projectId: schema.taskTable.projectId,
+      title: schema.taskTable.title,
+      description: schema.taskTable.description,
+    })
+    .from(schema.taskTable)
+    .where(eq(schema.taskTable.id, taskId))
+    .limit(1);
+  if (!task || (await isProjectAgentControlled(task.projectId))) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+  return { task };
+}
+
+async function getPublicActivityCommentById(commentId: string) {
+  const [comment] = await db
+    .select({
+      id: schema.activityTable.id,
+      taskId: schema.activityTable.taskId,
+      content: schema.activityTable.content,
+    })
+    .from(schema.activityTable)
+    .where(
+      and(
+        eq(schema.activityTable.id, commentId),
+        eq(schema.activityTable.type, "comment"),
+      ),
+    )
+    .limit(1);
+  if (!comment) throw new HTTPException(404, { message: "Not found" });
+  return { comment };
+}
+
+app.get("/:resourceType/:token/asset/:assetId", async (c) => {
+  const resourceType = c.req.param("resourceType");
+  const token = c.req.param("token");
+  const assetId = c.req.param("assetId");
+  if (!isShareResourceType(resourceType)) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+
+  assertShareRateLimit(c, "read", hashShareToken(token));
+  const link = await resolveShareLink(token, resourceType, "view");
+  const [asset] = await db
+    .select({
+      id: schema.assetTable.id,
+      objectKey: schema.assetTable.objectKey,
+      filename: schema.assetTable.filename,
+      mimeType: schema.assetTable.mimeType,
+      projectId: schema.assetTable.projectId,
+      taskId: schema.assetTable.taskId,
+      activityId: schema.assetTable.activityId,
+      surface: schema.assetTable.surface,
+      documentId: schema.assetTable.documentId,
+      goalCheckinId: schema.assetTable.goalCheckinId,
+    })
+    .from(schema.assetTable)
+    .where(eq(schema.assetTable.id, assetId))
+    .limit(1);
+
+  if (!asset || !(await canShareReadAsset(link, asset))) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+
+  try {
+    const object = await getPrivateObject(asset.objectKey);
+    return buildAssetResponse(asset, object, "private, no-store");
+  } catch {
+    throw new HTTPException(404, { message: "Not found" });
+  }
 });
 
 // Agent-readable Markdown: raw text/markdown over plain HTTP, no JS/cookie/

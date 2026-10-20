@@ -19,6 +19,7 @@ import {
 } from "hono-openapi";
 import * as v from "valibot";
 import activity from "./activity";
+import contentAsset from "./asset/content-upload";
 import { auth } from "./auth";
 import column from "./column";
 import comment from "./comment";
@@ -55,6 +56,7 @@ import search from "./search";
 import sharePublic from "./share";
 import shareManage from "./share/manage";
 import slackIntegration from "./slack-integration";
+import { buildAssetResponse } from "./storage/asset-response";
 import { getPrivateObject } from "./storage/s3";
 import task from "./task";
 import taskRelation from "./task-relation";
@@ -132,41 +134,6 @@ type ApiVariables = {
     apiKey?: ApiKey;
   };
 };
-
-const SAFE_INLINE_ASSET_TYPES = new Set([
-  "image/apng",
-  "image/avif",
-  "image/gif",
-  "image/heic",
-  "image/heif",
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-]);
-
-function buildContentDisposition(filename: string, inline: boolean) {
-  const normalized = filename
-    .normalize("NFC")
-    .replace(/[\r\n"]/g, "")
-    .trim();
-  const safeFilename = normalized || "file";
-  const asciiFallback =
-    safeFilename
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[\\/]/g, "-")
-      .replace(/[^\x20-\x7E]+/g, "_")
-      .replace(/\s+/g, " ")
-      .trim() || "file";
-  const encodedFilename = encodeURIComponent(safeFilename).replace(
-    /['()*]/g,
-    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-
-  const disposition = inline ? "inline" : "attachment";
-  return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
-}
 
 export function createApp() {
   const app = new Hono<AppVariables>();
@@ -325,7 +292,7 @@ export function createApp() {
           isPublic: schema.projectTable.isPublic,
         })
         .from(schema.assetTable)
-        .innerJoin(
+        .leftJoin(
           schema.projectTable,
           eq(schema.assetTable.projectId, schema.projectTable.id),
         )
@@ -346,31 +313,11 @@ export function createApp() {
 
       try {
         const object = await getPrivateObject(asset.objectKey);
-        const storedContentType =
-          (object.contentType || asset.mimeType)
-            .toLowerCase()
-            .split(";")[0]
-            ?.trim() ?? "";
-        const inline = SAFE_INLINE_ASSET_TYPES.has(storedContentType);
-
-        return new Response(object.body as BodyInit, {
-          headers: {
-            "Cache-Control": asset.isPublic
-              ? "public, max-age=300"
-              : "private, max-age=120",
-            "Content-Disposition": buildContentDisposition(
-              asset.filename,
-              inline,
-            ),
-            "Content-Length": object.contentLength?.toString() || "",
-            "Content-Type": inline
-              ? storedContentType
-              : "application/octet-stream",
-            "X-Content-Type-Options": "nosniff",
-            ETag: object.etag || "",
-            "Last-Modified": object.lastModified?.toUTCString() || "",
-          },
-        });
+        return buildAssetResponse(
+          asset,
+          object,
+          asset.isPublic ? "public, max-age=300" : "private, max-age=120",
+        );
       } catch (error) {
         console.error("Failed to stream asset:", error);
         throw new HTTPException(404, { message: "Asset object not found" });
@@ -612,6 +559,7 @@ export function createApp() {
   const executionApi = api.route("/execution", execution);
   const workflowRuleApi = api.route("/workflow-rule", workflowRule);
   const shareManageApi = api.route("/share-manage", shareManage);
+  const contentAssetApi = api.route("/content-asset", contentAsset);
   const invitationApi = api.route("/invitation", invitation);
   const workspaceApi = api.route("/workspace", workspace);
 
@@ -781,6 +729,7 @@ export function createApp() {
     publicProjectApi,
     shareApi,
     shareManageApi,
+    contentAssetApi,
     searchApi,
     slackIntegrationApi,
     taskApi,
@@ -904,6 +853,7 @@ const {
   searchApi,
   shareApi,
   shareManageApi,
+  contentAssetApi,
   slackIntegrationApi,
   taskApi,
   taskRelationApi,
@@ -952,6 +902,7 @@ export type AppType =
   | typeof publicProjectApi
   | typeof shareApi
   | typeof shareManageApi
+  | typeof contentAssetApi
   | typeof invitationPublicApi
   | typeof oauthApi;
 

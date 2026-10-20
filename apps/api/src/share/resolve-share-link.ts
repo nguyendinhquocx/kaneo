@@ -12,7 +12,13 @@ import { hashShareToken, isPlausibleShareToken } from "./token";
 
 export type SharePermission = "view" | "edit";
 
-export const SHARE_RESOURCE_TYPES = ["project", "document", "goal"] as const;
+export const SHARE_RESOURCE_TYPES = [
+  "project",
+  "document",
+  "goal",
+  "task_description",
+  "activity_comment",
+] as const;
 export type ShareResourceType = (typeof SHARE_RESOURCE_TYPES)[number];
 
 export function isShareResourceType(value: string): value is ShareResourceType {

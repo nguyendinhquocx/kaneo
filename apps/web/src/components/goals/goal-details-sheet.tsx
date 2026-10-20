@@ -327,6 +327,10 @@ export default function GoalDetailsSheet({
                   setConflict(false);
                 }}
                 placeholder={t("sheet.notePlaceholder")}
+                uploadOwner={{
+                  ownerType: "goal_checkin",
+                  ownerId: checkinForDate.id,
+                }}
               />
               <div className="flex items-center justify-end gap-1.5">
                 {checkinForDate.note ? (

@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CommentEditor from "@/components/activity/comment-editor";
 import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
+import { CopyShareLinkButton } from "@/components/share/copy-share-link-button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import useDeleteComment from "@/hooks/mutations/comment/use-delete-comment";
 import useUpdateComment from "@/hooks/mutations/comment/use-update-comment";
+import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { formatDateTime, formatRelativeTime } from "@/lib/format";
 import { getInitials } from "@/lib/get-initials";
 import { toast } from "@/lib/toast";
@@ -49,6 +51,7 @@ export default function CommentCard({
 }: CommentCardProps) {
   const { t } = useTranslation();
   const { user: currentUser } = useAuth();
+  const { canManageShareLinks } = useWorkspacePermission();
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
   const { mutateAsync: updateComment, isPending } = useUpdateComment();
@@ -200,39 +203,51 @@ export default function CommentCard({
           )}
         </div>
 
-        {canEdit && !isEditing && (
-          <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleEdit}
-                  className="h-6 w-6 rounded-md p-0 text-muted-foreground hover:text-foreground"
-                >
-                  <Pencil className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">{t("activity:comment.edit")}</p>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteComment({ activityId: commentId })}
-                  disabled={isDeleting}
-                  className="h-6 w-6 rounded-md p-0 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">{t("common:actions.delete")}</p>
-              </TooltipContent>
-            </Tooltip>
+        {(canManageShareLinks() || (canEdit && !isEditing)) && (
+          <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+            {canManageShareLinks() ? (
+              <CopyShareLinkButton
+                resourceType="activity_comment"
+                resourceId={commentId}
+                canShare
+                label={t("share:copy")}
+              />
+            ) : null}
+            {canEdit && !isEditing ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleEdit}
+                      className="h-6 w-6 rounded-md p-0 text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">{t("activity:comment.edit")}</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteComment({ activityId: commentId })}
+                      disabled={isDeleting}
+                      className="h-6 w-6 rounded-md p-0 text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">{t("common:actions.delete")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </>
+            ) : null}
           </div>
         )}
 
