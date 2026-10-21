@@ -868,16 +868,21 @@ export default function CommentEditor({
               filteredSlashCommandsRef.current.length
             ) {
               event.preventDefault();
-              if (!editor) return true;
+              // editorProps freeze at construct, so the closure `editor` is the
+              // null returned by the first render and `slashMenu` is stale —
+              // read the live instance and menu state instead.
+              const menu = slashMenuRef.current;
+              const activeEditor = lastEditorRef.current;
+              if (!menu || !activeEditor) return true;
               const command =
                 filteredSlashCommandsRef.current[
                   Math.min(
-                    slashMenuRef.current?.selectedIndex ?? 0,
+                    menu.selectedIndex ?? 0,
                     filteredSlashCommandsRef.current.length - 1,
                   )
                 ];
               if (command) {
-                command.run(editor, { from: slashMenu.from, to: slashMenu.to });
+                command.run(activeEditor, { from: menu.from, to: menu.to });
                 setSlashMenu(null);
               }
               return true;
