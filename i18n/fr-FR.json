@@ -1790,11 +1790,14 @@
 			"deleteSuccess": "Tâche supprimée avec succès",
 			"deleteError": "Échec de la suppression de la tâche",
 			"deleteDialogTitle": "Supprimer la tâche ?",
-			"deleteDialogDescription": "Cela supprimera définitivement la tâche et toutes ses données. Vous ne pouvez pas annuler cette action.",
+			"deleteDialogDescription": "Cette tâche et ses sous-tâches dans ce projet seront définitivement supprimées. Cette action est irréversible.",
 			"deleteAction": "Supprimer la tâche",
 			"completeAria": "Mark subtask complete",
 			"drag": "Glisser pour réorganiser {{title}}",
-			"moveUp": "Déplacer {{title}} vers le haut"
+			"moveUp": "Déplacer {{title}} vers le haut",
+			"moveDown": "Déplacer {{title}} vers le bas",
+			"editTitle": "Modifier le titre de {{title}}",
+			"saveTitle": "Enregistrer le titre"
 		},
 		"properties": {
 			"title": "Propriétés",
@@ -1939,7 +1942,7 @@
 		},
 		"delete": {
 			"title": "Supprimer la tâche ?",
-			"description": "Cela supprimera définitivement la tâche et toutes ses données. Vous ne pouvez pas annuler cette action.",
+			"description": "Cette tâche et ses sous-tâches dans ce projet seront définitivement supprimées. Cette action est irréversible.",
 			"action": "Supprimer la tâche",
 			"success": "Tâche supprimée avec succès",
 			"error": "Échec de la suppression de la tâche"

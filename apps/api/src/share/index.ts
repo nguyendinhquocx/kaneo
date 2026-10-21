@@ -228,13 +228,19 @@ async function canShareReadAsset(
   }
 
   const { comment } = await getPublicActivityCommentById(link.resourceId);
+  const isCommentUpload =
+    asset.surface === "comment" &&
+    (asset.activityId === null || asset.activityId === comment.id);
+  const isCopiedTaskAsset =
+    asset.surface === "description" && asset.activityId === null;
   if (
     asset.taskId !== comment.taskId ||
-    asset.surface !== "comment" ||
-    (asset.activityId !== null && asset.activityId !== comment.id)
+    (!isCommentUpload && !isCopiedTaskAsset)
   ) {
     return false;
   }
+  // A comment may reuse an image uploaded to its task description. Sharing the
+  // comment grants only assets its exact Markdown references, never siblings.
   return contentReferencesAsset(comment.content, asset.id);
 }
 

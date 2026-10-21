@@ -51,7 +51,12 @@ export function useReorderSubtasks() {
           ),
         );
       }
-      if (previousTasks) {
+      if (Array.isArray(previousTasks)) {
+        queryClient.setQueryData(
+          taskKey,
+          reorderTaskCardsBySiblingLane(previousTasks, orderedTargetTaskIds),
+        );
+      } else if (previousTasks) {
         queryClient.setQueryData(
           taskKey,
           reorderTaskCardsBySiblingLane(previousTasks, orderedTargetTaskIds),

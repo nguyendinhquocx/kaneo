@@ -10,7 +10,8 @@ const useGetExecutionManifest = vi.fn();
 const useReviewTaskRun = vi.fn();
 
 vi.mock("@/hooks/queries/execution/use-get-task-runs", () => ({
-  default: (taskId: string) => useGetTaskRuns(taskId),
+  default: (taskId: string, enabled: boolean) =>
+    useGetTaskRuns(taskId, enabled),
 }));
 vi.mock("@/hooks/queries/execution/use-get-task-run-evidence", () => ({
   default: (taskId: string, runId: string | undefined) =>
@@ -88,7 +89,7 @@ afterEach(() => {
 });
 
 describe("TaskExecutionPanel", () => {
-  it("hides entirely when execution is not configured (runs 409)", () => {
+  it("does not mount or request runs when the project has no manifest", () => {
     useGetTaskRuns.mockReturnValue({
       data: [],
       isLoading: false,
@@ -112,6 +113,32 @@ describe("TaskExecutionPanel", () => {
     );
     expect(container.querySelector("section")).toBeNull();
     expect(screen.queryByText("tasks:detail.execution.error")).toBeNull();
+    expect(useGetTaskRuns).toHaveBeenCalledWith("task-1", false);
+  });
+
+  it("waits for manifest resolution without flashing a panel or requesting runs", () => {
+    useGetTaskRuns.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    });
+    useGetTaskRunEvidence.mockReturnValue({ data: [], isLoading: false });
+    useGetExecutionAgents.mockReturnValue({ data: [] });
+    useGetExecutionManifest.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    });
+    useReviewTaskRun.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+
+    const { container } = render(
+      <TaskExecutionPanel taskId="task-1" projectId="project-1" />,
+    );
+
+    expect(container.querySelector("section")).toBeNull();
+    expect(useGetTaskRuns).toHaveBeenCalledWith("task-1", false);
   });
 
   it("shows parent review controls and submits bounded verification evidence", async () => {
@@ -134,6 +161,7 @@ describe("TaskExecutionPanel", () => {
 
     render(<TaskExecutionPanel taskId="task-1" projectId="project-1" />);
 
+    expect(useGetTaskRuns).toHaveBeenCalledWith("task-1", true);
     expect(screen.getByText("tasks:detail.execution.title")).toBeVisible();
     expect(
       screen.queryByRole("button", {

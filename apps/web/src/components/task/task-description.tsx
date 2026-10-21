@@ -41,7 +41,14 @@ import {
   Underline as UnderlineIcon,
 } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { bundledLanguages, type Highlighter } from "shiki";
 import { CopyShareLinkButton } from "@/components/share/copy-share-link-button";
@@ -284,6 +291,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   const dragDepthRef = useRef(0);
   const taskRef = useRef(task);
   const updateTaskRef = useRef(updateTaskDescription);
+  const currentTaskIdRef = useRef(taskId);
+  currentTaskIdRef.current = taskId;
   const activeTaskIdRef = useRef<string | null>(null);
   const lastEditorRef = useRef<Editor | null>(null);
   const pendingImageInsertRef = useRef<{
@@ -363,6 +372,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
       asset: Awaited<ReturnType<typeof uploadTaskImage>>,
       range: SlashRange,
     ) => {
+      if (activeEditor.isDestroyed) return;
       const chain = activeEditor.chain().focus().setTextSelection(range);
 
       if (asset.kind === "image") {
@@ -393,7 +403,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   const handleAssetFilesUpload = useCallback(
     async (files: File[], targetEditor?: Editor | null, range?: SlashRange) => {
       const activeEditor = targetEditor || lastEditorRef.current;
-      if (!activeEditor || files.length === 0) return;
+      if (!activeEditor || activeEditor.isDestroyed || files.length === 0)
+        return;
       const mappedSelection = createMappedSelection(activeEditor, range);
       const loadingToast = toast.loading(
         t("tasks:detail.editor.upload.loading"),
@@ -405,7 +416,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
           mappedSelection,
           upload: (file) =>
             uploadTaskImage({
-              taskId,
+              taskId: currentTaskIdRef.current,
               surface: "description",
               file,
             }),
@@ -435,7 +446,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
         toast.dismiss(loadingToast);
       }
     },
-    [insertUploadedAsset, t, taskId],
+    [insertUploadedAsset, t],
   );
 
   const openImagePicker = useCallback(
@@ -773,8 +784,23 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     [getOverlayPosition, handleAssetFilesUpload, t, toShikiLanguage],
   );
 
+  // Synchronize before browser input can hit a newly mounted editor view.
+  useLayoutEffect(() => {
+    const nextEditor = editor && !editor.isDestroyed ? editor : null;
+    if (lastEditorRef.current !== nextEditor) {
+      hasHydratedRef.current = false;
+      lastEditorRef.current = nextEditor;
+    }
+    return () => {
+      if (lastEditorRef.current === nextEditor) {
+        hasHydratedRef.current = false;
+        lastEditorRef.current = null;
+      }
+    };
+  }, [editor]);
+
   useEffect(() => {
-    if (!editor || !shikiHighlighter) return;
+    if (!editor || editor.isDestroyed || !shikiHighlighter) return;
     editor.view.dispatch(
       editor.state.tr.setMeta(SHIKI_CODEBLOCK_REFRESH_META, true),
     );
@@ -785,15 +811,17 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   // menus, paste handlers, and toolbar buttons all become no-ops because
   // the editor refuses content mutations.
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     editor.setEditable(canEdit);
   }, [editor, canEdit]);
 
   useEffect(() => {
-    if (!editor || typeof document === "undefined") return;
+    if (!editor || editor.isDestroyed || typeof document === "undefined")
+      return;
 
     const root = document.documentElement;
     const refreshShikiTheme = () => {
+      if (editor.isDestroyed) return;
       editor.view.dispatch(
         editor.state.tr.setMeta(SHIKI_CODEBLOCK_REFRESH_META, true),
       );
@@ -815,7 +843,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   }, [editor]);
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
 
     const handleImagePreviewClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -968,11 +996,17 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     [getOverlayPosition],
   );
 
+  const loadedTaskId = task?.id;
+  const taskDescription = task?.description;
+
   useEffect(() => {
-    if (!editor) return;
-    if (lastEditorRef.current !== editor) {
-      hasHydratedRef.current = false;
-      lastEditorRef.current = editor;
+    if (
+      !editor ||
+      editor.isDestroyed ||
+      !loadedTaskId ||
+      loadedTaskId !== taskId
+    ) {
+      return;
     }
 
     const isTaskChanged = activeTaskIdRef.current !== taskId;
@@ -982,7 +1016,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
       latestSyncedMarkdownRef.current = "";
     }
 
-    const incomingMarkdown = formatMarkdown(task?.description || "");
+    const incomingMarkdown = formatMarkdown(taskDescription || "");
     if (!hasHydratedRef.current) {
       isSyncingExternalContentRef.current = true;
       latestSyncedMarkdownRef.current = incomingMarkdown;
@@ -1009,10 +1043,10 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     requestAnimationFrame(() => {
       isSyncingExternalContentRef.current = false;
     });
-  }, [editor, taskId, task?.description]);
+  }, [editor, loadedTaskId, taskDescription, taskId]);
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
 
     syncSlashMenu(editor);
     const onSelection = () => syncSlashMenu(editor);

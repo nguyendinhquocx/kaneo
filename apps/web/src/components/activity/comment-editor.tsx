@@ -35,7 +35,14 @@ import {
   UnderlineIcon,
 } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { bundledLanguages, type Highlighter } from "shiki";
 import { AttachmentCard } from "@/components/task/extensions/attachment-card";
@@ -234,9 +241,8 @@ export default function CommentEditor({
   const onCancelShortcutRef = useRef(onCancelShortcut);
   onSubmitShortcutRef.current = onSubmitShortcut;
   onCancelShortcutRef.current = onCancelShortcut;
-  // Editor options freeze at construct (useEditor deps are stable across the
-  // viewer->editable flip and tiptap binds onUpdate once), so these guards
-  // must read fresh values or edit-mode changes are silently dropped.
+  // Tiptap 3.28 refreshes lifecycle callbacks, but editorProps handlers keep
+  // their creation-time closure. Mirror live guards into refs for key handlers.
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
   const disabledRef = useRef(disabled);
@@ -827,7 +833,7 @@ export default function CommentEditor({
           view.dispatch(tr.scrollIntoView());
           return true;
         },
-        handleKeyDown: (_view, event) => {
+        handleKeyDown: (view, event) => {
           if (
             !readOnlyRef.current &&
             !disabledRef.current &&
@@ -873,7 +879,14 @@ export default function CommentEditor({
               // read the live instance and menu state instead.
               const menu = slashMenuRef.current;
               const activeEditor = lastEditorRef.current;
-              if (!menu || !activeEditor) return true;
+              if (
+                !menu ||
+                !activeEditor ||
+                activeEditor.isDestroyed ||
+                activeEditor.view !== view
+              ) {
+                return true;
+              }
               const command =
                 filteredSlashCommandsRef.current[
                   Math.min(
@@ -957,10 +970,28 @@ export default function CommentEditor({
     [handleAssetFilesUpload, resolvedPlaceholder, toShikiLanguage],
   );
 
+  // Keep frozen editorProps callbacks pointed at the current live instance
+  // before the browser can deliver input after an editor recreation.
+  useLayoutEffect(() => {
+    const nextEditor = editor && !editor.isDestroyed ? editor : null;
+    if (lastEditorRef.current !== nextEditor) {
+      hasHydratedRef.current = false;
+      lastEditorRef.current = nextEditor;
+    }
+    return () => {
+      if (lastEditorRef.current === nextEditor) {
+        hasHydratedRef.current = false;
+        lastEditorRef.current = null;
+      }
+    };
+  }, [editor]);
+
   useEffect(() => {
     if (!onAttachActionChange) return;
 
-    onAttachActionChange(editor ? () => openImagePicker(editor) : null);
+    onAttachActionChange(
+      editor && !editor.isDestroyed ? () => openImagePicker(editor) : null,
+    );
 
     return () => {
       onAttachActionChange(null);
@@ -968,17 +999,19 @@ export default function CommentEditor({
   }, [editor, onAttachActionChange, openImagePicker]);
 
   useEffect(() => {
-    if (!editor || !shikiHighlighter) return;
+    if (!editor || editor.isDestroyed || !shikiHighlighter) return;
     editor.view.dispatch(
       editor.state.tr.setMeta(SHIKI_CODEBLOCK_REFRESH_META, true),
     );
   }, [editor, shikiHighlighter]);
 
   useEffect(() => {
-    if (!editor || typeof document === "undefined") return;
+    if (!editor || editor.isDestroyed || typeof document === "undefined")
+      return;
 
     const root = document.documentElement;
     const refreshShikiTheme = () => {
+      if (editor.isDestroyed) return;
       editor.view.dispatch(
         editor.state.tr.setMeta(SHIKI_CODEBLOCK_REFRESH_META, true),
       );
@@ -1000,7 +1033,7 @@ export default function CommentEditor({
   }, [editor]);
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
 
     const handleImagePreviewClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -1024,7 +1057,7 @@ export default function CommentEditor({
 
   const updateSlashMenu = useCallback(
     (activeEditor: Editor) => {
-      if (readOnly || disabled) {
+      if (activeEditor.isDestroyed || readOnly || disabled) {
         setSlashMenu(null);
         return;
       }
@@ -1076,8 +1109,10 @@ export default function CommentEditor({
   );
 
   useEffect(() => {
-    if (!editor) return;
-    const syncSlash = () => updateSlashMenu(editor);
+    if (!editor || editor.isDestroyed) return;
+    const syncSlash = () => {
+      if (!editor.isDestroyed) updateSlashMenu(editor);
+    };
     editor.on("selectionUpdate", syncSlash);
     editor.on("update", syncSlash);
 
@@ -1088,16 +1123,12 @@ export default function CommentEditor({
   }, [editor, updateSlashMenu]);
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     editor.setEditable(!readOnly && !disabled);
   }, [disabled, editor, readOnly]);
 
   useEffect(() => {
-    if (!editor) return;
-    if (lastEditorRef.current !== editor) {
-      hasHydratedRef.current = false;
-      lastEditorRef.current = editor;
-    }
+    if (!editor || editor.isDestroyed) return;
 
     const incoming = normalizeMarkdown(value || "");
     if (!hasHydratedRef.current) {

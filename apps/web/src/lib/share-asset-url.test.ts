@@ -40,6 +40,20 @@ describe("share asset URLs", () => {
     ).toBe("https://kaneo.example/api/share/document/share-token");
   });
 
+  it("rewrites copied task-description images in activity-comment shares", () => {
+    const comment = "![copied image](/api/asset/task-image-1)";
+    expect(
+      rewriteShareAssetUrls(
+        comment,
+        apiBase,
+        "activity_comment",
+        "comment-token",
+      ),
+    ).toBe(
+      "![copied image](https://kaneo.example/api/share/activity_comment/comment-token/asset/task-image-1)",
+    );
+  });
+
   it("rewrites Markdown references and restores them for document editing", () => {
     const source = "![image](/api/asset/file-1)";
     const shared = rewriteShareAssetUrls(

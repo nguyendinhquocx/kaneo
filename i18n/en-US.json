@@ -1802,10 +1802,13 @@
 			"deleteSuccess": "Task deleted successfully",
 			"deleteError": "Failed to delete task",
 			"deleteDialogTitle": "Delete Task?",
-			"deleteDialogDescription": "This will permanently remove the task and all its data. You can't undo this action.",
+			"deleteDialogDescription": "This permanently deletes this task and its child tasks in this project. This action cannot be undone.",
 			"deleteAction": "Delete Task",
 			"drag": "Drag to reorder {{title}}",
-			"moveUp": "Move {{title}} up"
+			"moveUp": "Move {{title}} up",
+			"moveDown": "Move {{title}} down",
+			"editTitle": "Edit title for {{title}}",
+			"saveTitle": "Save title"
 		},
 		"properties": {
 			"title": "Properties",
@@ -1950,7 +1953,7 @@
 		},
 		"delete": {
 			"title": "Delete Task?",
-			"description": "This will permanently remove the task and all its data. You can't undo this action.",
+			"description": "This permanently deletes this task and its child tasks in this project. This action cannot be undone.",
 			"action": "Delete Task",
 			"success": "Task deleted successfully",
 			"error": "Failed to delete task"

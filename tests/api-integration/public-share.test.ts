@@ -498,6 +498,7 @@ describe("API integration: public share boundary", () => {
     });
     const task = await seedTask(project.id);
     const assetId = createId();
+    const copiedTaskAssetId = createId();
     const otherAssetId = createId();
     const [comment] = await db
       .insert(schema.activityTable)
@@ -505,7 +506,7 @@ describe("API integration: public share boundary", () => {
         taskId: task.id,
         userId: member.user.id,
         type: "comment",
-        content: `![proof](http://kaneo.test/api/asset/${assetId})`,
+        content: `![proof](http://kaneo.test/api/asset/${assetId})\n![copied](http://kaneo.test/api/asset/${copiedTaskAssetId})`,
       })
       .returning();
     if (!comment) throw new Error("Failed to create comment fixture");
@@ -523,6 +524,18 @@ describe("API integration: public share boundary", () => {
         size: 3,
         kind: "image",
         surface: "comment",
+      },
+      {
+        id: copiedTaskAssetId,
+        workspaceId: member.workspace.id,
+        projectId: project.id,
+        taskId: task.id,
+        objectKey: "private/copied-task-description.png",
+        filename: "copied-task-description.png",
+        mimeType: "image/png",
+        size: 3,
+        kind: "image",
+        surface: "description",
       },
       {
         id: otherAssetId,
@@ -561,6 +574,12 @@ describe("API integration: public share boundary", () => {
     );
     expect(getPrivateObject).toHaveBeenCalledTimes(1);
 
+    const copiedTaskAsset = await app.request(
+      `/api/share/activity_comment/${link.token}/asset/${copiedTaskAssetId}`,
+    );
+    expect(copiedTaskAsset.status).toBe(200);
+    expect(getPrivateObject).toHaveBeenCalledTimes(2);
+
     const unrelated = await app.request(
       `/api/share/activity_comment/${link.token}/asset/${otherAssetId}`,
     );
@@ -577,7 +596,11 @@ describe("API integration: public share boundary", () => {
     const revoked = await app.request(
       `/api/share/activity_comment/${link.token}/asset/${assetId}`,
     );
+    const revokedCopiedTaskAsset = await app.request(
+      `/api/share/activity_comment/${link.token}/asset/${copiedTaskAssetId}`,
+    );
     expect(revoked.status).toBe(404);
+    expect(revokedCopiedTaskAsset.status).toBe(404);
   });
 
   it("keeps legacy hash-only links readable but cannot recover their URL", async () => {

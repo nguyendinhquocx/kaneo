@@ -496,7 +496,7 @@ const task = new Hono<{
       const { id } = c.req.valid("param");
 
       const currentUserId = c.get("userId");
-      const task = await deleteTask(id, currentUserId);
+      const task = await deleteTask(id, currentUserId, requestActorIsAgent(c));
 
       return c.json(task);
     },

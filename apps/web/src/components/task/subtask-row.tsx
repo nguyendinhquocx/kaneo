@@ -1,14 +1,25 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowUp, GripVertical } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  GripVertical,
+  Pencil,
+  X,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import TaskCardContextMenuContent from "@/components/kanban-board/task-card-context-menu/task-card-context-menu-content";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { Input } from "@/components/ui/input";
+import { useUpdateTaskTitle } from "@/hooks/mutations/task/use-update-task-title";
 import { getColumnIcon } from "@/lib/column";
 import { getInitials } from "@/lib/get-initials";
+import { toast } from "@/lib/toast";
 import type Task from "@/types/task";
 import SubtaskAssigneePopover from "./subtask-assignee-popover";
 import SubtaskStatusPopover from "./subtask-status-popover";
@@ -19,6 +30,7 @@ type SubtaskRowProps = {
   projectId: string;
   workspaceId: string;
   isSelected: boolean;
+  isFocused: boolean;
   isCompleted: boolean;
   canEdit: boolean;
   selectionRadius: string;
@@ -29,6 +41,7 @@ type SubtaskRowProps = {
   onNavigate: () => void;
   onDeleteClick: () => void;
   onMoveUp: () => void;
+  onMoveDown: () => void;
 };
 
 export default function SubtaskRow({
@@ -37,6 +50,7 @@ export default function SubtaskRow({
   projectId,
   workspaceId,
   isSelected,
+  isFocused,
   isCompleted,
   canEdit,
   selectionRadius,
@@ -45,9 +59,44 @@ export default function SubtaskRow({
   onNavigate,
   onDeleteClick,
   onMoveUp,
+  onMoveDown,
 }: SubtaskRowProps) {
   const reduceMotion = useReducedMotion();
   const { t } = useTranslation();
+  const { mutateAsync: updateTaskTitle, isPending: isSavingTitle } =
+    useUpdateTaskTitle();
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(task.title);
+  const [displayTitle, setDisplayTitle] = useState(task.title);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new task may have the same title
+  useEffect(() => {
+    setTitleDraft(task.title);
+    setDisplayTitle(task.title);
+  }, [task.id, task.title]);
+
+  const saveTitle = async () => {
+    const nextTitle = titleDraft.trim();
+    if (!nextTitle) {
+      toast.error(t("tasks:update.error"));
+      return;
+    }
+    if (nextTitle === displayTitle) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    try {
+      await updateTaskTitle({ ...task, title: nextTitle });
+      setDisplayTitle(nextTitle);
+      setIsEditingTitle(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("tasks:update.error"),
+      );
+    }
+  };
+
   const {
     attributes,
     listeners,
@@ -83,7 +132,7 @@ export default function SubtaskRow({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
-            className={`group flex items-center gap-2 py-1 px-2 ${selectionRadius} transition-colors cursor-default ${isSelected ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-accent/50"}`}
+            className={`group flex items-center gap-2 py-1 px-2 ${selectionRadius} transition-colors cursor-default ${isSelected ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-accent/50"} ${isFocused ? "ring-1 ring-inset ring-ring/50" : ""}`}
           >
             {canEdit ? (
               <div className="flex shrink-0 items-center gap-0.5">
@@ -108,6 +157,16 @@ export default function SubtaskRow({
                   >
                     <ArrowUp className="size-3" aria-hidden="true" />
                   </button>
+                  <button
+                    type="button"
+                    className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent"
+                    onClick={onMoveDown}
+                    aria-label={t("tasks:subtasks.moveDown", {
+                      title: task.title,
+                    })}
+                  >
+                    <ArrowDown className="size-3" aria-hidden="true" />
+                  </button>
                 </div>
               </div>
             ) : null}
@@ -131,17 +190,84 @@ export default function SubtaskRow({
               </button>
             </SubtaskStatusPopover>
 
-            <button
-              type="button"
-              className="flex-1 min-w-0 text-left outline-none"
-              onClick={onNavigate}
-            >
-              <span
-                className={`text-sm truncate block ${isCompleted ? "line-through text-muted-foreground" : "text-foreground/90"}`}
-              >
-                {task.title}
-              </span>
-            </button>
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              {isEditingTitle ? (
+                <>
+                  <Input
+                    autoFocus
+                    value={titleDraft}
+                    disabled={isSavingTitle}
+                    aria-label={t("tasks:subtasks.editTitle", {
+                      title: displayTitle,
+                    })}
+                    className="h-11 min-w-0 flex-1 sm:h-8"
+                    onChange={(event) => setTitleDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void saveTitle();
+                      } else if (event.key === "Escape") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setTitleDraft(displayTitle);
+                        setIsEditingTitle(false);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-50 sm:size-7"
+                    aria-label={t("tasks:subtasks.saveTitle")}
+                    disabled={isSavingTitle || !titleDraft.trim()}
+                    onClick={() => void saveTitle()}
+                  >
+                    <Check className="size-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-50 sm:size-7"
+                    aria-label={t("common:actions.cancel")}
+                    disabled={isSavingTitle}
+                    onClick={() => {
+                      setTitleDraft(displayTitle);
+                      setIsEditingTitle(false);
+                    }}
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 text-left outline-none"
+                    onClick={onNavigate}
+                  >
+                    <span
+                      className={`block truncate text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground/90"}`}
+                    >
+                      {displayTitle}
+                    </span>
+                  </button>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent sm:size-7"
+                      aria-label={t("tasks:subtasks.editTitle", {
+                        title: displayTitle,
+                      })}
+                      onClick={() => {
+                        setTitleDraft(displayTitle);
+                        setIsEditingTitle(true);
+                      }}
+                    >
+                      <Pencil className="size-3.5" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </div>
 
             <SubtaskAssigneePopover tasks={tasks} workspaceId={workspaceId}>
               <button

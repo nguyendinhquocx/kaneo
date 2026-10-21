@@ -1790,11 +1790,14 @@
 			"deleteSuccess": "Tugas berhasil dihapus",
 			"deleteError": "Gagal menghapus tugas",
 			"deleteDialogTitle": "Hapus Tugas?",
-			"deleteDialogDescription": "Ini akan menghapus tugas dan semua datanya secara permanen. Anda tidak dapat membatalkan tindakan ini.",
+			"deleteDialogDescription": "Tugas ini beserta semua sub-tugasnya di proyek ini akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
 			"deleteAction": "Hapus Tugas",
 			"completeAria": "Mark subtask complete",
 			"drag": "Seret untuk menyusun ulang {{title}}",
-			"moveUp": "Naikkan {{title}}"
+			"moveUp": "Naikkan {{title}}",
+			"moveDown": "Pindahkan {{title}} ke bawah",
+			"editTitle": "Edit judul {{title}}",
+			"saveTitle": "Simpan judul"
 		},
 		"properties": {
 			"title": "Properti",
@@ -1939,7 +1942,7 @@
 		},
 		"delete": {
 			"title": "Hapus Tugas?",
-			"description": "Ini akan menghapus tugas dan semua datanya secara permanen. Anda tidak dapat membatalkan tindakan ini.",
+			"description": "Tugas ini beserta semua sub-tugasnya di proyek ini akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
 			"action": "Hapus Tugas",
 			"success": "Tugas berhasil dihapus",
 			"error": "Gagal menghapus tugas"

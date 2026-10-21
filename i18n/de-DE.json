@@ -1790,11 +1790,14 @@
 			"deleteSuccess": "Aufgabe erfolgreich gelöscht",
 			"deleteError": "Aufgabe konnte nicht gelöscht werden",
 			"deleteDialogTitle": "Aufgabe löschen?",
-			"deleteDialogDescription": "Dadurch wird die Aufgabe und alle zugehörigen Daten dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
+			"deleteDialogDescription": "Diese Aufgabe und ihre Unteraufgaben in diesem Projekt werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
 			"deleteAction": "Aufgabe löschen",
 			"completeAria": "Mark subtask complete",
 			"drag": "{{title}} zum Neuanordnen ziehen",
-			"moveUp": "{{title}} nach oben verschieben"
+			"moveUp": "{{title}} nach oben verschieben",
+			"moveDown": "{{title}} nach unten verschieben",
+			"editTitle": "Titel von {{title}} bearbeiten",
+			"saveTitle": "Titel speichern"
 		},
 		"properties": {
 			"title": "Eigenschaften",
@@ -1939,7 +1942,7 @@
 		},
 		"delete": {
 			"title": "Aufgabe löschen?",
-			"description": "Dadurch wird die Aufgabe und alle zugehörigen Daten dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
+			"description": "Diese Aufgabe und ihre Unteraufgaben in diesem Projekt werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
 			"action": "Aufgabe löschen",
 			"success": "Aufgabe erfolgreich gelöscht",
 			"error": "Aufgabe konnte nicht gelöscht werden"

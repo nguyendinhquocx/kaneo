@@ -312,8 +312,11 @@ export default function TaskSubtasks({
     if (!deleteTaskId) return;
     try {
       await deleteTask(deleteTaskId);
-      queryClient.invalidateQueries({ queryKey: ["tasks", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["task-relations", taskId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
+        queryClient.invalidateQueries({ queryKey: ["task-relations"] }),
+        queryClient.invalidateQueries({ queryKey: ["task"] }),
+      ]);
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(deleteTaskId);
@@ -406,6 +409,7 @@ export default function TaskSubtasks({
                         projectId={projectId}
                         workspaceId={workspace?.id ?? workspaceId}
                         isSelected={isSelected}
+                        isFocused={focusedIndex === index}
                         isCompleted={isCompleted(subtask.task.status)}
                         canEdit={canEdit}
                         selectionRadius={getSelectionRadius(index, isSelected)}
@@ -423,6 +427,7 @@ export default function TaskSubtasks({
                         }
                         onDeleteClick={() => setDeleteTaskId(subtask.task.id)}
                         onMoveUp={() => moveSubtask(subtask.task.id, -1)}
+                        onMoveDown={() => moveSubtask(subtask.task.id, 1)}
                       />
                     );
                   })}

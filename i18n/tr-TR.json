@@ -1790,11 +1790,14 @@
 			"deleteSuccess": "Talep başarıyla silindi",
 			"deleteError": "Talep silinemedi",
 			"deleteDialogTitle": "Talep Silinsin mi?",
-			"deleteDialogDescription": "Bu, talebi ve tüm verilerini kalıcı olarak kaldıracak. Bu işlemi geri alamazsınız.",
+			"deleteDialogDescription": "Bu görev ve bu projedeki alt görevleri kalıcı olarak silinecek. Bu işlem geri alınamaz.",
 			"deleteAction": "Talebi Sil",
 			"completeAria": "Mark subtask complete",
 			"drag": "Sıralamak için {{title}} öğesini sürükleyin",
-			"moveUp": "{{title}} öğesini yukarı taşı"
+			"moveUp": "{{title}} öğesini yukarı taşı",
+			"moveDown": "{{title}} öğesini aşağı taşı",
+			"editTitle": "{{title}} başlığını düzenle",
+			"saveTitle": "Başlığı kaydet"
 		},
 		"properties": {
 			"title": "Özellikler",
@@ -1939,7 +1942,7 @@
 		},
 		"delete": {
 			"title": "Talep Silinsin mi?",
-			"description": "Bu, talebi ve tüm verilerini kalıcı olarak kaldıracak. Bu işlemi geri alamazsınız.",
+			"description": "Bu görev ve bu projedeki alt görevleri kalıcı olarak silinecek. Bu işlem geri alınamaz.",
 			"action": "Talebi Sil",
 			"success": "Talep başarıyla silindi",
 			"error": "Talep silinemedi"

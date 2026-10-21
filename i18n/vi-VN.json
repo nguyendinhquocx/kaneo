@@ -1790,11 +1790,14 @@
 			"deleteSuccess": "Đã xoá công việc thành công",
 			"deleteError": "Xoá công việc thất bại",
 			"deleteDialogTitle": "Xoá công việc?",
-			"deleteDialogDescription": "Điều này sẽ xoá vĩnh viễn công việc và tất cả dữ liệu của nó. Bạn không thể hoàn tác hành động này.",
+			"deleteDialogDescription": "Công việc này và các công việc con trong dự án sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
 			"deleteAction": "Xoá công việc",
 			"completeAria": "Đánh dấu công việc con đã hoàn tất",
 			"drag": "Kéo để sắp xếp lại {{title}}",
-			"moveUp": "Chuyển {{title}} lên"
+			"moveUp": "Chuyển {{title}} lên",
+			"moveDown": "Chuyển {{title}} xuống",
+			"editTitle": "Sửa tên công việc {{title}}",
+			"saveTitle": "Lưu tên"
 		},
 		"properties": {
 			"title": "Thuộc tính",
@@ -1939,7 +1942,7 @@
 		},
 		"delete": {
 			"title": "Xoá công việc?",
-			"description": "Điều này sẽ xoá vĩnh viễn công việc và tất cả dữ liệu của nó. Bạn không thể hoàn tác hành động này.",
+			"description": "Công việc này và các công việc con trong dự án sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
 			"action": "Xoá công việc",
 			"success": "Đã xoá công việc thành công",
 			"error": "Xoá công việc thất bại"

@@ -281,3 +281,209 @@ describe("API integration: task creation", () => {
     });
   });
 });
+
+describe("API integration: task deletion", () => {
+  beforeEach(async () => {
+    await resetTestDatabase();
+  });
+
+  async function insertTask(
+    projectId: string,
+    columnId: string,
+    title: string,
+    number: number,
+  ) {
+    const [task] = await db
+      .insert(schema.taskTable)
+      .values({
+        projectId,
+        title,
+        number,
+        status: "to-do",
+        columnId,
+        priority: "no-priority",
+        position: number,
+      })
+      .returning();
+    if (!task) throw new Error(`Failed to create task ${title}`);
+    return task;
+  }
+
+  async function linkSubtask(sourceTaskId: string, targetTaskId: string) {
+    await db.insert(schema.taskRelationTable).values({
+      sourceTaskId,
+      targetTaskId,
+      relationType: "subtask",
+      position: 0,
+    });
+  }
+
+  async function deleteTaskRequest(
+    taskId: string,
+    user: typeof schema.userTable.$inferSelect,
+  ) {
+    mockAuthenticatedSession(user);
+    const { app } = createApp();
+    return app.request(`/api/task/${taskId}`, { method: "DELETE" });
+  }
+
+  it("deletes exclusive same-project subtasks recursively with the parent", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const parent = await insertTask(project.id, columns.todo.id, "Parent", 1);
+    const child = await insertTask(project.id, columns.todo.id, "Child", 2);
+    const grandchild = await insertTask(
+      project.id,
+      columns.todo.id,
+      "Grandchild",
+      3,
+    );
+    const unrelated = await insertTask(
+      project.id,
+      columns.todo.id,
+      "Unrelated task",
+      4,
+    );
+    await linkSubtask(parent.id, child.id);
+    await linkSubtask(child.id, grandchild.id);
+
+    const response = await deleteTaskRequest(parent.id, member.user);
+
+    expect(response.status).toBe(200);
+    for (const id of [parent.id, child.id, grandchild.id]) {
+      await expect(
+        db.query.taskTable.findFirst({ where: eq(schema.taskTable.id, id) }),
+      ).resolves.toBeUndefined();
+    }
+    await expect(
+      db.query.taskTable.findFirst({
+        where: eq(schema.taskTable.id, unrelated.id),
+      }),
+    ).resolves.toMatchObject({ id: unrelated.id });
+  });
+
+  it("refuses the whole cascade when a child is shared by another parent", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const parent = await insertTask(project.id, columns.todo.id, "Parent", 1);
+    const otherParent = await insertTask(
+      project.id,
+      columns.todo.id,
+      "Other parent",
+      2,
+    );
+    const child = await insertTask(project.id, columns.todo.id, "Child", 3);
+    await linkSubtask(parent.id, child.id);
+    await linkSubtask(otherParent.id, child.id);
+
+    const response = await deleteTaskRequest(parent.id, member.user);
+
+    expect(response.status).toBe(409);
+    for (const id of [parent.id, otherParent.id, child.id]) {
+      await expect(
+        db.query.taskTable.findFirst({ where: eq(schema.taskTable.id, id) }),
+      ).resolves.toMatchObject({ id });
+    }
+  });
+
+  it("refuses to cascade into another project", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const otherProject = await createProjectFixture({
+      workspaceId: member.workspace.id,
+      name: "Another project",
+    });
+    const parent = await insertTask(project.id, columns.todo.id, "Parent", 1);
+    const child = await insertTask(
+      otherProject.project.id,
+      otherProject.columns.todo.id,
+      "Cross-project child",
+      1,
+    );
+    await linkSubtask(parent.id, child.id);
+
+    const response = await deleteTaskRequest(parent.id, member.user);
+
+    expect(response.status).toBe(409);
+    await expect(
+      db.query.taskTable.findFirst({
+        where: eq(schema.taskTable.id, parent.id),
+      }),
+    ).resolves.toMatchObject({ id: parent.id });
+    await expect(
+      db.query.taskTable.findFirst({
+        where: eq(schema.taskTable.id, child.id),
+      }),
+    ).resolves.toMatchObject({ id: child.id });
+  });
+
+  it("refuses to delete a tree with execution history", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const parent = await insertTask(project.id, columns.todo.id, "Parent", 1);
+    const child = await insertTask(project.id, columns.todo.id, "Child", 2);
+    await linkSubtask(parent.id, child.id);
+    await db.insert(schema.taskRunTable).values({
+      taskId: child.id,
+      manifestVersion: 1,
+      protocolVersion: 1,
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+      baseBranch: "main",
+      hostId: "pi-prodesk",
+      branchName: "test-child",
+      scope: ["apps/web/**"],
+      requestKey: `request-${randomUUID()}`,
+      requestHash: "a".repeat(64),
+      leaseTokenHash: "b".repeat(64),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const response = await deleteTaskRequest(parent.id, member.user);
+
+    expect(response.status).toBe(409);
+    await expect(
+      db.query.taskTable.findFirst({
+        where: eq(schema.taskTable.id, parent.id),
+      }),
+    ).resolves.toMatchObject({ id: parent.id });
+    await expect(
+      db.query.taskTable.findFirst({
+        where: eq(schema.taskTable.id, child.id),
+      }),
+    ).resolves.toMatchObject({ id: child.id });
+  });
+
+  it("refuses to delete a cyclic subtask relation graph", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const parent = await insertTask(project.id, columns.todo.id, "Parent", 1);
+    const child = await insertTask(project.id, columns.todo.id, "Child", 2);
+    await linkSubtask(parent.id, child.id);
+    await linkSubtask(child.id, parent.id);
+
+    const response = await deleteTaskRequest(parent.id, member.user);
+
+    expect(response.status).toBe(409);
+    await expect(
+      db.query.taskTable.findFirst({
+        where: eq(schema.taskTable.id, parent.id),
+      }),
+    ).resolves.toMatchObject({ id: parent.id });
+    await expect(
+      db.query.taskTable.findFirst({
+        where: eq(schema.taskTable.id, child.id),
+      }),
+    ).resolves.toMatchObject({ id: child.id });
+  });
+});

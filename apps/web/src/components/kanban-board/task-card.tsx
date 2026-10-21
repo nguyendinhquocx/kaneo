@@ -162,15 +162,18 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
   const handleDeleteTask = async () => {
     try {
       await deleteTask(task.id);
-      queryClient.invalidateQueries({
-        queryKey: ["tasks", project?.id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["tasks", project?.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["task-relations"] }),
+        queryClient.invalidateQueries({ queryKey: ["task"] }),
+      ]);
+      toast.success(t("tasks:delete.success"));
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("tasks:delete.error"),
       );
-    } finally {
-      toast.success(t("tasks:delete.success"));
     }
   };
 

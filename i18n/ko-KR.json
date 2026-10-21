@@ -1790,11 +1790,14 @@
 			"deleteSuccess": "작업이 삭제되었습니다",
 			"deleteError": "작업 삭제에 실패했습니다",
 			"deleteDialogTitle": "작업을 삭제하시겠습니까?",
-			"deleteDialogDescription": "작업과 모든 데이터가 영구적으로 제거됩니다. 이 작업은 취소할 수 없습니다.",
+			"deleteDialogDescription": "이 작업과 이 프로젝트의 하위 작업이 영구적으로 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
 			"deleteAction": "작업 삭제",
 			"completeAria": "Mark subtask complete",
 			"drag": "{{title}} 순서 드래그",
-			"moveUp": "{{title}} 위로 이동"
+			"moveUp": "{{title}} 위로 이동",
+			"moveDown": "{{title}} 아래로 이동",
+			"editTitle": "{{title}} 제목 수정",
+			"saveTitle": "제목 저장"
 		},
 		"properties": {
 			"title": "속성",
@@ -1939,7 +1942,7 @@
 		},
 		"delete": {
 			"title": "작업을 삭제하시겠습니까?",
-			"description": "작업과 모든 데이터가 영구적으로 제거됩니다. 이 작업은 취소할 수 없습니다.",
+			"description": "이 작업과 이 프로젝트의 하위 작업이 영구적으로 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
 			"action": "작업 삭제",
 			"success": "작업이 삭제되었습니다",
 			"error": "작업 삭제에 실패했습니다"

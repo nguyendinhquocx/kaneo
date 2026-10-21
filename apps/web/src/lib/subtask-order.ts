@@ -127,9 +127,17 @@ export function reorderTaskCardsBySiblingLane<T extends PositionedTask>(
   orderedSiblingIds: string[],
 ): T[];
 export function reorderTaskCardsBySiblingLane(
-  tasks: ProjectTasksCache | null | undefined,
+  tasks: ProjectTasksCache,
   orderedSiblingIds: string[],
-): ProjectTasksCache | null | undefined;
+): ProjectTasksCache;
+export function reorderTaskCardsBySiblingLane(
+  tasks: null,
+  orderedSiblingIds: string[],
+): null;
+export function reorderTaskCardsBySiblingLane(
+  tasks: undefined,
+  orderedSiblingIds: string[],
+): undefined;
 export function reorderTaskCardsBySiblingLane(
   tasks: PositionedTask[] | ProjectTasksCache | null | undefined,
   orderedSiblingIds: string[],

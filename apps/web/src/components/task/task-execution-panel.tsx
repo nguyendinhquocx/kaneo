@@ -18,12 +18,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { ExecutionTaskRun } from "@/fetchers/execution/get-task-runs";
+import { ExecutionNotConfiguredError } from "@/fetchers/execution/get-task-runs";
 import useReviewTaskRun from "@/hooks/mutations/execution/use-review-task-run";
 import useGetExecutionAgents from "@/hooks/queries/execution/use-get-execution-agents";
 import useGetExecutionManifest from "@/hooks/queries/execution/use-get-execution-manifest";
 import useGetTaskRunEvidence from "@/hooks/queries/execution/use-get-task-run-evidence";
 import useGetTaskRuns from "@/hooks/queries/execution/use-get-task-runs";
-import { ExecutionNotConfiguredError } from "@/fetchers/execution/get-task-runs";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
@@ -114,15 +114,16 @@ export default function TaskExecutionPanel({
 }: TaskExecutionPanelProps) {
   const { t } = useTranslation();
   const { canReviewExecutions } = useWorkspacePermission();
+  const { data: manifest, isLoading: isManifestLoading } =
+    useGetExecutionManifest(projectId);
   const {
     data: runs = [],
     isLoading,
     isError,
     error: runsError,
     refetch: refetchRuns,
-  } = useGetTaskRuns(taskId);
+  } = useGetTaskRuns(taskId, !isManifestLoading && Boolean(manifest));
   const { data: agents = [], isError: isAgentsError } = useGetExecutionAgents();
-  const { data: manifest } = useGetExecutionManifest(projectId);
   const { data: evidence = [], isError: isEvidenceError } =
     useGetTaskRunEvidence(taskId, runs[0]?.id);
   const { mutateAsync: reviewTaskRun, isPending: isReviewing } =
@@ -285,8 +286,9 @@ export default function TaskExecutionPanel({
     }
   };
 
-  // Regular projects have no execution manifest; the runs endpoint answers
-  // 409 for them. That is not an error worth a panel — hide the section.
+  // Resolve the manifest before mounting the panel or requesting runs. This
+  // prevents a normal-project 409 from flashing the panel and shifting layout.
+  if (isManifestLoading || !manifest) return null;
   if (runsError instanceof ExecutionNotConfiguredError) {
     return null;
   }

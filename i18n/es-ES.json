@@ -1790,11 +1790,14 @@
 			"deleteSuccess": "Tarea eliminada correctamente",
 			"deleteError": "Error al eliminar tarea",
 			"deleteDialogTitle": "¿Eliminar tarea?",
-			"deleteDialogDescription": "Esto eliminará permanentemente la tarea y sus datos. Esta acción no puede deshacerse.",
+			"deleteDialogDescription": "Esta tarea y sus subtareas de este proyecto se eliminarán permanentemente. Esta acción no se puede deshacer.",
 			"deleteAction": "Eliminar tarea",
 			"completeAria": "Mark subtask complete",
 			"drag": "Arrastrar para reordenar {{title}}",
-			"moveUp": "Mover {{title}} hacia arriba"
+			"moveUp": "Mover {{title}} hacia arriba",
+			"moveDown": "Mover {{title}} hacia abajo",
+			"editTitle": "Editar el título de {{title}}",
+			"saveTitle": "Guardar título"
 		},
 		"properties": {
 			"title": "Propiedades",
@@ -1928,7 +1931,7 @@
 		},
 		"delete": {
 			"title": "¿Eliminar tarea?",
-			"description": "Esto eliminará permanentemente la tarea y sus datos. Esta acción no puede deshacerse.",
+			"description": "Esta tarea y sus subtareas de este proyecto se eliminarán permanentemente. Esta acción no se puede deshacer.",
 			"action": "Eliminar tarea",
 			"success": "Tarea eliminada correctamente",
 			"error": "Error al eliminar la tarea"

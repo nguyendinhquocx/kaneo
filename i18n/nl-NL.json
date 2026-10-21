@@ -1790,11 +1790,14 @@
 			"deleteSuccess": "Taak succesvol verwijderd",
 			"deleteError": "Verwijderen taak mislukt",
 			"deleteDialogTitle": "Taak verwijderen?",
-			"deleteDialogDescription": "Dit zal de taak en alle data permanent verwijderen. Dit kan niet ongedaan worden gemaakt.",
+			"deleteDialogDescription": "Deze taak en de subtaken in dit project worden permanent verwijderd. Dit kan niet ongedaan worden gemaakt.",
 			"deleteAction": "Taak verwijderen",
 			"completeAria": "Mark subtask complete",
 			"drag": "Sleep om {{title}} te herordenen",
-			"moveUp": "{{title}} omhoog verplaatsen"
+			"moveUp": "{{title}} omhoog verplaatsen",
+			"moveDown": "Verplaats {{title}} omlaag",
+			"editTitle": "Titel van {{title}} bewerken",
+			"saveTitle": "Titel opslaan"
 		},
 		"properties": {
 			"title": "Eigenschappen",
@@ -1928,7 +1931,7 @@
 		},
 		"delete": {
 			"title": "Taak verwijderen?",
-			"description": "Dit zal de taak en alle data permanent verwijderen. Dit kan niet ongedaan worden gemaakt.",
+			"description": "Deze taak en de subtaken in dit project worden permanent verwijderd. Dit kan niet ongedaan worden gemaakt.",
 			"action": "Taak verwijderen",
 			"success": "Taak succesvol verwijderd",
 			"error": "Verwijderen taak mislukt"
