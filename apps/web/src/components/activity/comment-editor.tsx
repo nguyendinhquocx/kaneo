@@ -234,11 +234,22 @@ export default function CommentEditor({
   const onCancelShortcutRef = useRef(onCancelShortcut);
   onSubmitShortcutRef.current = onSubmitShortcut;
   onCancelShortcutRef.current = onCancelShortcut;
+  // Editor options freeze at construct (useEditor deps are stable across the
+  // viewer->editable flip and tiptap binds onUpdate once), so these guards
+  // must read fresh values or edit-mode changes are silently dropped.
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const pendingImageInsertRef = useRef<{
     editor: Editor;
     range?: SlashRange;
   } | null>(null);
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
+  const slashMenuRef = useRef(slashMenu);
+  slashMenuRef.current = slashMenu;
   const [shikiHighlighter, setShikiHighlighter] = useState<Highlighter | null>(
     null,
   );
@@ -617,6 +628,8 @@ export default function CommentEditor({
         command.search.includes(query),
     );
   }, [slashCommands, slashMenu?.query]);
+  const filteredSlashCommandsRef = useRef(filteredSlashCommands);
+  filteredSlashCommandsRef.current = filteredSlashCommands;
 
   const editor = useEditor(
     {
@@ -815,7 +828,11 @@ export default function CommentEditor({
           return true;
         },
         handleKeyDown: (_view, event) => {
-          if (!readOnly && !disabled && slashMenu) {
+          if (
+            !readOnlyRef.current &&
+            !disabledRef.current &&
+            slashMenuRef.current
+          ) {
             if (event.key === "ArrowDown") {
               event.preventDefault();
               setSlashMenu((current) => {
@@ -824,7 +841,7 @@ export default function CommentEditor({
                   ...current,
                   selectedIndex:
                     (current.selectedIndex + 1) %
-                    Math.max(filteredSlashCommands.length, 1),
+                    Math.max(filteredSlashCommandsRef.current.length, 1),
                 };
               });
               return true;
@@ -839,8 +856,8 @@ export default function CommentEditor({
                   selectedIndex:
                     (current.selectedIndex -
                       1 +
-                      Math.max(filteredSlashCommands.length, 1)) %
-                    Math.max(filteredSlashCommands.length, 1),
+                      Math.max(filteredSlashCommandsRef.current.length, 1)) %
+                    Math.max(filteredSlashCommandsRef.current.length, 1),
                 };
               });
               return true;
@@ -848,15 +865,15 @@ export default function CommentEditor({
 
             if (
               (event.key === "Enter" || event.key === "Tab") &&
-              filteredSlashCommands.length
+              filteredSlashCommandsRef.current.length
             ) {
               event.preventDefault();
               if (!editor) return true;
               const command =
-                filteredSlashCommands[
+                filteredSlashCommandsRef.current[
                   Math.min(
-                    slashMenu.selectedIndex,
-                    filteredSlashCommands.length - 1,
+                    slashMenuRef.current?.selectedIndex ?? 0,
+                    filteredSlashCommandsRef.current.length - 1,
                   )
                 ];
               if (command) {
@@ -875,7 +892,7 @@ export default function CommentEditor({
 
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
             const submit = onSubmitShortcutRef.current;
-            if (!readOnly && !disabled && submit) {
+            if (!readOnlyRef.current && !disabledRef.current && submit) {
               event.preventDefault();
               submit();
               return true;
@@ -884,8 +901,8 @@ export default function CommentEditor({
 
           if (
             event.key === "Escape" &&
-            !readOnly &&
-            !disabled &&
+            !readOnlyRef.current &&
+            !disabledRef.current &&
             onCancelShortcutRef.current
           ) {
             event.preventDefault();
@@ -915,14 +932,21 @@ export default function CommentEditor({
         },
       },
       onUpdate: ({ editor: activeEditor }) => {
-        if (readOnly || disabled || !onChange || isSyncingRef.current) return;
+        if (
+          readOnlyRef.current ||
+          disabledRef.current ||
+          !onChangeRef.current ||
+          isSyncingRef.current
+        ) {
+          return;
+        }
         const markdown = normalizeMarkdown(activeEditor.getMarkdown());
         // UAT repair: a programmatic sync can surface as an update event with
         // unchanged markdown — only propagate real changes, otherwise the
         // document autosave fires with empty content right after mount.
         if (markdown === latestValueRef.current) return;
         latestValueRef.current = markdown;
-        onChange(markdown);
+        onChangeRef.current(markdown);
       },
     },
     [handleAssetFilesUpload, resolvedPlaceholder, toShikiLanguage],
