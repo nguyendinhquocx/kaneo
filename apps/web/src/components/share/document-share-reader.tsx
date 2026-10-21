@@ -1,6 +1,5 @@
 import { resolveApiBaseUrl } from "@kaneo/libs";
 import { useQueryClient } from "@tanstack/react-query";
-import { Pencil } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -114,13 +113,44 @@ export default function DocumentShareReader({
         {canEdit && !isEditing ? (
           <Button
             size="sm"
-            variant="secondary"
-            className="min-h-11 gap-1.5 sm:min-h-8"
+            variant="ghost"
+            className="min-h-11 sm:min-h-8"
             onClick={startEditing}
           >
-            <Pencil className="size-3.5" />
             {t("edit")}
           </Button>
+        ) : null}
+        {canEdit && isEditing ? (
+          <>
+            {saveState === "saving" ? (
+              <span className="text-xs text-muted-foreground">
+                {t("document.saving")}
+              </span>
+            ) : null}
+            {saveState === "error" ? (
+              <span className="text-xs text-foreground" role="alert">
+                {t("document.saveFailed")}
+              </span>
+            ) : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="min-h-11 sm:min-h-8"
+              disabled={saveState === "saving"}
+              onClick={cancelEditing}
+            >
+              {t("document.cancel")}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="min-h-11 font-medium text-foreground sm:min-h-8"
+              disabled={saveState === "saving" || !dirtyRef.current}
+              onClick={() => void handleSave()}
+            >
+              {t("document.save")}
+            </Button>
+          </>
         ) : null}
       </div>
 
@@ -135,11 +165,7 @@ export default function DocumentShareReader({
           : null}
       </p>
 
-      {canEdit ? (
-        <p className="text-xs text-muted-foreground">
-          {isEditing ? t("document.editingHint") : t("document.editHint")}
-        </p>
-      ) : (
+      {canEdit ? null : (
         <p className="text-xs text-muted-foreground">
           {t("document.viewHint")}
         </p>
@@ -184,32 +210,6 @@ export default function DocumentShareReader({
             rows={20}
             className="min-h-[45vh] font-mono text-sm leading-6"
           />
-          <div className="flex items-center justify-end gap-2">
-            {saveState === "error" ? (
-              <span className="text-xs text-foreground" role="alert">
-                {t("document.saveFailed")}
-              </span>
-            ) : null}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="min-h-11 sm:min-h-8"
-              disabled={saveState === "saving"}
-              onClick={cancelEditing}
-            >
-              {t("document.cancel")}
-            </Button>
-            <Button
-              size="sm"
-              className="min-h-11 sm:min-h-8"
-              disabled={saveState === "saving" || !dirtyRef.current}
-              onClick={() => void handleSave()}
-            >
-              {saveState === "saving"
-                ? t("document.saving")
-                : t("document.save")}
-            </Button>
-          </div>
         </div>
       ) : (
         <SharedMarkdown

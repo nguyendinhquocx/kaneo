@@ -70,22 +70,21 @@ export default function ProjectShareReader({
           <>
             <Button
               size="sm"
-              variant={isEditing ? "outline" : "secondary"}
-              className="min-h-11 gap-1.5 sm:min-h-8"
+              variant="ghost"
+              className="min-h-11 sm:min-h-8"
               aria-pressed={isEditing}
               onClick={() => {
                 setSelectedTaskId(null);
                 setIsEditing((current) => !current);
               }}
             >
-              <Pencil className="size-3.5" />
               {isEditing ? t("doneEditing") : t("edit")}
             </Button>
             {isEditing ? (
               <Button
                 size="sm"
-                variant="secondary"
-                className="min-h-11 gap-1.5 sm:min-h-8"
+                variant="ghost"
+                className="min-h-11 sm:min-h-8"
                 onClick={() => setIsCreating(true)}
               >
                 <Plus className="size-3.5" />
@@ -98,11 +97,9 @@ export default function ProjectShareReader({
       {data.description ? (
         <p className="text-sm text-muted-foreground">{data.description}</p>
       ) : null}
-      <p className="text-xs text-muted-foreground">
-        {canEdit
-          ? t(isEditing ? "project.editingHint" : "project.editHint")
-          : t("project.viewHint")}
-      </p>
+      {canEdit ? null : (
+        <p className="text-xs text-muted-foreground">{t("project.viewHint")}</p>
+      )}
 
       <div className="flex items-center gap-1">
         <Button

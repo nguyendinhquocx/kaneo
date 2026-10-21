@@ -23,6 +23,7 @@ import useGetExecutionAgents from "@/hooks/queries/execution/use-get-execution-a
 import useGetExecutionManifest from "@/hooks/queries/execution/use-get-execution-manifest";
 import useGetTaskRunEvidence from "@/hooks/queries/execution/use-get-task-run-evidence";
 import useGetTaskRuns from "@/hooks/queries/execution/use-get-task-runs";
+import { ExecutionNotConfiguredError } from "@/fetchers/execution/get-task-runs";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
@@ -117,6 +118,7 @@ export default function TaskExecutionPanel({
     data: runs = [],
     isLoading,
     isError,
+    error: runsError,
     refetch: refetchRuns,
   } = useGetTaskRuns(taskId);
   const { data: agents = [], isError: isAgentsError } = useGetExecutionAgents();
@@ -283,9 +285,15 @@ export default function TaskExecutionPanel({
     }
   };
 
+  // Regular projects have no execution manifest; the runs endpoint answers
+  // 409 for them. That is not an error worth a panel — hide the section.
+  if (runsError instanceof ExecutionNotConfiguredError) {
+    return null;
+  }
+
   return (
     <section
-      className="min-w-0 rounded-lg border border-border/80 bg-card p-3 sm:p-4"
+      className="min-w-0 rounded-lg bg-card p-3 sm:p-4"
       aria-labelledby="task-execution-heading"
     >
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>

@@ -376,7 +376,8 @@ describe("API integration: public share boundary", () => {
     });
     const task = await seedTask(project.id, {
       title: "Private task title",
-      description: "Only this task description is shared.",
+      description:
+        "Only this task description is shared. ![shot](/api/asset/abc123)",
     });
     const [comment] = await db
       .insert(schema.activityTable)
@@ -438,6 +439,19 @@ describe("API integration: public share boundary", () => {
     expect(taskPayload).not.toHaveProperty("workspaceId");
     expect(taskPayload).not.toHaveProperty("assigneeId");
 
+    // Agent path: raw markdown with absolute share-scoped asset URLs, one
+    // fetch per capability instead of browser automation.
+    const taskRaw = await app.request(
+      `/api/share/task_description/${taskLink.token}/raw`,
+    );
+    expect(taskRaw.status).toBe(200);
+    expect(taskRaw.headers.get("content-type")).toContain("text/markdown");
+    const taskRawText = await taskRaw.text();
+    expect(taskRawText).toContain(`# ${task.title}`);
+    expect(taskRawText).toContain(
+      `/api/share/task_description/${taskLink.token}/asset/abc123`,
+    );
+
     const commentRead = await app.request(
       `/api/share/activity_comment/${commentLink.token}`,
     );
@@ -450,6 +464,13 @@ describe("API integration: public share boundary", () => {
     expect(commentPayload).not.toHaveProperty("userId");
     expect(commentPayload).not.toHaveProperty("userImage");
     expect(commentPayload).not.toHaveProperty("workspaceId");
+
+    const commentRaw = await app.request(
+      `/api/share/activity_comment/${commentLink.token}/raw`,
+    );
+    expect(commentRaw.status).toBe(200);
+    expect(commentRaw.headers.get("content-type")).toContain("text/markdown");
+    expect(await commentRaw.text()).toBe("Only this comment is shared.");
 
     mockAuthenticatedSession(member.user);
     const { app: editApp } = createApp();

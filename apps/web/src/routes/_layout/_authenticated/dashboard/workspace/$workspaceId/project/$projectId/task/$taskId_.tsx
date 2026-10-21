@@ -19,7 +19,47 @@ export const Route = createFileRoute(
   "/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_",
 )({
   component: RouteComponent,
+  // A render error in any nested editor/panel must degrade to a recoverable
+  // page instead of the bare router crash screen (UAT round 1 finding).
+  errorComponent: TaskRouteError,
 });
+
+function TaskRouteError({ error }: { error: unknown }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { projectId, workspaceId } = Route.useParams();
+
+  console.error("[task-route] render error", error);
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-4 py-12 text-center">
+      <h1 className="text-2xl font-bold">{t("common:error.title")}</h1>
+      <p className="max-w-md text-muted-foreground">
+        {t("common:error.description", {
+          defaultValue: "Reload the page or go back to the board.",
+        })}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          {t("common:actions.reload", { defaultValue: "Reload" })}
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() =>
+            navigate({
+              to: "/dashboard/workspace/$workspaceId/project/$projectId/board",
+              params: { workspaceId, projectId },
+            })
+          }
+        >
+          {t("navigation:sidebar.backToBoard", {
+            defaultValue: "Back to board",
+          })}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function RouteComponent() {
   const { t } = useTranslation();

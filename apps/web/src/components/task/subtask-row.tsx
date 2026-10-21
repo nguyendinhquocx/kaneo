@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
+import { ArrowUp, GripVertical } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import TaskCardContextMenuContent from "@/components/kanban-board/task-card-context-menu/task-card-context-menu-content";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,7 +19,6 @@ type SubtaskRowProps = {
   projectId: string;
   workspaceId: string;
   isSelected: boolean;
-  isFocused: boolean;
   isCompleted: boolean;
   canEdit: boolean;
   selectionRadius: string;
@@ -30,7 +29,6 @@ type SubtaskRowProps = {
   onNavigate: () => void;
   onDeleteClick: () => void;
   onMoveUp: () => void;
-  onMoveDown: () => void;
 };
 
 export default function SubtaskRow({
@@ -39,7 +37,6 @@ export default function SubtaskRow({
   projectId,
   workspaceId,
   isSelected,
-  isFocused,
   isCompleted,
   canEdit,
   selectionRadius,
@@ -48,7 +45,6 @@ export default function SubtaskRow({
   onNavigate,
   onDeleteClick,
   onMoveUp,
-  onMoveDown,
 }: SubtaskRowProps) {
   const reduceMotion = useReducedMotion();
   const { t } = useTranslation();
@@ -70,7 +66,9 @@ export default function SubtaskRow({
         transition,
         opacity: isDragging ? 0.6 : 1,
       }}
-      layout
+      // No `layout` prop here: framer's layout animations rewrite `transform`
+      // on the same element dnd-kit drives, which breaks drop-target hit
+      // testing and snaps dragged rows back to their old slot.
       initial={
         reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0, scale: 0.98 }
       }
@@ -85,7 +83,7 @@ export default function SubtaskRow({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
-            className={`group flex items-center gap-2 py-1 px-2 ${selectionRadius} transition-colors cursor-default ${isSelected ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-accent/50"} ${isFocused ? "ring-1 ring-inset ring-ring/50" : ""}`}
+            className={`group flex items-center gap-2 py-1 px-2 ${selectionRadius} transition-colors cursor-default ${isSelected ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-accent/50"}`}
           >
             {canEdit ? (
               <div className="flex shrink-0 items-center gap-0.5">
@@ -109,16 +107,6 @@ export default function SubtaskRow({
                     })}
                   >
                     <ArrowUp className="size-3" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent"
-                    onClick={onMoveDown}
-                    aria-label={t("tasks:subtasks.moveDown", {
-                      title: task.title,
-                    })}
-                  >
-                    <ArrowDown className="size-3" aria-hidden="true" />
                   </button>
                 </div>
               </div>

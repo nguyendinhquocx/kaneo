@@ -566,6 +566,9 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
           },
           trailingNode: false,
           heading: { levels: [1, 2, 3] },
+          // StarterKit v3 bundles Link; keep the explicit Link.configure as
+          // the single link extension (duplicates break content parsing).
+          link: false,
         }),
         Link.configure({
           autolink: true,

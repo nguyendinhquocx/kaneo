@@ -11,6 +11,21 @@ type PositionedTask = {
   position: number | null;
 };
 
+type TaskColumn = {
+  slug?: string;
+  tasks?: PositionedTask[];
+};
+
+// Shape returned by GET /task/tasks/:projectId: the project with per-column
+// task lanes, not a flat task array. Cached under ["tasks", projectId].
+export type ProjectTasksCache = {
+  id?: string;
+  columns?: TaskColumn[];
+  archivedTasks?: PositionedTask[];
+  plannedTasks?: PositionedTask[];
+  [key: string]: unknown;
+};
+
 export function moveTaskId(ids: string[], taskId: string, offset: -1 | 1) {
   const from = ids.indexOf(taskId);
   const to = from + offset;
@@ -66,7 +81,7 @@ export function reorderSubtaskRelations<T extends OrderedRelation>(
   });
 }
 
-export function reorderTaskCardsBySiblingLane<T extends PositionedTask>(
+function reorderFlatTaskCards<T extends PositionedTask>(
   tasks: T[],
   orderedSiblingIds: string[],
 ): T[] {
@@ -105,4 +120,40 @@ export function reorderTaskCardsBySiblingLane<T extends PositionedTask>(
   }
 
   return tasks.map((task) => updates.get(task.id) ?? task);
+}
+
+export function reorderTaskCardsBySiblingLane<T extends PositionedTask>(
+  tasks: T[],
+  orderedSiblingIds: string[],
+): T[];
+export function reorderTaskCardsBySiblingLane(
+  tasks: ProjectTasksCache | null | undefined,
+  orderedSiblingIds: string[],
+): ProjectTasksCache | null | undefined;
+export function reorderTaskCardsBySiblingLane(
+  tasks: PositionedTask[] | ProjectTasksCache | null | undefined,
+  orderedSiblingIds: string[],
+): PositionedTask[] | ProjectTasksCache | null | undefined {
+  if (Array.isArray(tasks)) {
+    return reorderFlatTaskCards(tasks, orderedSiblingIds);
+  }
+  // The ["tasks", projectId] cache holds a project object with column lanes
+  // (see GET /task/tasks/:projectId). Unknown shapes pass through untouched —
+  // the relations cache is the source of truth for subtask order anyway.
+  if (!tasks || typeof tasks !== "object" || !Array.isArray(tasks.columns)) {
+    return tasks;
+  }
+
+  const reorderLane = (lane: PositionedTask[] | undefined) =>
+    Array.isArray(lane) ? reorderFlatTaskCards(lane, orderedSiblingIds) : lane;
+
+  return {
+    ...tasks,
+    columns: tasks.columns.map((column) => ({
+      ...column,
+      tasks: reorderLane(column?.tasks),
+    })),
+    archivedTasks: reorderLane(tasks.archivedTasks),
+    plannedTasks: reorderLane(tasks.plannedTasks),
+  };
 }

@@ -11,7 +11,8 @@
 			"remove": "Gỡ bỏ",
 			"reset": "Đặt lại",
 			"filter": "Lọc",
-			"clearAllFilters": "Xoá bộ lọc"
+			"clearAllFilters": "Xoá bộ lọc",
+			"reload": "Tải lại"
 		},
 		"a11y": {
 			"toggleSidebar": "Đóng/mở thanh bên"
@@ -54,7 +55,8 @@
 			"troubleshooting": "Các bước khắc phục:",
 			"tryAgain": "Thử lại",
 			"viewDeploymentGuide": "Xem hướng dẫn triển khai",
-			"refreshPage": "Tải lại trang"
+			"refreshPage": "Tải lại trang",
+			"description": "Tải lại trang hoặc quay về bảng công việc."
 		},
 		"formats": {
 			"never": "Không bao giờ"
@@ -1659,7 +1661,9 @@
 					"approved": "Đã approve execution run.",
 					"rejected": "Đã reject execution run.",
 					"error": "Không thể review execution run."
-				}
+				},
+				"toggle": "Bật/tắt trạng thái thực thi",
+				"retry": "Thử lại"
 			},
 			"editor": {
 				"ariaLabel": "Trình sửa mô tả công việc",
@@ -1788,7 +1792,9 @@
 			"deleteDialogTitle": "Xoá công việc?",
 			"deleteDialogDescription": "Điều này sẽ xoá vĩnh viễn công việc và tất cả dữ liệu của nó. Bạn không thể hoàn tác hành động này.",
 			"deleteAction": "Xoá công việc",
-			"completeAria": "Đánh dấu công việc con đã hoàn tất"
+			"completeAria": "Đánh dấu công việc con đã hoàn tất",
+			"drag": "Kéo để sắp xếp lại {{title}}",
+			"moveUp": "Chuyển {{title}} lên"
 		},
 		"properties": {
 			"title": "Thuộc tính",
@@ -2274,8 +2280,6 @@
 		"documentTitle": "Tài liệu được chia sẻ",
 		"document": {
 			"updated": "Cập nhật {{date}}",
-			"editHint": "Link này cho phép sửa riêng tài liệu. Bấm Sửa để bắt đầu.",
-			"editingHint": "Đang sửa tài liệu. Lưu để áp dụng thay đổi.",
 			"viewHint": "Tài liệu này chỉ xem. Xin chủ sở hữu cấp link sửa nếu muốn thay đổi.",
 			"titleLabel": "Tiêu đề tài liệu",
 			"contentLabel": "Nội dung Markdown",
@@ -2297,7 +2301,6 @@
 			"matrixGoal": "Mục tiêu",
 			"totalColumn": "Tổng",
 			"notesTitle": "Ghi chú",
-			"editHint": "Link này có quyền sửa. Bấm Sửa để bật check-in và sửa ghi chú.",
 			"viewHint": "Trang này chỉ xem. Xin chủ sở hữu cấp link sửa nếu muốn thay đổi.",
 			"noteCancel": "Hủy",
 			"noteConflict": "Ghi chú đã bị đổi ở nơi khác. Tải bản mới nhất trước khi lưu.",
@@ -2310,8 +2313,6 @@
 		},
 		"project": {
 			"newTask": "Task mới",
-			"editHint": "Link này cho phép tạo/cập nhật task cơ bản. Bấm Sửa để bắt đầu.",
-			"editingHint": "Chọn task để sửa các trường cơ bản, hoặc tạo task mới.",
 			"viewHint": "Dự án này chỉ xem. Xin chủ sở hữu cấp link sửa nếu muốn đổi task.",
 			"boardView": "Bảng",
 			"listView": "Danh sách",

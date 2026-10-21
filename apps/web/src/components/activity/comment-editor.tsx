@@ -627,6 +627,9 @@ export default function CommentEditor({
         StarterKit.configure({
           heading: { levels: [1, 2, 3] },
           trailingNode: false,
+          // StarterKit v3 bundles Link; the explicit Link.configure below is
+          // the single source of link options (duplicate marks break parsing).
+          link: false,
           codeBlock: {
             HTMLAttributes: { class: "kaneo-tiptap-codeblock" },
           },
@@ -685,7 +688,10 @@ export default function CommentEditor({
         },
         transformPastedHTML: (html) => sanitizePastedHtml(html, editorApiBase),
         handlePaste: (view, event) => {
-          if (readOnly || disabled) return false;
+          // Read view.editable instead of the readOnly prop: editor options are
+          // captured once, so the stale closure kept paste dead after the
+          // viewer instance flipped to editable for comment editing.
+          if (!view.editable) return false;
 
           const pastedFiles = getPastedFiles(event.clipboardData);
           if (pastedFiles.length > 0) {
@@ -759,7 +765,7 @@ export default function CommentEditor({
           return true;
         },
         handleDrop: (view, event) => {
-          if (readOnly || disabled) return false;
+          if (!view.editable) return false;
 
           const droppedFiles = getPastedFiles(event.dataTransfer);
           if (droppedFiles.length === 0) return false;
@@ -777,7 +783,7 @@ export default function CommentEditor({
           return true;
         },
         handleTextInput: (view, _from, _to, text) => {
-          if (readOnly || disabled || text !== "`") return false;
+          if (!view.editable || text !== "`") return false;
 
           const { state } = view;
           const { $from } = state.selection;

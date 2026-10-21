@@ -11,7 +11,8 @@
 			"remove": "Remove",
 			"reset": "Reset",
 			"filter": "Filter",
-			"clearAllFilters": "Clear all filters"
+			"clearAllFilters": "Clear all filters",
+			"reload": "Reload"
 		},
 		"a11y": {
 			"toggleSidebar": "Toggle sidebar"
@@ -54,7 +55,8 @@
 			"troubleshooting": "Troubleshooting steps:",
 			"tryAgain": "Try Again",
 			"viewDeploymentGuide": "View Deployment Guide",
-			"refreshPage": "Refresh Page"
+			"refreshPage": "Refresh Page",
+			"description": "Reload the page or go back to the board."
 		},
 		"formats": {
 			"never": "Never"
@@ -1670,7 +1672,9 @@
 					"approved": "Execution run approved.",
 					"rejected": "Execution run rejected.",
 					"error": "Unable to review execution run."
-				}
+				},
+				"toggle": "Toggle execution state",
+				"retry": "Retry"
 			},
 			"editor": {
 				"ariaLabel": "Task description editor",
@@ -1799,7 +1803,9 @@
 			"deleteError": "Failed to delete task",
 			"deleteDialogTitle": "Delete Task?",
 			"deleteDialogDescription": "This will permanently remove the task and all its data. You can't undo this action.",
-			"deleteAction": "Delete Task"
+			"deleteAction": "Delete Task",
+			"drag": "Drag to reorder {{title}}",
+			"moveUp": "Move {{title}} up"
 		},
 		"properties": {
 			"title": "Properties",
@@ -2274,8 +2280,6 @@
 		"documentTitle": "Shared document",
 		"document": {
 			"updated": "Updated {{date}}",
-			"editHint": "This link lets you edit this document only. Choose Edit to start.",
-			"editingHint": "You are editing this document. Save to publish your changes.",
 			"viewHint": "This document is read-only. Ask the owner for an edit link to change it.",
 			"titleLabel": "Document title",
 			"contentLabel": "Markdown content",
@@ -2297,7 +2301,6 @@
 			"matrixGoal": "Goal",
 			"totalColumn": "Total",
 			"notesTitle": "Notes",
-			"editHint": "Edit link: choose Edit to enable check-ins and note controls.",
 			"viewHint": "This page is view-only. Ask the owner for an edit link to change it.",
 			"noteCancel": "Cancel",
 			"noteConflict": "This note changed elsewhere. Reload the latest note before saving.",
@@ -2310,8 +2313,6 @@
 		},
 		"project": {
 			"newTask": "New task",
-			"editHint": "This link can create and update basic tasks. Choose Edit to begin.",
-			"editingHint": "Choose a task to edit its basic fields, or create a task.",
 			"viewHint": "This project is read-only. Ask the owner for an edit link to change tasks.",
 			"boardView": "Board",
 			"listView": "List",

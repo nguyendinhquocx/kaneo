@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { reorderSubtasks } from "@/fetchers/task-relation/reorder-subtasks";
 import {
+  type ProjectTasksCache,
   reorderSubtaskRelations,
   reorderTaskCardsBySiblingLane,
 } from "@/lib/subtask-order";
@@ -34,7 +35,11 @@ export function useReorderSubtasks() {
       ]);
       const previousRelations =
         queryClient.getQueryData<RelationCache[]>(relationKey);
-      const previousTasks = queryClient.getQueryData<Task[]>(taskKey);
+      // The ["tasks", projectId] cache can be a flat task array or a project
+      // object with column lanes depending on the view that populated it.
+      const previousTasks = queryClient.getQueryData<
+        Task[] | ProjectTasksCache
+      >(taskKey);
 
       if (previousRelations) {
         queryClient.setQueryData(

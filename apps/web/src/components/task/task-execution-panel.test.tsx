@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ExecutionNotConfiguredError } from "@/fetchers/execution/get-task-runs";
 import TaskExecutionPanel from "./task-execution-panel";
 
 const useGetTaskRuns = vi.fn();
@@ -87,6 +88,32 @@ afterEach(() => {
 });
 
 describe("TaskExecutionPanel", () => {
+  it("hides entirely when execution is not configured (runs 409)", () => {
+    useGetTaskRuns.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: true,
+      error: new ExecutionNotConfiguredError(),
+    });
+    useGetTaskRunEvidence.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    });
+    useGetExecutionAgents.mockReturnValue({ data: [] });
+    useGetExecutionManifest.mockReturnValue({ data: null });
+    useReviewTaskRun.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+
+    const { container } = render(
+      <TaskExecutionPanel taskId="task-1" projectId="project-1" />,
+    );
+    expect(container.querySelector("section")).toBeNull();
+    expect(screen.queryByText("tasks:detail.execution.error")).toBeNull();
+  });
+
   it("shows parent review controls and submits bounded verification evidence", async () => {
     const mutateAsync = vi.fn().mockResolvedValue(run);
     useGetTaskRuns.mockReturnValue({

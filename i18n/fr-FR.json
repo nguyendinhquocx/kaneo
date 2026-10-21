@@ -11,7 +11,8 @@
 			"remove": "Retirer",
 			"reset": "Réinitialiser",
 			"filter": "Filtrer",
-			"clearAllFilters": "Effacer tous les filtres"
+			"clearAllFilters": "Effacer tous les filtres",
+			"reload": "Reload"
 		},
 		"a11y": {
 			"toggleSidebar": "Basculer la barre latérale"
@@ -54,7 +55,8 @@
 			"troubleshooting": "Étapes de dépannage :",
 			"tryAgain": "Réessayer",
 			"viewDeploymentGuide": "Voir le guide de déploiement",
-			"refreshPage": "Rafraîchir la page"
+			"refreshPage": "Rafraîchir la page",
+			"description": "Reload the page or go back to the board."
 		},
 		"formats": {
 			"never": "Jamais"
@@ -1753,7 +1755,9 @@
 				"updated": "Updated",
 				"worker": "Worker / host",
 				"agentsError": "Unable to resolve the worker identity; showing the run's recorded principal.",
-				"evidenceError": "Unable to load the latest run evidence."
+				"evidenceError": "Unable to load the latest run evidence.",
+				"toggle": "Toggle execution state",
+				"retry": "Retry"
 			}
 		},
 		"entity": {
@@ -1788,7 +1792,9 @@
 			"deleteDialogTitle": "Supprimer la tâche ?",
 			"deleteDialogDescription": "Cela supprimera définitivement la tâche et toutes ses données. Vous ne pouvez pas annuler cette action.",
 			"deleteAction": "Supprimer la tâche",
-			"completeAria": "Mark subtask complete"
+			"completeAria": "Mark subtask complete",
+			"drag": "Glisser pour réorganiser {{title}}",
+			"moveUp": "Déplacer {{title}} vers le haut"
 		},
 		"properties": {
 			"title": "Propriétés",
@@ -2263,13 +2269,11 @@
 			"conflictReload": "Reload latest",
 			"contentLabel": "Markdown content",
 			"contentPlaceholder": "Write in Markdown…",
-			"editingHint": "You are editing this document. Save to publish your changes.",
 			"save": "Save changes",
 			"saveFailed": "Could not save the document.",
 			"saving": "Saving…",
 			"titleLabel": "Document title",
-			"viewHint": "This document is read-only. Ask the owner for an edit link to change it.",
-			"editHint": "This link lets you edit this document only. Choose Edit to start."
+			"viewHint": "This document is read-only. Ask the owner for an edit link to change it."
 		},
 		"documentTitle": "Shared document",
 		"expires": "Expires {{date}}",
@@ -2282,7 +2286,6 @@
 			"thisWeek": "This week",
 			"totalAllTime": "{{total}} completions",
 			"totalColumn": "Total",
-			"editHint": "Edit link: you can tick the cells directly.",
 			"viewHint": "This page is view-only. Ask the owner for an edit link to tick.",
 			"noteCancel": "Cancel",
 			"noteConflict": "This note changed elsewhere. Reload the latest note before saving.",
@@ -2336,8 +2339,6 @@
 			"create": "Create task",
 			"descriptionLabel": "Description",
 			"dueDateLabel": "Due date",
-			"editHint": "This link can create and update basic tasks. Choose Edit to begin.",
-			"editingHint": "Choose a task to edit its basic fields, or create a task.",
 			"editTaskTitle": "Edit task",
 			"listView": "List",
 			"newTask": "New task",

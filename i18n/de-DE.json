@@ -11,7 +11,8 @@
 			"remove": "Entfernen",
 			"reset": "Zurücksetzen",
 			"filter": "Filter",
-			"clearAllFilters": "Alle Filter löschen"
+			"clearAllFilters": "Alle Filter löschen",
+			"reload": "Reload"
 		},
 		"a11y": {
 			"toggleSidebar": "Sidebar umschalten"
@@ -54,7 +55,8 @@
 			"troubleshooting": "Schritte zur Fehlerbehebung:",
 			"tryAgain": "Erneut versuchen",
 			"viewDeploymentGuide": "Bereitstellungsanleitung ansehen",
-			"refreshPage": "Seite neu laden"
+			"refreshPage": "Seite neu laden",
+			"description": "Reload the page or go back to the board."
 		},
 		"formats": {
 			"never": "Nie"
@@ -1753,7 +1755,9 @@
 				"updated": "Updated",
 				"worker": "Worker / host",
 				"agentsError": "Unable to resolve the worker identity; showing the run's recorded principal.",
-				"evidenceError": "Unable to load the latest run evidence."
+				"evidenceError": "Unable to load the latest run evidence.",
+				"toggle": "Toggle execution state",
+				"retry": "Retry"
 			}
 		},
 		"entity": {
@@ -1788,7 +1792,9 @@
 			"deleteDialogTitle": "Aufgabe löschen?",
 			"deleteDialogDescription": "Dadurch wird die Aufgabe und alle zugehörigen Daten dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
 			"deleteAction": "Aufgabe löschen",
-			"completeAria": "Mark subtask complete"
+			"completeAria": "Mark subtask complete",
+			"drag": "{{title}} zum Neuanordnen ziehen",
+			"moveUp": "{{title}} nach oben verschieben"
 		},
 		"properties": {
 			"title": "Eigenschaften",
@@ -2263,8 +2269,6 @@
 		"creating": "Creating…",
 		"document": {
 			"updated": "Aktualisiert {{date}}",
-			"editHint": "Dieser Link erlaubt nur die Bearbeitung dieses Dokuments. Wähle „Bearbeiten“, um zu beginnen.",
-			"editingHint": "Dokument wird bearbeitet. Speichere, um die Änderungen zu übernehmen.",
 			"viewHint": "Dieses Dokument ist schreibgeschützt. Bitte den Eigentümer um einen Bearbeitungslink.",
 			"titleLabel": "Dokumenttitel",
 			"contentLabel": "Markdown-Inhalt",
@@ -2288,7 +2292,6 @@
 			"thisWeek": "This week",
 			"totalAllTime": "{{total}} completions",
 			"totalColumn": "Total",
-			"editHint": "Bearbeitungslink: Wähle „Bearbeiten“, um Check-ins und Notizen freizuschalten.",
 			"viewHint": "Diese Seite ist schreibgeschützt. Bitte den Eigentümer um einen Bearbeitungslink.",
 			"noteCancel": "Abbrechen",
 			"noteConflict": "Diese Notiz wurde an anderer Stelle geändert. Lade die neueste Version vor dem Speichern.",
@@ -2301,8 +2304,6 @@
 		},
 		"project": {
 			"newTask": "Neue Aufgabe",
-			"editHint": "Dieser Link kann einfache Aufgaben erstellen und bearbeiten. Wähle „Bearbeiten“, um zu beginnen.",
-			"editingHint": "Wähle eine Aufgabe zum Bearbeiten oder erstelle eine neue.",
 			"viewHint": "Dieses Projekt ist schreibgeschützt. Bitte den Eigentümer um einen Bearbeitungslink.",
 			"boardView": "Board",
 			"listView": "Liste",

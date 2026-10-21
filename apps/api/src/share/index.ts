@@ -10,6 +10,7 @@ import {
 import { buildAssetResponse } from "../storage/asset-response";
 import { contentReferencesAsset } from "../storage/cleanup-assets";
 import { getPrivateObject } from "../storage/s3";
+import { rewriteContentAssetRefs } from "./agent-content";
 import {
   publicCreateTask,
   publicToggleGoalCheckin,
@@ -325,15 +326,67 @@ app.get("/:resourceType/:token/asset/:assetId", async (c) => {
 });
 
 // Agent-readable Markdown: raw text/markdown over plain HTTP, no JS/cookie/
-// login/Tailscale required.
+// login/Tailscale required. Asset references are rewritten to absolute
+// share-scoped URLs so an agent can fetch images/files with the same
+// capability in one request each.
 app.get("/document/:token/raw", async (c) => {
   const token = c.req.param("token");
   assertShareRateLimit(c, "read", hashShareToken(token));
 
   const document = await getPublicDocument(token);
-  return c.body(document.content, 200, {
-    "Content-Type": "text/markdown; charset=utf-8",
-  });
+  const origin = new URL(c.req.url).origin;
+  return c.body(
+    rewriteContentAssetRefs(document.content, origin, "document", token),
+    200,
+    {
+      "Content-Type": "text/markdown; charset=utf-8",
+    },
+  );
+});
+
+// Agent-readable task description: the title as an H1 followed by the
+// description markdown with fetchable asset URLs.
+app.get("/task_description/:token/raw", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+
+  const { task } = await getPublicTaskDescription(token);
+  const origin = new URL(c.req.url).origin;
+  const heading = task.title ? `# ${task.title}\n\n` : "";
+  return c.body(
+    heading +
+      rewriteContentAssetRefs(
+        task.description ?? "",
+        origin,
+        "task_description",
+        token,
+      ),
+    200,
+    {
+      "Content-Type": "text/markdown; charset=utf-8",
+    },
+  );
+});
+
+// Agent-readable comment: the comment markdown with fetchable asset URLs.
+app.get("/activity_comment/:token/raw", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+
+  const { comment } = await getPublicActivityComment(token);
+  const origin = new URL(c.req.url).origin;
+  return c.body(
+    rewriteContentAssetRefs(
+      comment.content ?? "",
+      origin,
+      "activity_comment",
+      token,
+    ),
+    200,
+    {
+      "Content-Type": "text/markdown; charset=utf-8",
+    },
+  );
 });
 
 // Goal capability read: the link grants exactly this goal's check-in history

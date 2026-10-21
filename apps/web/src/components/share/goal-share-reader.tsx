@@ -253,10 +253,10 @@ export default function GoalShareReader({
     }
   };
 
-  // Rows worth showing: any note text, or any row that exists server-side
-  // (so an edit-link holder can start a note on a completed day).
+  // Only days with an actual note render a row — empty per-day shells were
+  // noise (UAT round 1).
   const notes = checkins
-    .filter((ci) => ci.note || ci.id)
+    .filter((ci) => Boolean(ci.note?.trim()))
     .sort((left, right) => right.checkInDate.localeCompare(left.checkInDate));
 
   return (
@@ -271,8 +271,8 @@ export default function GoalShareReader({
           {canEdit ? (
             <Button
               size="sm"
-              variant={isEditing ? "outline" : "secondary"}
-              className="min-h-11 gap-1.5 sm:min-h-8"
+              variant="ghost"
+              className="min-h-11 sm:min-h-8"
               onClick={() => {
                 if (isEditing) setEditingDate(null);
                 setIsEditing((current) => !current);
@@ -288,11 +288,11 @@ export default function GoalShareReader({
             ? t("goal.perWeek", { target: data.targetPerWeek })
             : null}
         </p>
-        {/* R3-T3: make the link scope obvious — an edit link can tick and
-        write notes, a view link cannot. */}
-        {isEditing ? null : (
+        {/* R3-T3 scope hint for view links only — edit links carry the
+        visible scope chip, the extra sentence was noise. */}
+        {isEditing || canEdit ? null : (
           <p className="mt-1 text-xs text-muted-foreground">
-            {canEdit ? t("goal.editHint") : t("goal.viewHint")}
+            {t("goal.viewHint")}
           </p>
         )}
       </div>
@@ -331,20 +331,28 @@ export default function GoalShareReader({
               <th className="bg-card px-3 py-2 text-start text-xs font-medium text-muted-foreground">
                 {t("goal.matrixGoal")}
               </th>
-              {days.map((day) => (
-                <th
-                  key={formatDateKey(day)}
-                  scope="col"
-                  className="w-14 px-2 py-2 text-center"
-                >
-                  <span className="block text-[10px] font-normal text-muted-foreground">
-                    {weekdayFormatter.format(day)}
-                  </span>
-                  <span className="block text-xs font-medium text-foreground">
-                    {day.getDate()}
-                  </span>
-                </th>
-              ))}
+              {days.map((day) => {
+                const isToday =
+                  formatDateKey(day) === formatDateKey(new Date());
+                return (
+                  <th
+                    key={formatDateKey(day)}
+                    scope="col"
+                    className="w-14 px-2 py-2 text-center"
+                  >
+                    <span
+                      className={`block text-[10px] ${isToday ? "font-bold text-foreground" : "font-normal text-muted-foreground"}`}
+                    >
+                      {weekdayFormatter.format(day)}
+                    </span>
+                    <span
+                      className={`block text-xs ${isToday ? "font-bold text-foreground" : "font-medium text-foreground"}`}
+                    >
+                      {day.getDate()}
+                    </span>
+                  </th>
+                );
+              })}
               <th className="w-16 px-2 py-2 text-center text-xs font-medium text-muted-foreground">
                 {t("goal.totalColumn")}
               </th>

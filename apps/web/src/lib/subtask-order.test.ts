@@ -65,4 +65,54 @@ describe("subtask order", () => {
         .map((task) => task.id),
     ).toEqual(["sibling-c", "other-3"]);
   });
+
+  it("reorders tasks inside project cache column lanes without throwing", () => {
+    const projectCache = {
+      id: "project-1",
+      name: "Project",
+      columns: [
+        {
+          slug: "todo",
+          tasks: [
+            { id: "other-1", status: "todo", position: 0 },
+            { id: "sibling-a", status: "todo", position: 1 },
+            { id: "sibling-b", status: "todo", position: 2 },
+          ],
+        },
+        {
+          slug: "done",
+          tasks: [{ id: "sibling-c", status: "done", position: 0 }],
+        },
+      ],
+      archivedTasks: [],
+      plannedTasks: [],
+    };
+
+    const result = reorderTaskCardsBySiblingLane(projectCache, [
+      "sibling-b",
+      "sibling-a",
+    ]);
+
+    // Positions are canonical; array order follows the original cache.
+    const todoLane = [...(result.columns?.[0].tasks ?? [])].sort(
+      (left, right) => (left.position ?? 0) - (right.position ?? 0),
+    );
+    expect(todoLane.map((task) => task.id)).toEqual([
+      "other-1",
+      "sibling-b",
+      "sibling-a",
+    ]);
+    expect(todoLane[2].position).toBe(2);
+    expect(result.columns?.[1].tasks?.map((task) => task.id)).toEqual([
+      "sibling-c",
+    ]);
+    expect(result.name).toBe("Project");
+  });
+
+  it("passes through unknown cache shapes untouched", () => {
+    expect(reorderTaskCardsBySiblingLane(null, ["a"])).toBeNull();
+    expect(reorderTaskCardsBySiblingLane(undefined, ["a"])).toBeUndefined();
+    const weird = { notColumns: true };
+    expect(reorderTaskCardsBySiblingLane(weird, ["a"])).toBe(weird);
+  });
 });

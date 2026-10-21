@@ -374,7 +374,11 @@ export default function TaskSubtasks({
         </div>
 
         <CollapsibleContent>
-          <DndContext onDragEnd={handleSubtaskDragEnd}>
+          <DndContext
+            onDragEnd={(event) => {
+              handleSubtaskDragEnd(event);
+            }}
+          >
             <SortableContext
               items={orderedSubtaskIds}
               strategy={verticalListSortingStrategy}
@@ -402,7 +406,6 @@ export default function TaskSubtasks({
                         projectId={projectId}
                         workspaceId={workspace?.id ?? workspaceId}
                         isSelected={isSelected}
-                        isFocused={focusedIndex === index}
                         isCompleted={isCompleted(subtask.task.status)}
                         canEdit={canEdit}
                         selectionRadius={getSelectionRadius(index, isSelected)}
@@ -420,7 +423,6 @@ export default function TaskSubtasks({
                         }
                         onDeleteClick={() => setDeleteTaskId(subtask.task.id)}
                         onMoveUp={() => moveSubtask(subtask.task.id, -1)}
-                        onMoveDown={() => moveSubtask(subtask.task.id, 1)}
                       />
                     );
                   })}
