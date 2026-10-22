@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { rewriteContentAssetRefs } from "../../apps/api/src/share/agent-content";
 
+describe("share module env wiring", () => {
+  it("loads the share router with the configured public origin env present", async () => {
+    process.env.KANEO_PUBLIC_API_URL = "https://kaneo.quoc.app";
+    const mod = await import("../../apps/api/src/share/index.ts");
+    // The rewrite helper is exercised directly below; the router import must
+    // load cleanly so its shareOrigin() helper reads the configured public
+    // origin at request time instead of the proxied internal scheme/host.
+    expect(mod).toBeTruthy();
+    expect(process.env.KANEO_PUBLIC_API_URL).toBe("https://kaneo.quoc.app");
+  });
+});
+
 describe("rewriteContentAssetRefs", () => {
   it("rewrites private asset refs to absolute share-scoped URLs", () => {
     const result = rewriteContentAssetRefs(

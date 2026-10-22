@@ -11,6 +11,24 @@ import { buildAssetResponse } from "../storage/asset-response";
 import { contentReferencesAsset } from "../storage/cleanup-assets";
 import { getPrivateObject } from "../storage/s3";
 import { rewriteContentAssetRefs } from "./agent-content";
+
+// Public origin for share asset rewrites. Behind the reverse proxy c.req.url
+// carries the internal http scheme/host, so configured origins must win —
+// otherwise absolute same-origin asset refs never match and stay private.
+function shareOrigin(fallback: string): string {
+  const configured =
+    process.env.KANEO_PUBLIC_API_URL?.trim() ||
+    process.env.KANEO_API_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      // Misconfigured URL falls through to the request origin.
+    }
+  }
+  return fallback;
+}
+
 import {
   publicCreateTask,
   publicToggleGoalCheckin,
@@ -55,7 +73,7 @@ app.get("/project/:token", async (c) => {
   // Task descriptions can embed asset refs; share-scoped URLs let the link
   // holder fetch them with the same capability instead of leaking private
   // /api/asset/ paths that 401 for anonymous consumers.
-  const origin = new URL(c.req.url).origin;
+  const origin = shareOrigin(new URL(c.req.url).origin);
   const withAssetUrls = (description: string | null): string | null =>
     description
       ? rewriteContentAssetRefs(description, origin, "project", token)
@@ -108,7 +126,7 @@ app.get("/document/:token", async (c) => {
 
   const link = await resolveShareLink(token, "document", "view");
   const document = await getPublicDocument(token);
-  const origin = new URL(c.req.url).origin;
+  const origin = shareOrigin(new URL(c.req.url).origin);
   return c.json({
     id: document.id,
     title: document.title,
@@ -169,7 +187,7 @@ app.get("/task_description/:token", async (c) => {
   const token = c.req.param("token");
   assertShareRateLimit(c, "read", hashShareToken(token));
   const { link, task } = await getPublicTaskDescription(token);
-  const origin = new URL(c.req.url).origin;
+  const origin = shareOrigin(new URL(c.req.url).origin);
   return c.json({
     title: task.title,
     content: task.description
@@ -188,7 +206,7 @@ app.get("/activity_comment/:token", async (c) => {
   const token = c.req.param("token");
   assertShareRateLimit(c, "read", hashShareToken(token));
   const { link, comment } = await getPublicActivityComment(token);
-  const origin = new URL(c.req.url).origin;
+  const origin = shareOrigin(new URL(c.req.url).origin);
   return c.json({
     content: comment.content
       ? rewriteContentAssetRefs(
@@ -384,7 +402,7 @@ app.get("/document/:token/raw", async (c) => {
   assertShareRateLimit(c, "read", hashShareToken(token));
 
   const document = await getPublicDocument(token);
-  const origin = new URL(c.req.url).origin;
+  const origin = shareOrigin(new URL(c.req.url).origin);
   return c.body(
     rewriteContentAssetRefs(document.content, origin, "document", token),
     200,
@@ -401,7 +419,7 @@ app.get("/task_description/:token/raw", async (c) => {
   assertShareRateLimit(c, "read", hashShareToken(token));
 
   const { task } = await getPublicTaskDescription(token);
-  const origin = new URL(c.req.url).origin;
+  const origin = shareOrigin(new URL(c.req.url).origin);
   const heading = task.title ? `# ${task.title}\n\n` : "";
   return c.body(
     heading +
@@ -424,7 +442,7 @@ app.get("/activity_comment/:token/raw", async (c) => {
   assertShareRateLimit(c, "read", hashShareToken(token));
 
   const { comment } = await getPublicActivityComment(token);
-  const origin = new URL(c.req.url).origin;
+  const origin = shareOrigin(new URL(c.req.url).origin);
   return c.body(
     rewriteContentAssetRefs(
       comment.content ?? "",
