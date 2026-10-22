@@ -14,6 +14,42 @@ describe("rewriteContentAssetRefs", () => {
     );
   });
 
+  it("rewrites same-origin absolute stored asset URLs to canonical share URLs", () => {
+    const result = rewriteContentAssetRefs(
+      "![image](https://kaneo.quoc.app/api/asset/i1ij123) plus [doc](https://kaneo.quoc.app/asset/xyz_-9)",
+      "https://kaneo.quoc.app",
+      "task_description",
+      "tok",
+    );
+    expect(result).toBe(
+      "![image](https://kaneo.quoc.app/api/share/task_description/tok/asset/i1ij123) plus [doc](https://kaneo.quoc.app/api/share/task_description/tok/asset/xyz_-9)",
+    );
+  });
+
+  it("matches the origin case-insensitively but keeps configured casing in output", () => {
+    const result = rewriteContentAssetRefs(
+      "![image](https://KANEO.QUOC.APP/api/asset/abc)",
+      "https://kaneo.quoc.app",
+      "document",
+      "tok",
+    );
+    expect(result).toBe(
+      "![image](https://kaneo.quoc.app/api/share/document/tok/asset/abc)",
+    );
+  });
+
+  it("keeps asset-looking paths inside foreign or non-exact absolute URLs verbatim", () => {
+    const result = rewriteContentAssetRefs(
+      "See https://example.com/api/asset/zzz and https://kaneo.quoc.app/api/asset/nope/extra and https://kaneo.quoc.app/uploads/asset/keep",
+      "https://kaneo.quoc.app",
+      "activity_comment",
+      "tok",
+    );
+    expect(result).toContain("https://example.com/api/asset/zzz");
+    expect(result).toContain("https://kaneo.quoc.app/api/asset/nope/extra");
+    expect(result).toContain("https://kaneo.quoc.app/uploads/asset/keep");
+  });
+
   it("is idempotent for already share-scoped refs", () => {
     const once = rewriteContentAssetRefs(
       "![shot](/api/asset/abc123)",

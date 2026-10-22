@@ -52,8 +52,30 @@ app.get("/project/:token", async (c) => {
     link.permission === "edit" &&
     (await isProjectAgentControlled(link.resourceId));
 
+  // Task descriptions can embed asset refs; share-scoped URLs let the link
+  // holder fetch them with the same capability instead of leaking private
+  // /api/asset/ paths that 401 for anonymous consumers.
+  const origin = new URL(c.req.url).origin;
+  const withAssetUrls = (description: string | null): string | null =>
+    description
+      ? rewriteContentAssetRefs(description, origin, "project", token)
+      : description;
+  const withTaskAssetUrls = <T extends { description: string | null }>(
+    task: T,
+  ): T => ({
+    ...task,
+    description: withAssetUrls(task.description),
+  });
+
   return c.json({
     ...payload,
+    description: withAssetUrls(payload.description),
+    columns: payload.columns.map((column) => ({
+      ...column,
+      tasks: column.tasks.map(withTaskAssetUrls),
+    })),
+    archivedTasks: payload.archivedTasks.map(withTaskAssetUrls),
+    plannedTasks: payload.plannedTasks.map(withTaskAssetUrls),
     // Existing edit links may predate agent control; never advertise an edit
     // affordance when the public write routes will refuse the operation.
     scope: isReadOnly ? "view" : link.permission,
@@ -86,10 +108,16 @@ app.get("/document/:token", async (c) => {
 
   const link = await resolveShareLink(token, "document", "view");
   const document = await getPublicDocument(token);
+  const origin = new URL(c.req.url).origin;
   return c.json({
     id: document.id,
     title: document.title,
-    content: document.content,
+    content: rewriteContentAssetRefs(
+      document.content,
+      origin,
+      "document",
+      token,
+    ),
     revision: document.revision,
     updatedAt: document.updatedAt,
     scope: link.permission,
@@ -141,9 +169,17 @@ app.get("/task_description/:token", async (c) => {
   const token = c.req.param("token");
   assertShareRateLimit(c, "read", hashShareToken(token));
   const { link, task } = await getPublicTaskDescription(token);
+  const origin = new URL(c.req.url).origin;
   return c.json({
     title: task.title,
-    content: task.description,
+    content: task.description
+      ? rewriteContentAssetRefs(
+          task.description,
+          origin,
+          "task_description",
+          token,
+        )
+      : task.description,
     scope: link.permission,
   });
 });
@@ -152,8 +188,16 @@ app.get("/activity_comment/:token", async (c) => {
   const token = c.req.param("token");
   assertShareRateLimit(c, "read", hashShareToken(token));
   const { link, comment } = await getPublicActivityComment(token);
+  const origin = new URL(c.req.url).origin;
   return c.json({
-    content: comment.content,
+    content: comment.content
+      ? rewriteContentAssetRefs(
+          comment.content,
+          origin,
+          "activity_comment",
+          token,
+        )
+      : comment.content,
     createdAt: comment.createdAt,
     scope: link.permission,
   });
@@ -433,7 +477,17 @@ app.get("/goal/:token", async (c) => {
     // Exposing the link's own scope to the link holder reveals nothing the
     // holder cannot probe by attempting a write.
     scope: link.permission,
-    checkins,
+    checkins: checkins.map((checkin) => ({
+      ...checkin,
+      note: checkin.note
+        ? rewriteContentAssetRefs(
+            checkin.note,
+            new URL(c.req.url).origin,
+            "goal",
+            token,
+          )
+        : checkin.note,
+    })),
   });
 });
 

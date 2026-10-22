@@ -435,7 +435,13 @@ describe("API integration: public share boundary", () => {
     expect(taskRead.status).toBe(200);
     const taskPayload = (await taskRead.json()) as Record<string, unknown>;
     expect(taskPayload.title).toBe(task.title);
-    expect(taskPayload.content).toBe(task.description);
+    // JSON capability reads now carry the same canonical share-scoped asset
+    // URLs as the raw markdown path, so stored absolute/relative private refs
+    // never leak to the link holder.
+    expect(String(taskPayload.content)).toContain(
+      `/api/share/task_description/${taskLink.token}/asset/abc123`,
+    );
+    expect(String(taskPayload.content)).not.toContain("/api/asset/abc123");
     expect(taskPayload).not.toHaveProperty("workspaceId");
     expect(taskPayload).not.toHaveProperty("assigneeId");
 
