@@ -23,7 +23,6 @@ import {
   listAssignableMembers,
   loadProjectTask,
 } from "./full-access";
-import type { SQL } from "drizzle-orm";
 import {
   appendShareActionAudit,
   type ResolvedShareLink,
@@ -73,6 +72,7 @@ export type FullTaskWriteBody = {
   startDate?: string | null;
   dueDate?: string | null;
   assigneeId?: string | null;
+  position?: number;
   labels?: Array<{ name: string; color: string }>;
 };
 
@@ -217,6 +217,9 @@ export async function fullUpdateTask(
   }
   if (body.assigneeId !== undefined) {
     updates.userId = body.assigneeId || null;
+  }
+  if (body.position !== undefined) {
+    updates.position = body.position;
   }
 
   const [updated] = await db.transaction(async (tx) => {
@@ -1080,15 +1083,20 @@ export async function fullReorderSubtasks(
         eq(schema.taskRelationTable.relationType, "subtask"),
       ),
     );
-  const knownIds = new Set(relations.map((relation) => relation.id));
+  const relationByTaskId = new Map(
+    relations.map((relation) => [relation.targetTaskId, relation.id]),
+  );
+  const orderedRelationIds: string[] = [];
   for (const childId of orderedTargetTaskIds) {
-    if (!knownIds.has(childId)) {
+    const relationId = relationByTaskId.get(childId);
+    if (!relationId) {
       throw notFound();
     }
+    orderedRelationIds.push(relationId);
   }
 
   await db.transaction(async (tx) => {
-    for (const [index, relationId] of orderedTargetTaskIds.entries()) {
+    for (const [index, relationId] of orderedRelationIds.entries()) {
       await tx
         .update(schema.taskRelationTable)
         .set({ position: index })
@@ -1437,6 +1445,7 @@ export async function fullCreateUploadTicket(
   },
 ) {
   const project = await getFullLinkProject(link.resourceId);
+  void project;
   const owner = await resolveGuestUploadOwner(input.ownerType, input.ownerId);
   assertUploadOwnerInLink(owner, link);
   await assertGuestUploadTargetAllowed(owner);
@@ -1492,6 +1501,7 @@ export async function fullFinalizeUpload(
   },
 ) {
   const project = await getFullLinkProject(link.resourceId);
+  void project;
   const owner = await resolveGuestUploadOwner(input.ownerType, input.ownerId);
   assertUploadOwnerInLink(owner, link);
   await assertGuestUploadTargetAllowed(owner);

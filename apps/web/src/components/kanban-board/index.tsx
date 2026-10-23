@@ -19,6 +19,7 @@ import { produce } from "immer";
 import { useEffect, useState } from "react";
 import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { getShareCapability } from "@/components/share/share-capability";
 import useBulkSelectionStore from "@/store/bulk-selection";
 import useProjectStore from "@/store/project";
 import type { ProjectWithTasks } from "@/types/project";
@@ -76,6 +77,16 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
       },
       Enter: () => {
         if (focusedTaskId && project) {
+          // SPEC-2026-10-22: capability keyboard navigation stays on the
+          // share surface.
+          const capability = getShareCapability();
+          if (capability) {
+            navigate({
+              to: "/share/project/$token/task/$taskId",
+              params: { token: capability.token, taskId: focusedTaskId },
+            });
+            return;
+          }
           navigate({
             to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
             params: {

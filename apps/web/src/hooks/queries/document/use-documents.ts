@@ -13,19 +13,63 @@ import {
   listDocuments,
   updateDocument,
 } from "@/fetchers/document/document-api";
+import {
+  createShareFullDocument,
+  deleteShareFullDocument,
+  getShareFullDocument,
+  listShareFullDocuments,
+  setShareFullDocumentArchived,
+  updateShareFullDocument,
+} from "@/fetchers/share/share-full-api";
+import {
+  getShareCapability,
+  invalidateShareQueries,
+} from "@/components/share/share-capability";
 
 export function useGetDocuments(projectId: string, includeArchived = false) {
+  const capability = getShareCapability();
   return useQuery({
-    queryKey: ["documents", projectId, includeArchived],
-    queryFn: () => listDocuments(projectId, includeArchived),
-    enabled: Boolean(projectId),
+    queryKey: capability
+      ? ["share-full", capability.token, "documents", includeArchived]
+      : ["documents", projectId, includeArchived],
+    queryFn: () => {
+      if (capability) {
+        return listShareFullDocuments(capability.token).then((rows): DocumentSummary[] =>
+          rows
+            .filter((row) => includeArchived || row.archivedAt === null)
+            .map((row) => ({
+              ...row,
+              projectId: capability.projectId,
+              createdByUserId: null,
+            })),
+        );
+      }
+      return listDocuments(projectId, includeArchived);
+    },
+    enabled: Boolean(capability || projectId),
   });
 }
 
 export function useGetDocument(id: string | null) {
+  const capability = getShareCapability();
   return useQuery({
-    queryKey: ["document", id],
-    queryFn: () => getDocument(id as string),
+    queryKey: capability
+      ? ["share-full", capability.token, "document", id]
+      : ["document", id],
+    queryFn: () => {
+      if (capability) {
+        return getShareFullDocument(capability.token, id as string).then(
+          (row): DocumentFull => ({
+            ...row,
+            projectId: capability.projectId,
+            createdByUserId: null,
+            archivedAt: null,
+            createdAt: row.updatedAt,
+          }),
+        );
+      }
+      return getDocument(id as string);
+    },
     enabled: Boolean(id),
   });
 }
@@ -88,17 +132,65 @@ async function syncDocumentQueries(
 export function useCreateDocument() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: createDocument,
-    onSuccess: (document: DocumentFull) =>
-      syncDocumentQueries(queryClient, document),
+    mutationFn: (input: { projectId: string; title: string; content: string }) => {
+      const capability = getShareCapability();
+      if (capability) {
+        return createShareFullDocument(capability.token, {
+          title: input.title,
+          content: input.content,
+        }).then((created): DocumentFull => ({
+          id: created.id,
+          projectId: capability.projectId,
+          title: input.title,
+          content: input.content,
+          revision: created.revision,
+          archivedAt: null,
+          createdByUserId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
+      }
+      return createDocument(input);
+    },
+    onSuccess: (document: DocumentFull) => {
+      invalidateShareQueries(queryClient);
+      return syncDocumentQueries(queryClient, document);
+    },
   });
 }
 
 export function useUpdateDocument() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: updateDocument,
+    mutationFn: (input: {
+      id: string;
+      title: string;
+      content: string;
+      revision: number;
+      projectId?: string;
+    }) => {
+      const capability = getShareCapability();
+      if (capability) {
+        return updateShareFullDocument(capability.token, input.id, {
+          title: input.title,
+          content: input.content,
+          revision: input.revision,
+        }).then((updated): DocumentFull => ({
+          id: updated.id,
+          projectId: capability.projectId,
+          title: updated.title,
+          content: updated.content,
+          revision: updated.revision,
+          archivedAt: null,
+          createdByUserId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
+      }
+      return updateDocument(input);
+    },
     onSuccess: (result) => {
+      invalidateShareQueries(queryClient);
       if (!("conflict" in result)) {
         return syncDocumentQueries(queryClient, result);
       }
@@ -109,10 +201,29 @@ export function useUpdateDocument() {
 export function useArchiveDocument() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; archived: boolean; projectId: string }) =>
-      archiveDocument(input.id, input.archived),
-    onSuccess: (document: DocumentFull) =>
-      syncDocumentQueries(queryClient, document),
+    mutationFn: (input: { id: string; archived: boolean; projectId: string }) => {
+      const capability = getShareCapability();
+      if (capability) {
+        return setShareFullDocumentArchived(
+          capability.token,
+          input.id,
+          input.archived,
+        ).then(() =>
+          getShareFullDocument(capability.token, input.id).then((row): DocumentFull => ({
+            ...row,
+            projectId: capability.projectId,
+            createdByUserId: null,
+            archivedAt: input.archived ? new Date().toISOString() : null,
+            createdAt: row.updatedAt,
+          })),
+        );
+      }
+      return archiveDocument(input.id, input.archived);
+    },
+    onSuccess: (document: DocumentFull) => {
+      invalidateShareQueries(queryClient);
+      return syncDocumentQueries(queryClient, document);
+    },
   });
 }
 
@@ -141,8 +252,25 @@ export function useDeleteDocumentComment() {
 export function useDeleteDocument() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: deleteDocument,
+    mutationFn: (id: string) => {
+      const capability = getShareCapability();
+      if (capability) {
+        return deleteShareFullDocument(capability.token, id).then((): DocumentFull => ({
+          id,
+          projectId: capability.projectId,
+          title: '',
+          content: '',
+          revision: 0,
+          archivedAt: null,
+          createdByUserId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
+      }
+      return deleteDocument(id);
+    },
     onSuccess: (deleted: DocumentFull) => {
+      invalidateShareQueries(queryClient);
       // R2-T4: hard delete — drop the detail cache and the row from both
       // list views instead of syncing a tombstone.
       queryClient.removeQueries({ queryKey: ["document", deleted.id] });

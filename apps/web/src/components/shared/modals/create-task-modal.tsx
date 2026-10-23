@@ -378,7 +378,7 @@ function CreateTaskModal({
 
       const savedTask = draftTask
         ? normalizeTask(
-            await updateTask({
+            (await updateTask({
               ...draftTask,
               title: title.trim(),
               description: description.trim() || "",
@@ -388,7 +388,7 @@ function CreateTaskModal({
               startDate: startDate ? startDate.toISOString() : null,
               dueDate: dueDate ? dueDate.toISOString() : null,
               projectId: resolvedProjectId,
-            }),
+            })) as unknown as Parameters<typeof normalizeTask>[0],
           )
         : normalizeTask(
             await createTask({

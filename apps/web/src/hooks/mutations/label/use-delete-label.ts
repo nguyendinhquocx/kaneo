@@ -1,13 +1,29 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import deleteLabel from "@/fetchers/label/delete-label";
+import { deleteShareFullLabel } from "@/fetchers/share/share-full-api";
+import {
+  getShareCapability,
+  invalidateShareQueries,
+} from "@/components/share/share-capability";
 import { removeLabelFromTaskInTasksCache } from "./sync-task-labels-cache";
 
 function useDeleteLabel() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: deleteLabel,
+    mutationFn: (input: { id: string }) => {
+      const capability = getShareCapability();
+      if (capability) {
+        return deleteShareFullLabel(
+          capability.token,
+          input.id,
+        ) as unknown as ReturnType<typeof deleteLabel>;
+      }
+      return deleteLabel(input);
+    },
     onSuccess: (deletedLabel) => {
+      invalidateShareQueries(queryClient);
+      if (getShareCapability()) return;
       queryClient.setQueryData(
         ["labels", deletedLabel.workspaceId],
         (existingLabels: Array<typeof deletedLabel> | undefined) =>

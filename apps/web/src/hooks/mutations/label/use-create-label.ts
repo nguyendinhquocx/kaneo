@@ -1,14 +1,32 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreateLabelRequest } from "@/fetchers/label/create-label";
 import createLabel from "@/fetchers/label/create-label";
+import { createShareFullLabel } from "@/fetchers/share/share-full-api";
+import {
+  getShareCapability,
+  invalidateShareQueries,
+} from "@/components/share/share-capability";
 import { addLabelToTaskInTasksCache } from "./sync-task-labels-cache";
 
 function useCreateLabel() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: createLabel,
+    mutationFn: (input: CreateLabelRequest) => {
+      const capability = getShareCapability();
+      if (capability) {
+        // Labels are per-task rows scoped by taskId — the share route
+        // verifies the task lives in the linked project.
+        return createShareFullLabel(capability.token, input.taskId ?? "", {
+          name: input.name,
+          color: input.color,
+        }) as unknown as ReturnType<typeof createLabel>;
+      }
+      return createLabel(input);
+    },
     onSuccess: (createdLabel, variables: CreateLabelRequest) => {
+      invalidateShareQueries(queryClient);
+      if (getShareCapability()) return;
       queryClient.setQueryData(
         ["labels", variables.workspaceId],
         (existingLabels: Array<typeof createdLabel> | undefined) => {

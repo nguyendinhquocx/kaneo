@@ -35,6 +35,7 @@ import { getInitials } from "@/lib/get-initials";
 import { getPriorityLabel, getStatusDisplayLabel } from "@/lib/i18n/domain";
 import { getPriorityIcon } from "@/lib/priority";
 import { toast } from "@/lib/toast";
+import { getShareCapability } from "@/components/share/share-capability";
 import TaskAssigneePopover from "./task-assignee-popover";
 import TaskDueDatePopover from "./task-due-date-popover";
 import TaskLabelsPopover from "./task-labels-popover";
@@ -89,7 +90,9 @@ export default function TaskPropertiesSidebar({
   const { data: githubIntegration } = useGetGithubIntegration(projectId);
   const { data: giteaIntegration } = useGetGiteaIntegration(projectId);
   const { data: workspaceProjects = [] } = useGetProjects({ workspaceId });
+  const shareCapability = getShareCapability();
   const canMoveTask =
+    !shareCapability &&
     Boolean(task) && workspaceProjects.some((p) => p.id !== task?.projectId);
   const statusColumn = columns.find(
     (column) => column.slug === task?.status || column.id === task?.status,
@@ -113,9 +116,13 @@ export default function TaskPropertiesSidebar({
   );
 
   const handleCopyTaskLink = () => {
-    navigator.clipboard.writeText(
-      `${window.location.origin}/dashboard/workspace/${workspaceId}/project/${projectId}/task/${taskId}`,
-    );
+    // SPEC-2026-10-22: capability holders copy the share-scoped URL — never
+    // an internal dashboard URL.
+    const capability = getShareCapability();
+    const url = capability
+      ? `${window.location.origin}/share/project/${capability.token}/task/${taskId}`
+      : `${window.location.origin}/dashboard/workspace/${workspaceId}/project/${projectId}/task/${taskId}`;
+    navigator.clipboard.writeText(url);
     toast.message(t("tasks:properties.copyTaskLink"));
   };
 
@@ -167,6 +174,7 @@ export default function TaskPropertiesSidebar({
                     />
                   </TooltipContent>
                 </Tooltip>
+                {shareCapability ? null : (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -186,6 +194,7 @@ export default function TaskPropertiesSidebar({
                     />
                   </TooltipContent>
                 </Tooltip>
+                )}
               </TooltipProvider>
             </div>
 
@@ -354,6 +363,7 @@ export default function TaskPropertiesSidebar({
                       />
                     </TooltipContent>
                   </Tooltip>
+                  {shareCapability ? null : (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -373,6 +383,7 @@ export default function TaskPropertiesSidebar({
                       />
                     </TooltipContent>
                   </Tooltip>
+                  )}
                 </TooltipProvider>
               </div>
 

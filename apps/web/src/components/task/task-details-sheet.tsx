@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/tooltip";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import useGetTask from "@/hooks/queries/task/use-get-task";
+import { getShareCapability } from "@/components/share/share-capability";
 import TaskDetailsContent from "./task-details-content";
 import TaskPropertiesSidebar from "./task-properties-sidebar";
 
@@ -52,6 +53,16 @@ export default function TaskDetailsSheet({
 
   const handleOpenFullPage = useCallback(() => {
     if (!currentTaskId) return;
+    // SPEC-2026-10-22: capability holders maximize into the share-scoped
+    // task route — never into an authenticated dashboard URL.
+    const capability = getShareCapability();
+    if (capability) {
+      navigate({
+        to: "/share/project/$token/task/$taskId",
+        params: { token: capability.token, taskId: currentTaskId },
+      });
+      return;
+    }
     navigate({
       to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
       params: {

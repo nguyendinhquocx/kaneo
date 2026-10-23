@@ -1,14 +1,28 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import updateTaskTitle from "@/fetchers/task/update-task-title";
+import { updateShareFullTask } from "@/fetchers/share/share-full-api";
+import {
+  getShareCapability,
+  invalidateShareQueries,
+} from "@/components/share/share-capability";
 import type getTaskRelations from "@/fetchers/task-relation/get-task-relations";
 import type Task from "@/types/task";
 
 export function useUpdateTaskTitle() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (task: Task) => updateTaskTitle(task.id, task),
+  return useMutation<Task, Error, Task>({
+    mutationFn: (task: Task) => {
+      const capability = getShareCapability();
+      if (capability) {
+        return updateShareFullTask(capability.token, task.id, {
+          title: task.title,
+        }) as unknown as Promise<Task>;
+      }
+      return updateTaskTitle(task.id, task) as unknown as Promise<Task>;
+    },
     onSuccess: (updatedTask, variables) => {
+      invalidateShareQueries(queryClient);
       const title = updatedTask.title || variables.title;
       queryClient.setQueryData<Task>(["task", variables.id], (current) =>
         current ? { ...current, title } : current,

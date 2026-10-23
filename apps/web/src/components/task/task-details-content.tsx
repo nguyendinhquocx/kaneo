@@ -13,6 +13,7 @@ import useGetProject from "@/hooks/queries/project/use-get-project";
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-relations";
 import { getParentTaskRouteParams } from "@/lib/task-parent-route";
+import { getShareCapability } from "@/components/share/share-capability";
 import type { ExternalLink } from "@/types/external-link";
 import TaskDescription from "./task-description";
 import TaskExecutionPanel from "./task-execution-panel";
@@ -35,6 +36,7 @@ export default function TaskDetailsContent({
 }: TaskDetailsContentProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const shareCapability = getShareCapability();
   const { data: task } = useGetTask(taskId ?? "");
   const { data: project } = useGetProject({ id: projectId, workspaceId });
   const { data: activities = [] } = useGetActivitiesByTaskId(taskId ?? "");
@@ -57,7 +59,19 @@ export default function TaskDetailsContent({
           <button
             type="button"
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit"
-            onClick={() =>
+            onClick={() => {
+              // SPEC-2026-10-22: capability navigation stays inside the
+              // share surface; cross-project parents are never expanded.
+              if (shareCapability && parentTask.projectId === shareCapability.projectId) {
+                navigate({
+                  to: "/share/project/$token/task/$taskId",
+                  params: {
+                    token: shareCapability.token,
+                    taskId: parentTask.id,
+                  },
+                });
+                return;
+              }
               navigate({
                 to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
                 params: getParentTaskRouteParams({
@@ -66,8 +80,8 @@ export default function TaskDetailsContent({
                   parentTaskId: parentTask.id,
                   parentProjectId: parentTask.projectId,
                 }),
-              })
-            }
+              });
+            }}
           >
             <ArrowUpRight className="size-3" />
             <span>
@@ -77,19 +91,23 @@ export default function TaskDetailsContent({
           </button>
         )}
         <p className="text-xs font-semibold text-foreground/70">
-          {project?.slug}-{task?.number}
+          {project?.slug ?? ""}-{task?.number}
         </p>
         <TaskTitle taskId={taskId} />
         <TaskDescription taskId={taskId} />
       </div>
-      <TaskExecutionPanel taskId={taskId} projectId={projectId} />
-      {!isLoadingExternalLinks && externalLinks.length > 0 && (
-        <div className="mt-4">
-          <ExternalLinksAccordion
-            externalLinks={externalLinks as ExternalLink[]}
-            isLoading={isLoadingExternalLinks}
-          />
-        </div>
+      {shareCapability ? null : (
+        <TaskExecutionPanel taskId={taskId} projectId={projectId} />
+      )}
+      {shareCapability ? null : (
+        !isLoadingExternalLinks && externalLinks.length > 0 && (
+          <div className="mt-4">
+            <ExternalLinksAccordion
+              externalLinks={externalLinks as ExternalLink[]}
+              isLoading={isLoadingExternalLinks}
+            />
+          </div>
+        )
       )}
       <div className="mt-4">
         <TaskSubtasks
@@ -108,7 +126,7 @@ export default function TaskDetailsContent({
       <span className="text-sm font-medium text-muted-foreground h-[1px] bg-border w-full block shrink-0" />
       <div className="flex flex-col gap-4">
         <h1 className="text-md font-semibold">{t("tasks:detail.activity")}</h1>
-        {user?.id && taskId && <CommentInput taskId={taskId} />}
+        {(shareCapability || user?.id) && taskId && <CommentInput taskId={taskId} />}
         {activities.length > 0 ? (
           <Timeline>
             {activities.map((activity, index) => {

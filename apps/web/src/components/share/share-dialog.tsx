@@ -52,7 +52,7 @@ export default function ShareDialog({
   const { data: links = [] } = useGetShareLinks(resourceType, resourceId);
   const createLink = useCreateShareLink();
   const revokeLink = useRevokeShareLink();
-  const [permission, setPermission] = useState<"view" | "edit">("view");
+  const [permission, setPermission] = useState<"view" | "edit" | "full">("view");
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [legacyLinkId, setLegacyLinkId] = useState<string | null>(null);
   const supportsEdit =
@@ -173,7 +173,25 @@ export default function ShareDialog({
                     {t("permission.edit")}
                   </Button>
                 ) : null}
+                {resourceType === "project" ? (
+                  <Button
+                    variant={permission === "full" ? "secondary" : "ghost"}
+                    size="xs"
+                    onClick={() => setPermission("full")}
+                    className="h-11 flex-1 text-xs sm:h-6"
+                  >
+                    {t("permission.full")}
+                  </Button>
+                ) : null}
               </div>
+              {resourceType === "project" && permission === "full" ? (
+                <p
+                  role="note"
+                  className="rounded-md border border-border/80 bg-muted/40 p-2 text-[11px] text-muted-foreground"
+                >
+                  {t("permission.fullWarning")}
+                </p>
+              ) : null}
               <Button
                 size="xs"
                 className="min-h-11 sm:min-h-6"
@@ -225,7 +243,9 @@ export default function ShareDialog({
                           : "bg-muted text-muted-foreground",
                       )}
                     >
-                      {link.permission === "edit"
+                      {link.permission === "full"
+                        ? t("permission.full")
+                        : link.permission === "edit"
                         ? t("permission.edit")
                         : t("permission.view")}
                     </span>

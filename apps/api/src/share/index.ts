@@ -11,10 +11,7 @@ import { buildAssetResponse } from "../storage/asset-response";
 import { contentReferencesAsset } from "../storage/cleanup-assets";
 import { getPrivateObject } from "../storage/s3";
 import { rewriteContentAssetRefs } from "./agent-content";
-import {
-  buildFullProjectPayload,
-  getFullLinkProject,
-} from "./full-access";
+import { buildFullProjectPayload } from "./full-access";
 import {
   fullCreateComment,
   fullCreateDocument,
@@ -37,7 +34,6 @@ import {
   fullUpdateComment,
   fullUpdateDocument,
   fullUpdateTask,
-  type FullTaskWriteBody,
 } from "./full-write";
 
 // Public origin for share asset rewrites. Behind the reverse proxy c.req.url
@@ -669,6 +665,7 @@ const fullTaskUpdateSchema = v.object({
   startDate: v.optional(v.nullable(v.string())),
   dueDate: v.optional(v.nullable(v.string())),
   assigneeId: v.optional(v.nullable(v.string())),
+  position: v.optional(v.number()),
 });
 
 const documentUpdateSchema = v.object({
@@ -929,12 +926,12 @@ app.put("/project/:token/task/:taskId/subtasks/reorder", async (c) => {
   const taskId = c.req.param("taskId");
   const body = await c.req.json().then((raw) =>
     v.parse(
-      v.object({ orderedRelationIds: v.array(v.string()) }),
+      v.object({ orderedTargetTaskIds: v.array(v.string()) }),
       raw,
     ),
   );
   return c.json(
-    await fullReorderSubtasks(link, taskId, body.orderedRelationIds),
+    await fullReorderSubtasks(link, taskId, body.orderedTargetTaskIds),
   );
 });
 

@@ -11,7 +11,7 @@ export type ShareLink = {
   id: string;
   resourceType: ShareResourceType;
   resourceId: string;
-  permission: "view" | "edit";
+  permission: "view" | "edit" | "full";
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
@@ -41,7 +41,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export async function createShareLink(input: {
   resourceType: ShareResourceType;
   resourceId: string;
-  permission: "view" | "edit";
+  permission: "view" | "edit" | "full";
 }) {
   return request<CreatedShareLink>("/share-manage", {
     method: "POST",

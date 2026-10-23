@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { getShareCapability } from "@/components/share/share-capability";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUser } from "@/hooks/queries/workspace-users/use-active-workspace-user";
 import { authClient } from "@/lib/auth-client";
@@ -52,6 +53,22 @@ export function useWorkspacePermission() {
   const workspaceId = activeWorkspace?.id;
   const role = activeMember?.role as string | undefined;
 
+  // SPEC-2026-10-22: a full capability holder gets exactly the T1 matrix
+  // capabilities — ordinary project work — and never workspace administration
+  // or share-link management.
+  const capability = getShareCapability();
+  const capabilityMap = useMemo(() => {
+    if (!capability) return null;
+    const map = emptyCapabilityMap();
+    map.createTasks = true;
+    map.manageTasks = true;
+    map.assignTasks = true;
+    map.writeDocuments = true;
+    map.deleteDocuments = true;
+    map.manageLabels = true;
+    return map;
+  }, [capability]);
+
   // One query that fans out to all capability checks in parallel and caches
   // the resulting map by (workspaceId, role). Refetches when either changes
   // — e.g., when the admin edits the role's permissions in the Roles UI and
@@ -62,7 +79,7 @@ export function useWorkspacePermission() {
     isFetching,
   } = useQuery({
     queryKey: ["workspace-capabilities", workspaceId, role],
-    enabled: Boolean(workspaceId && role),
+    enabled: Boolean(!capabilityMap && workspaceId && role),
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<CapabilityMap> => {
       const entries = Object.entries(CAPABILITIES) as Array<
@@ -90,7 +107,7 @@ export function useWorkspacePermission() {
     },
   });
 
-  const can: CapabilityMap = capabilities ?? emptyCapabilityMap();
+  const can: CapabilityMap = capabilityMap ?? capabilities ?? emptyCapabilityMap();
 
   const helpers = useMemo(() => {
     return {
@@ -113,6 +130,21 @@ export function useWorkspacePermission() {
       // Escape hatch for ad-hoc permission checks (uncached). Prefer adding
       // a capability above.
       hasPermission: async (permissions: Record<string, string[]>) => {
+        if (getShareCapability()) {
+          // Only the project-work capabilities above are granted to a
+          // capability holder; everything else denies.
+          return Object.entries(permissions).every(([resource, actions]) => {
+            if (resource === "task") {
+              return actions.every((action) =>
+                ["create", "update", "delete", "assign"].includes(action),
+              );
+            }
+            if (resource === "label") {
+              return true;
+            }
+            return false;
+          });
+        }
         try {
           const res = await authClient.organization.hasPermission({
             organizationId: workspaceId,
@@ -131,14 +163,14 @@ export function useWorkspacePermission() {
     ...helpers,
     workspace: activeWorkspace,
     member: activeMember,
-    role,
-    isOwner: role === "owner",
-    isAdmin: role === "owner" || role === "admin",
+    role: capabilityMap ? "member" : role,
+    isOwner: capabilityMap ? false : role === "owner",
+    isAdmin: capabilityMap ? false : role === "owner" || role === "admin",
     // True while the first capability fetch is in flight. Useful for hiding
     // action UI during the initial render instead of flashing it on then
     // off when the server check resolves.
     isCheckingPermissions:
-      Boolean(workspaceId && role) && (isLoading || !capabilities),
-    isRefetchingPermissions: isFetching,
+      !capabilityMap && Boolean(workspaceId && role) && (isLoading || !capabilities),
+    isRefetchingPermissions: capabilityMap ? false : isFetching,
   };
 }

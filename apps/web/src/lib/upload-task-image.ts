@@ -3,6 +3,8 @@ import {
   createImageUpload,
   finalizeImageUpload,
 } from "@/fetchers/task/create-image-upload";
+import { uploadShareFullAsset } from "@/fetchers/share/share-full-api";
+import { getShareCapability } from "@/components/share/share-capability";
 
 const allowedImageMimeTypes = new Set([
   "image/apng",
@@ -55,6 +57,28 @@ export async function uploadTaskImage({
   if (!resolvedOwnerId) throw new Error("An upload owner is required.");
 
   const filename = file.name || "image";
+
+  // SPEC-2026-10-22: capability holders upload through the share ticket +
+  // finalize pair (owner-approved caps + MIME allowlist enforced server-side).
+  const capability = getShareCapability();
+  if (capability) {
+    const asset = await uploadShareFullAsset({
+      token: capability.token,
+      ownerType: resolvedOwnerType as "task_description" | "task_comment" | "document",
+      ownerId: resolvedOwnerId,
+      file,
+    });
+    return {
+      id: asset.id,
+      url: asset.url ?? "",
+      filename,
+      mimeType: file.type,
+      size: file.size,
+      alt: getImageAltText(filename),
+      kind: isSupportedImageFile(file) ? "image" : "attachment",
+    };
+  }
+
   const ticket = await createImageUpload({
     ownerType: resolvedOwnerType,
     ownerId: resolvedOwnerId,

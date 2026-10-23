@@ -1,5 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { reorderSubtasks } from "@/fetchers/task-relation/reorder-subtasks";
+import { reorderShareFullSubtasks } from "@/fetchers/share/share-full-api";
+import { getShareCapability } from "@/components/share/share-capability";
 import {
   type ProjectTasksCache,
   reorderSubtaskRelations,
@@ -24,8 +26,19 @@ type ReorderInput = {
 export function useReorderSubtasks() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ taskId, orderedTargetTaskIds }: ReorderInput) =>
-      reorderSubtasks({ taskId, orderedTargetTaskIds }),
+    mutationFn: ({ taskId, orderedTargetTaskIds }: ReorderInput) => {
+      const capability = getShareCapability();
+      if (capability) {
+        // Guest reorder sends task ids; the share route maps them onto
+        // relation positions server-side.
+        return reorderShareFullSubtasks(
+          capability.token,
+          taskId,
+          orderedTargetTaskIds,
+        ) as unknown as ReturnType<typeof reorderSubtasks>;
+      }
+      return reorderSubtasks({ taskId, orderedTargetTaskIds });
+    },
     onMutate: async ({ taskId, projectId, orderedTargetTaskIds }) => {
       const relationKey = ["task-relations", taskId];
       const taskKey = ["tasks", projectId];
