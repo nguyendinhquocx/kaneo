@@ -257,6 +257,14 @@ Guest comment path is a NEW dedicated controller (no fake `userId`, no reuse of 
 
 Polling fallback: refetch on window focus + bounded interval poll ≤10s while `document.visibilityState === "visible"` + refetch after each mutation; no authenticated WebSocket mount, no reconnect loop, no capability WS ticket in v1. Matches UX Contract Freshness; owner may upgrade to a filtered WS ticket later (out of scope).
 
+## Implementation Progress (EP)
+
+- T1 DONE: matrix §A-G proven against source; baseline tests recorded (api 264 unit / web 62).
+- T2 DONE (commit 12714b08): full capability server-side; integration 191→194 PASS incl. 19 full-share tests.
+- T3 DONE (commit 3433a418): capability transport + owner component parity; web typecheck 0 errors, build PASS, tests 62/62.
+- T4 DONE (commit 81978644): security matrix tests (admin lockout, expiry, cross-project IDOR); full suite green (api integration 194/194, unit 264/264, web 62/62, build PASS).
+- Not done by design: production deployment (requires separate guarded release plan + owner UAT per spec); doc comments for guests (schema `document_comment.user_id` NOT NULL — excluded, matrix §C row 5); capability WS ticket (polling fallback per §G).
+
 ## Checkpoints
 
 1. T1 matrix and agent-control partition reviewed before any authorization/UI implementation.
