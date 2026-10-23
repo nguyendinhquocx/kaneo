@@ -960,3 +960,129 @@ describe("API integration: full project share capability", () => {
     expect(await detail.text()).not.toContain(link.token);
   });
 });
+
+describe("API integration: T4 security matrix", () => {
+  beforeEach(async () => {
+    await resetTestDatabase();
+    resetShareRateLimits();
+    storageMocks.deleteS3Object.mockClear();
+    auditMock.fail = false;
+  });
+
+  it("a full-link holder cannot mint, list, or revoke any share link", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const mint = await app.request("/api/share-manage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        resourceType: "project",
+        resourceId: project.id,
+        permission: "full",
+      }),
+    });
+    expect(mint.status).toBe(401);
+
+    const list = await app.request(
+      `/api/share-manage?resourceType=project&resourceId=${project.id}`,
+    );
+    expect(list.status).toBe(401);
+
+    const revoke = await app.request(`/api/share-manage/${link.id}`, {
+      method: "DELETE",
+    });
+    expect(revoke.status).toBe(401);
+  });
+
+  it("an expired full link is denied on every route", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const task = await seedTask(project.id);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    await db
+      .update(schema.shareLinkTable)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.shareLinkTable.id, link.id));
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const read = await app.request(`/api/share/project/${link.token}`);
+    expect(read.status).toBe(404);
+    const members = await app.request(
+      `/api/share/project/${link.token}/members`,
+    );
+    expect(members.status).toBe(404);
+    const detail = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+    );
+    expect(detail.status).toBe(404);
+  });
+
+  it("cross-project asset ids and task ids never resolve through the link", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const otherProject = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+      name: "Other",
+    });
+    const foreignTask = await seedTask(otherProject.project.id);
+    const [foreignAsset] = await db
+      .insert(schema.assetTable)
+      .values({
+        workspaceId: admin.workspace.id,
+        projectId: otherProject.project.id,
+        taskId: foreignTask.id,
+        objectKey: `workspace/${admin.workspace.id}/content/task_description/${foreignTask.id}/foreign.png`,
+        filename: "foreign.png",
+        mimeType: "image/png",
+        size: 10,
+        surface: "description",
+      })
+      .returning();
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const assetRead = await app.request(
+      `/api/share/project/${link.token}/asset/${foreignAsset.id}`,
+    );
+    expect(assetRead.status).toBe(404);
+
+    const taskRead = await app.request(
+      `/api/share/project/${link.token}/task/${foreignTask.id}`,
+    );
+    expect(taskRead.status).toBe(404);
+
+    const taskWrite = await app.request(
+      `/api/share/project/${link.token}/task/${foreignTask.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "hijack" }),
+      },
+    );
+    expect(taskWrite.status).toBe(404);
+  });
+});
