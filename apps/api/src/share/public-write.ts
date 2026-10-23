@@ -19,6 +19,9 @@ import {
 // by share-link ID and the action surface is the minimum viable: basic task
 // fields, document content CAS, goal check-in toggle/note. No deletes, no
 // assignment, no settings, no agent control.
+// SPEC-2026-10-22 full-project-share-link: every audit row now commits inside
+// the same transaction as its mutation — an audit failure rolls back the
+// mutation instead of leaving unattributed data behind.
 
 function agentControlledRefusal() {
   return new HTTPException(403, {
@@ -94,6 +97,8 @@ export async function publicCreateTask(
         number: taskNumber,
       })
       .returning();
+    // Atomic mutation + audit: a failed audit insert rolls back the task.
+    await appendShareActionAudit(link, "task.create", tx);
     return task;
   });
 
@@ -101,7 +106,6 @@ export async function publicCreateTask(
     throw new HTTPException(500, { message: "Failed to create task" });
   }
 
-  await appendShareActionAudit(link, "task.create");
   return {
     id: created.id,
     title: created.title,
@@ -179,16 +183,23 @@ export async function publicUpdateTask(
     updates.dueDate = body.dueDate ? new Date(body.dueDate) : null;
   }
 
-  const [updated] = await db
-    .update(schema.taskTable)
-    .set(updates)
-    .where(
-      and(
-        eq(schema.taskTable.id, taskId),
-        eq(schema.taskTable.projectId, link.resourceId),
-      ),
-    )
-    .returning();
+  const [updated] = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(schema.taskTable)
+      .set(updates)
+      .where(
+        and(
+          eq(schema.taskTable.id, taskId),
+          eq(schema.taskTable.projectId, link.resourceId),
+        ),
+      )
+      .returning();
+    if (!row) {
+      return [] as typeof row[];
+    }
+    await appendShareActionAudit(link, "task.update", tx);
+    return [row];
+  });
   if (!updated) {
     throw new HTTPException(404, { message: "Not found" });
   }
@@ -198,7 +209,6 @@ export async function publicUpdateTask(
       taskId,
     }).catch(() => {});
   }
-  await appendShareActionAudit(link, "task.update");
   return {
     id: updated.id,
     title: updated.title,
@@ -221,38 +231,44 @@ export async function publicUpdateDocument(
     throw new HTTPException(404, { message: "Not found" });
   }
 
-  const [updated] = await db
-    .update(schema.documentTable)
-    .set({
-      title: body.title,
-      content: body.content,
-      revision: body.revision + 1,
-    })
-    .where(
-      and(
-        eq(schema.documentTable.id, link.resourceId),
-        eq(schema.documentTable.revision, body.revision),
-      ),
-    )
-    .returning();
+  const [updated] = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(schema.documentTable)
+      .set({
+        title: body.title,
+        content: body.content,
+        revision: body.revision + 1,
+      })
+      .where(
+        and(
+          eq(schema.documentTable.id, link.resourceId),
+          eq(schema.documentTable.revision, body.revision),
+        ),
+      )
+      .returning();
+    if (!row) {
+      return [] as typeof row[];
+    }
+    await appendShareActionAudit(link, "document.update", tx);
+    return [row];
+  });
   if (!updated) {
     throw new HTTPException(409, {
       message: "Document was modified by someone else",
     });
   }
 
-  if (document.content !== updated.content) {
-    deleteOrphanedAssets(document.content, updated.content, {
-      documentId: document.id,
-    }).catch(() => {});
-  }
-  await appendShareActionAudit(link, "document.update");
-  return {
-    id: updated.id,
-    title: updated.title,
-    content: updated.content,
-    revision: updated.revision,
-  };
+    if (document.content !== updated.content) {
+      deleteOrphanedAssets(document.content, updated.content, {
+        documentId: document.id,
+      }).catch(() => {});
+    }
+    return {
+      id: updated.id,
+      title: updated.title,
+      content: updated.content,
+      revision: updated.revision,
+    };
 }
 
 export async function publicToggleGoalCheckin(
@@ -314,6 +330,7 @@ export async function publicToggleGoalCheckin(
         })
         .where(eq(schema.goalCheckinTable.id, locked.id))
         .returning();
+      await appendShareActionAudit(link, "goal.checkin.toggle", tx);
       return updated;
     }
 
@@ -335,6 +352,7 @@ export async function publicToggleGoalCheckin(
       })
       .returning();
     if (inserted) {
+      await appendShareActionAudit(link, "goal.checkin.toggle", tx);
       return inserted;
     }
 
@@ -358,6 +376,7 @@ export async function publicToggleGoalCheckin(
       .set({ completed: !raced.completed, checkedByUserId: null })
       .where(eq(schema.goalCheckinTable.id, raced.id))
       .returning();
+    await appendShareActionAudit(link, "goal.checkin.toggle", tx);
     return updated;
   });
 
@@ -365,7 +384,6 @@ export async function publicToggleGoalCheckin(
     throw new HTTPException(500, { message: "Failed to toggle check-in" });
   }
 
-  await appendShareActionAudit(link, "goal.checkin.toggle");
   return {
     id: row.id,
     checkInDate: row.checkInDate,
@@ -394,19 +412,26 @@ export async function publicUpdateGoalNote(
     throw new HTTPException(404, { message: "Not found" });
   }
 
-  const [updated] = await db
-    .update(schema.goalCheckinTable)
-    .set({
-      note: body.note,
-      noteRevision: body.noteRevision + 1,
-    })
-    .where(
-      and(
-        eq(schema.goalCheckinTable.id, checkinId),
-        eq(schema.goalCheckinTable.noteRevision, body.noteRevision),
-      ),
-    )
-    .returning();
+  const [updated] = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(schema.goalCheckinTable)
+      .set({
+        note: body.note,
+        noteRevision: body.noteRevision + 1,
+      })
+      .where(
+        and(
+          eq(schema.goalCheckinTable.id, checkinId),
+          eq(schema.goalCheckinTable.noteRevision, body.noteRevision),
+        ),
+      )
+      .returning();
+    if (!row) {
+      return [] as typeof row[];
+    }
+    await appendShareActionAudit(link, "goal.checkin.note", tx);
+    return [row];
+  });
   if (!updated) {
     throw new HTTPException(409, {
       message: "Note was modified by someone else",
@@ -418,7 +443,6 @@ export async function publicUpdateGoalNote(
       goalCheckinId: checkin.id,
     }).catch(() => {});
   }
-  await appendShareActionAudit(link, "goal.checkin.note");
   return {
     checkInDate: updated.checkInDate,
     completed: updated.completed,

@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
   type S3ClientConfig,
@@ -323,6 +324,42 @@ export function validateTaskAssetUploadInput(
   }
 }
 
+// SPEC-2026-10-22 full-project-share-link: owner-approved MIME allowlist for
+// capability uploads. Everything not listed is rejected — no HTML/SVG, no
+// scripts/executables, no archives, no application/octet-stream uploads.
+const fullLinkAllowedMimeTypes = new Set([
+  ...allowedImageMimeTypes,
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/json",
+  "application/xml",
+  "text/xml",
+]);
+
+export function isFullLinkAllowedContentType(contentType: string): boolean {
+  return fullLinkAllowedMimeTypes.has(contentType.toLowerCase().split(";")[0]?.trim() ?? "");
+}
+
+export function validateFullLinkUploadInput(
+  contentType: string,
+  size: number,
+) {
+  if (!isFullLinkAllowedContentType(contentType)) {
+    throw new Error(
+      "This file type is not allowed through a share link. Allowed: images, PDF, Word, Excel, PowerPoint, plain text, Markdown, CSV, JSON, XML.",
+    );
+  }
+  validateTaskAssetUploadInput(contentType, size);
+}
+
 export async function createTaskImageUploadUrl(
   context: TaskImageUploadContext,
 ): Promise<TaskImageUploadUrl> {
@@ -394,6 +431,23 @@ export function assertTaskImageKeyMatchesContext(
   const objectPrefix = buildObjectKeyPrefix(context);
   const fullPrefix = `${applyKeyPrefix(config.keyPrefix, objectPrefix)}/`;
   return key.startsWith(fullPrefix);
+}
+
+export async function getPrivateObjectMeta(
+  key: string,
+): Promise<{ contentType: string | undefined; contentLength: number | undefined }> {
+  const config = getStorageConfig();
+  const client = getClient(config);
+  const response = await client.send(
+    new HeadObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+    }),
+  );
+  return {
+    contentType: response.ContentType,
+    contentLength: response.ContentLength,
+  };
 }
 
 export async function getPrivateObject(key: string): Promise<AssetObject> {

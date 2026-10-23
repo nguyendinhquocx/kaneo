@@ -11,6 +11,34 @@ import { buildAssetResponse } from "../storage/asset-response";
 import { contentReferencesAsset } from "../storage/cleanup-assets";
 import { getPrivateObject } from "../storage/s3";
 import { rewriteContentAssetRefs } from "./agent-content";
+import {
+  buildFullProjectPayload,
+  getFullLinkProject,
+} from "./full-access";
+import {
+  fullCreateComment,
+  fullCreateDocument,
+  fullCreateLabel,
+  fullCreateRelation,
+  fullCreateTask,
+  fullCreateUploadTicket,
+  fullDeleteComment,
+  fullDeleteDocument,
+  fullDeleteLabel,
+  fullDeleteRelation,
+  fullDeleteTask,
+  fullFinalizeUpload,
+  fullGetDocument,
+  fullGetTaskDetail,
+  fullListDocuments,
+  fullListMembers,
+  fullReorderSubtasks,
+  fullSetDocumentArchived,
+  fullUpdateComment,
+  fullUpdateDocument,
+  fullUpdateTask,
+  type FullTaskWriteBody,
+} from "./full-write";
 
 // Public origin for share asset rewrites. Behind the reverse proxy c.req.url
 // carries the internal http scheme/host, so configured origins must win —
@@ -63,6 +91,36 @@ app.get("/project/:token", async (c) => {
   assertShareRateLimit(c, "read", hashShareToken(token));
 
   const link = await resolveShareLink(token, "project", "view");
+  const origin = shareOrigin(new URL(c.req.url).origin);
+
+  // SPEC-2026-10-22: a `full` link gets the holder payload — assignee ids,
+  // labels, and the agent-control description boundary. view/edit keep the
+  // minimized public DTO unchanged.
+  if (link.permission === "full") {
+    const payload = await buildFullProjectPayload(link.resourceId);
+    const withTaskAssetUrls = <
+      T extends { description: string | null; descriptionLocked?: boolean },
+    >(task: T): T => ({
+      ...task,
+      description:
+        task.description && !task.descriptionLocked
+          ? rewriteContentAssetRefs(task.description, origin, "project", token)
+          : task.description,
+    });
+    return c.json({
+      ...payload,
+      description: payload.description
+        ? rewriteContentAssetRefs(payload.description, origin, "project", token)
+        : payload.description,
+      columns: payload.columns.map((column) => ({
+        ...column,
+        tasks: column.tasks.map(withTaskAssetUrls),
+      })),
+      archivedTasks: payload.archivedTasks.map(withTaskAssetUrls),
+      plannedTasks: payload.plannedTasks.map(withTaskAssetUrls),
+    });
+  }
+
   const payload = await buildPublicProjectPayload(link.resourceId, {
     requirePublic: false,
   });
@@ -73,7 +131,6 @@ app.get("/project/:token", async (c) => {
   // Task descriptions can embed asset refs; share-scoped URLs let the link
   // holder fetch them with the same capability instead of leaking private
   // /api/asset/ paths that 401 for anonymous consumers.
-  const origin = shareOrigin(new URL(c.req.url).origin);
   const withAssetUrls = (description: string | null): string | null =>
     description
       ? rewriteContentAssetRefs(description, origin, "project", token)
@@ -233,6 +290,22 @@ async function canShareReadAsset(
     goalCheckinId: string | null;
   },
 ): Promise<boolean> {
+  // SPEC-2026-10-22: a full project link covers project-scoped assets on the
+  // task description/comment and document surfaces. Goal-note assets stay
+  // out (goals are not part of a project capability) and cross-project ids
+  // fail closed.
+  if (link.resourceType === "project" && link.permission === "full") {
+    if (asset.projectId !== link.resourceId) {
+      return false;
+    }
+    return (
+      asset.surface === "description" ||
+      asset.surface === "comment" ||
+      asset.surface === "document" ||
+      asset.surface === "document_comment"
+    );
+  }
+
   if (link.resourceType === "project") {
     if (
       asset.projectId !== link.resourceId ||
@@ -535,21 +608,67 @@ app.post("/project/:token/task", async (c) => {
   const token = c.req.param("token");
   assertShareRateLimit(c, "write", hashShareToken(token));
 
-  const link = await resolveShareLink(token, "project", "edit");
-  const body = await c.req.json().then((raw) => v.parse(taskCreateSchema, raw));
+  const raw = await c.req.json();
+  const link = await resolveShareLink(token, "project", "view");
+  // A `full` link takes the extended task surface (assignee, labels, virtual
+  // statuses); edit links keep the basic-fields contract; view links and
+  // unknown tokens keep failing with the same generic 404 as before.
+  if (link.permission === "full") {
+    const body = await v.parse(fullTaskCreateSchema, raw);
+    return c.json(await fullCreateTask(link, body));
+  }
+  if (link.permission !== "edit") {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+
+  const body = await v.parse(taskCreateSchema, raw);
   const task = await publicCreateTask(link, body);
   return c.json(task);
 });
 
 app.put("/project/:token/task/:taskId", async (c) => {
   const token = c.req.param("token");
+  const taskId = c.req.param("taskId");
   assertShareRateLimit(c, "write", hashShareToken(token));
 
-  const link = await resolveShareLink(token, "project", "edit");
-  const taskId = c.req.param("taskId");
-  const body = await c.req.json().then((raw) => v.parse(taskUpdateSchema, raw));
+  const raw = await c.req.json();
+  const link = await resolveShareLink(token, "project", "view");
+  // Same contract split: a full link gets the extended surface, an edit link
+  // keeps its basic-field authorization, anything else fails closed.
+  if (link.permission === "full") {
+    const body = await v.parse(fullTaskUpdateSchema, raw);
+    return c.json(await fullUpdateTask(link, taskId, body));
+  }
+  if (link.permission !== "edit") {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+
+  const body = await v.parse(taskUpdateSchema, raw);
   const task = await publicUpdateTask(link, taskId, body);
   return c.json(task);
+});
+
+const fullTaskCreateSchema = v.object({
+  title: v.string(),
+  description: v.optional(v.string()),
+  status: v.optional(v.string()),
+  priority: v.optional(v.string()),
+  startDate: v.optional(v.string()),
+  dueDate: v.optional(v.string()),
+  assigneeId: v.optional(v.nullable(v.string())),
+  labels: v.optional(
+    v.array(v.object({ name: v.string(), color: v.string() })),
+  ),
+});
+
+const fullTaskUpdateSchema = v.object({
+  title: v.optional(v.string()),
+  description: v.optional(v.nullable(v.string())),
+  status: v.optional(v.string()),
+  priority: v.optional(v.string()),
+  startDate: v.optional(v.nullable(v.string())),
+  dueDate: v.optional(v.nullable(v.string())),
+  assigneeId: v.optional(v.nullable(v.string())),
 });
 
 const documentUpdateSchema = v.object({
@@ -600,6 +719,296 @@ app.put("/goal/:token/checkin/:checkinId", async (c) => {
     .then((raw) => v.parse(checkinNoteSchema, raw));
   const row = await publicUpdateGoalNote(link, checkinId, body);
   return c.json(row);
+});
+
+// --- SPEC-2026-10-22: `full` capability routes -----------------------------
+// Every route below resolves with required permission "full" (or branches on
+// link.permission === "full"), stays inside the linked project, and fails
+// closed for agent-controlled objects. All writes use the share-write rate
+// limit and commit their audit row atomically.
+
+app.get("/project/:token/members", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  // Owner-approved minimal disclosure: id, display name, avatar only.
+  return c.json(await fullListMembers(link));
+});
+
+app.get("/project/:token/task/:taskId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const taskId = c.req.param("taskId");
+  const detail = await fullGetTaskDetail(link, taskId);
+  const origin = shareOrigin(new URL(c.req.url).origin);
+  return c.json({
+    ...detail,
+    description:
+      detail.description && !detail.descriptionLocked
+        ? rewriteContentAssetRefs(detail.description, origin, "project", token)
+        : detail.description,
+    comments: detail.comments.map((comment) => ({
+      ...comment,
+      content: comment.content
+        ? rewriteContentAssetRefs(comment.content, origin, "project", token)
+        : comment.content,
+    })),
+  });
+});
+
+app.delete("/project/:token/task/:taskId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const taskId = c.req.param("taskId");
+  return c.json(await fullDeleteTask(link, taskId));
+});
+
+app.post("/project/:token/task/:taskId/comments", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const taskId = c.req.param("taskId");
+  const body = await c.req
+    .json()
+    .then((raw) => v.parse(v.object({ content: v.string() }), raw));
+  return c.json(await fullCreateComment(link, taskId, body.content));
+});
+
+app.patch("/project/:token/comment/:commentId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const commentId = c.req.param("commentId");
+  const body = await c.req
+    .json()
+    .then((raw) => v.parse(v.object({ content: v.string() }), raw));
+  return c.json(await fullUpdateComment(link, commentId, body.content));
+});
+
+app.delete("/project/:token/comment/:commentId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const commentId = c.req.param("commentId");
+  return c.json(await fullDeleteComment(link, commentId));
+});
+
+app.get("/project/:token/documents", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  return c.json(await fullListDocuments(link));
+});
+
+app.post("/project/:token/documents", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const body = await c.req
+    .json()
+    .then((raw) =>
+      v.parse(
+        v.object({ title: v.string(), content: v.optional(v.string()) }),
+        raw,
+      ),
+    );
+  return c.json(
+    await fullCreateDocument(link, {
+      title: body.title,
+      content: body.content ?? "",
+    }),
+  );
+});
+
+app.get("/project/:token/document/:documentId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const documentId = c.req.param("documentId");
+  const origin = shareOrigin(new URL(c.req.url).origin);
+  const document = await fullGetDocument(link, documentId);
+  return c.json({
+    ...document,
+    content: document.content
+      ? rewriteContentAssetRefs(document.content, origin, "project", token)
+      : document.content,
+  });
+});
+
+app.put("/project/:token/document/:documentId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const documentId = c.req.param("documentId");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({
+        title: v.string(),
+        content: v.string(),
+        revision: v.number(),
+      }),
+      raw,
+    ),
+  );
+  return c.json(await fullUpdateDocument(link, documentId, body));
+});
+
+app.post("/project/:token/document/:documentId/archive", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const documentId = c.req.param("documentId");
+  return c.json(await fullSetDocumentArchived(link, documentId, true));
+});
+
+app.post("/project/:token/document/:documentId/unarchive", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const documentId = c.req.param("documentId");
+  return c.json(await fullSetDocumentArchived(link, documentId, false));
+});
+
+app.delete("/project/:token/document/:documentId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const documentId = c.req.param("documentId");
+  return c.json(await fullDeleteDocument(link, documentId));
+});
+
+app.post("/project/:token/task/:taskId/relations", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const taskId = c.req.param("taskId");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({
+        targetTaskId: v.string(),
+        relationType: v.picklist(["subtask", "blocks", "related"]),
+      }),
+      raw,
+    ),
+  );
+  return c.json(
+    await fullCreateRelation(link, taskId, body.targetTaskId, body.relationType),
+  );
+});
+
+app.delete("/project/:token/relation/:relationId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const relationId = c.req.param("relationId");
+  return c.json(await fullDeleteRelation(link, relationId));
+});
+
+app.put("/project/:token/task/:taskId/subtasks/reorder", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const taskId = c.req.param("taskId");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({ orderedRelationIds: v.array(v.string()) }),
+      raw,
+    ),
+  );
+  return c.json(
+    await fullReorderSubtasks(link, taskId, body.orderedRelationIds),
+  );
+});
+
+app.post("/project/:token/task/:taskId/labels", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const taskId = c.req.param("taskId");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({ name: v.string(), color: v.string() }),
+      raw,
+    ),
+  );
+  return c.json(await fullCreateLabel(link, taskId, body));
+});
+
+app.delete("/project/:token/label/:labelId", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const labelId = c.req.param("labelId");
+  return c.json(await fullDeleteLabel(link, labelId));
+});
+
+app.post("/project/:token/asset/upload-ticket", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({
+        ownerType: v.picklist([
+          "task_description",
+          "task_comment",
+          "document",
+        ]),
+        ownerId: v.string(),
+        filename: v.string(),
+        contentType: v.string(),
+        size: v.number(),
+      }),
+      raw,
+    ),
+  );
+  return c.json(await fullCreateUploadTicket(link, body));
+});
+
+app.post("/project/:token/asset/finalize", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({
+        ownerType: v.picklist([
+          "task_description",
+          "task_comment",
+          "document",
+        ]),
+        ownerId: v.string(),
+        key: v.string(),
+        filename: v.string(),
+        contentType: v.string(),
+        size: v.number(),
+      }),
+      raw,
+    ),
+  );
+  return c.json(await fullFinalizeUpload(link, body));
 });
 
 export default app;

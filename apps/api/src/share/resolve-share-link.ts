@@ -10,7 +10,7 @@ import { hashShareToken, isPlausibleShareToken } from "./token";
 // invalid states fail closed with the same generic 404 so a caller cannot
 // distinguish "bad token" from "resource does not exist".
 
-export type SharePermission = "view" | "edit";
+export type SharePermission = "view" | "edit" | "full";
 
 export const SHARE_RESOURCE_TYPES = [
   "project",
@@ -26,7 +26,7 @@ export function isShareResourceType(value: string): value is ShareResourceType {
 }
 
 export function isSharePermission(value: string): value is SharePermission {
-  return value === "view" || value === "edit";
+  return value === "view" || value === "edit" || value === "full";
 }
 
 export type ResolvedShareLink = typeof schema.shareLinkTable.$inferSelect;
@@ -64,16 +64,22 @@ export function assertShareRateLimit(
   }
 }
 
-// Share-link permission model: an `edit` link implies `view`. A `view` link
-// never grants mutations.
+// SPEC-2026-10-22 full-project-share-link: permission lattice is
+// full ⊃ edit ⊃ view. A weaker link never satisfies a stronger requirement
+// and a `full` link is only accepted for actions that declare their real
+// minimum, so requesting "edit" keeps basic-edit links working while "full"
+// gates stay exclusive to full links.
 export function linkGrantsPermission(
   linkPermission: string,
   required: SharePermission,
 ): boolean {
-  return (
-    linkPermission === "edit" ||
-    (linkPermission === "view" && required === "view")
-  );
+  if (required === "full") {
+    return linkPermission === "full";
+  }
+  if (required === "edit") {
+    return linkPermission === "edit" || linkPermission === "full";
+  }
+  return true;
 }
 
 export async function resolveShareLink(
@@ -117,14 +123,21 @@ export async function resolveShareLink(
 
 // Metadata-only audit row for every public mutation. No raw token, no request
 // body, no IP/UA — attribution is by share-link ID by design.
+// SPEC-2026-10-22: `tx` binds the audit insert into the mutation's own
+// transaction; when provided, an audit failure rolls the mutation back.
+// `resourceIdOverride` records the concrete object (e.g. asset id) the action
+// targeted while resourceType/resourceId columns keep the link's scope.
 export async function appendShareActionAudit(
   link: ResolvedShareLink,
   action: string,
+  tx?: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  resourceIdOverride?: string,
 ) {
-  await db.insert(schema.shareActionAuditTable).values({
+  const executor = tx ?? db;
+  await executor.insert(schema.shareActionAuditTable).values({
     shareLinkId: link.id,
     resourceType: link.resourceType,
-    resourceId: link.resourceId,
+    resourceId: resourceIdOverride ?? link.resourceId,
     action,
   });
 }

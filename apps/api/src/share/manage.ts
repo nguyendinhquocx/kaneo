@@ -138,7 +138,7 @@ const shareManage = new Hono<{
           "activity_comment",
         ]),
         resourceId: v.string(),
-        permission: v.picklist(["view", "edit"]),
+        permission: v.picklist(["view", "edit", "full"]),
       }),
     ),
     async (c) => {
@@ -152,6 +152,15 @@ const shareManage = new Hono<{
       ) {
         throw new HTTPException(400, {
           message: "This share resource only supports view links",
+        });
+      }
+
+      // SPEC-2026-10-22 full-project-share-link: `full` is a project-only
+      // capability — a single link must never carry whole-project powers for
+      // a document, goal, or single task resource.
+      if (permission === "full" && resourceType !== "project") {
+        throw new HTTPException(400, {
+          message: "Full links are only available for projects",
         });
       }
 
@@ -178,6 +187,9 @@ const shareManage = new Hono<{
           message: "Agent-controlled projects do not support public edit links",
         });
       }
+      // NOTE: `full` links are intentionally allowed for agent-controlled
+      // projects — restrictions are enforced per object at use time (spec
+      // Assumptions + T1 matrix §B). Only the basic-edit guard stays.
 
       if (resourceType === "task_description") {
         const [task] = await db
@@ -211,7 +223,7 @@ const shareManage = new Hono<{
         });
       }
       const expiresAt =
-        permission === "edit"
+        permission === "edit" || permission === "full"
           ? new Date(Date.now() + EDIT_LINK_TTL_DAYS * 24 * 60 * 60 * 1000)
           : null;
 
