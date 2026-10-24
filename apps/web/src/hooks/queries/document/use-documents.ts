@@ -47,6 +47,9 @@ export function useGetDocuments(projectId: string, includeArchived = false) {
       return listDocuments(projectId, includeArchived);
     },
     enabled: Boolean(capability || projectId),
+    refetchInterval: capability ? 10_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -71,6 +74,9 @@ export function useGetDocument(id: string | null) {
       return getDocument(id as string);
     },
     enabled: Boolean(id),
+    refetchInterval: capability ? 10_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 

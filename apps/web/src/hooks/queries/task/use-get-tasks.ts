@@ -6,7 +6,7 @@ import {
 } from "@/fetchers/share/share-full-api";
 import { getShareCapability } from "@/components/share/share-capability";
 import type Task from "@/types/task";
-import getTasksOriginal from "@/fetchers/task/get-tasks";
+import type { ProjectWithTasks } from "@/types/project";
 
 function mapShareTask(task: ShareFullTask): Task {
   return {
@@ -57,7 +57,7 @@ export function useGetTasks(projectId: string) {
           })),
           archivedTasks: payload.archivedTasks.map(mapShareTask),
           plannedTasks: payload.plannedTasks.map(mapShareTask),
-        } as unknown as Awaited<ReturnType<typeof getTasksOriginal>>;
+        } as unknown as ProjectWithTasks;
       }
       return getTasks(projectId);
     },

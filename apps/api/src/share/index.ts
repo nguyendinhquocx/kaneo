@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import * as v from "valibot";
@@ -11,7 +11,15 @@ import { buildAssetResponse } from "../storage/asset-response";
 import { contentReferencesAsset } from "../storage/cleanup-assets";
 import { getPrivateObject } from "../storage/s3";
 import { rewriteContentAssetRefs } from "./agent-content";
-import { buildFullProjectPayload } from "./full-access";
+import {
+  createShareAssetTicket,
+  verifyShareAssetTicket,
+} from "./asset-ticket";
+import {
+  buildFullProjectPayload,
+  isProjectAgentControlledStrict,
+  isTaskAgentControlled,
+} from "./full-access";
 import {
   fullCreateComment,
   fullCreateDocument,
@@ -51,6 +59,38 @@ function shareOrigin(fallback: string): string {
     }
   }
   return fallback;
+}
+
+// Replace canonical token-free refs with one-asset scoped tickets. The
+// project bearer token never appears in a public resource payload or page
+// content; the ticket expires in one hour and is revalidated against link
+// revocation/expiry on every asset request.
+const FULL_ASSET_REF = /(?:(https?:\/\/[^/\s"'`<>()[\]{}\\]+))?\/(?:api\/)?asset\/([A-Za-z0-9_-]+)/g;
+
+async function rewriteFullAssetRefs(
+  content: string,
+  origin: string,
+  link: ResolvedShareLink,
+): Promise<string> {
+  const matches = [...content.matchAll(FULL_ASSET_REF)];
+  if (matches.length === 0) return content;
+  let output = "";
+  let cursor = 0;
+  for (const match of matches) {
+    const start = match.index ?? 0;
+    const raw = match[0];
+    const absoluteOrigin = match[1];
+    const assetId = match[2];
+    if (!assetId || (absoluteOrigin && new URL(absoluteOrigin).origin !== origin)) {
+      continue;
+    }
+    output += content.slice(cursor, start);
+    const ticket = createShareAssetTicket(link.id, assetId);
+    output += `${origin}/api/share/asset-ticket/${ticket}`;
+    cursor = start + raw.length;
+  }
+  output += content.slice(cursor);
+  return output;
 }
 
 import {
@@ -94,26 +134,27 @@ app.get("/project/:token", async (c) => {
   // minimized public DTO unchanged.
   if (link.permission === "full") {
     const payload = await buildFullProjectPayload(link.resourceId);
-    const withTaskAssetUrls = <
-      T extends { description: string | null; descriptionLocked?: boolean },
-    >(task: T): T => ({
+    const withTaskAssetUrls = async <T extends { description: string | null }>(
+      task: T,
+    ): Promise<T> => ({
       ...task,
-      description:
-        task.description && !task.descriptionLocked
-          ? rewriteContentAssetRefs(task.description, origin, "project", token)
-          : task.description,
+      description: task.description
+        ? await rewriteFullAssetRefs(task.description, origin, link)
+        : task.description,
     });
     return c.json({
       ...payload,
       description: payload.description
-        ? rewriteContentAssetRefs(payload.description, origin, "project", token)
+        ? await rewriteFullAssetRefs(payload.description, origin, link)
         : payload.description,
-      columns: payload.columns.map((column) => ({
-        ...column,
-        tasks: column.tasks.map(withTaskAssetUrls),
-      })),
-      archivedTasks: payload.archivedTasks.map(withTaskAssetUrls),
-      plannedTasks: payload.plannedTasks.map(withTaskAssetUrls),
+      columns: await Promise.all(
+        payload.columns.map(async (column) => ({
+          ...column,
+          tasks: await Promise.all(column.tasks.map(withTaskAssetUrls)),
+        })),
+      ),
+      archivedTasks: await Promise.all(payload.archivedTasks.map(withTaskAssetUrls)),
+      plannedTasks: await Promise.all(payload.plannedTasks.map(withTaskAssetUrls)),
     });
   }
 
@@ -274,6 +315,24 @@ app.get("/activity_comment/:token", async (c) => {
   });
 });
 
+async function wasFinalizedByThisLink(
+  link: ResolvedShareLink,
+  assetId: string,
+): Promise<boolean> {
+  const [audit] = await db
+    .select({ id: schema.shareActionAuditTable.id })
+    .from(schema.shareActionAuditTable)
+    .where(
+      and(
+        eq(schema.shareActionAuditTable.shareLinkId, link.id),
+        eq(schema.shareActionAuditTable.resourceId, assetId),
+        eq(schema.shareActionAuditTable.action, "asset.finalize"),
+      ),
+    )
+    .limit(1);
+  return Boolean(audit);
+}
+
 async function canShareReadAsset(
   link: ResolvedShareLink,
   asset: {
@@ -291,15 +350,70 @@ async function canShareReadAsset(
   // out (goals are not part of a project capability) and cross-project ids
   // fail closed.
   if (link.resourceType === "project" && link.permission === "full") {
-    if (asset.projectId !== link.resourceId) {
-      return false;
+    if (asset.projectId !== link.resourceId) return false;
+
+    if (asset.surface === "description" && asset.taskId) {
+      // Manifest-wide description policy + task-level deny policy apply to
+      // assets as well as text; additionally require an extant Markdown ref.
+      if (await isProjectAgentControlledStrict(link.resourceId)) return false;
+      if (await isTaskAgentControlled(asset.taskId)) return false;
+      const [task] = await db
+        .select({ description: schema.taskTable.description })
+        .from(schema.taskTable)
+        .where(
+          and(
+            eq(schema.taskTable.id, asset.taskId),
+            eq(schema.taskTable.projectId, link.resourceId),
+          ),
+        )
+        .limit(1);
+      if (task && contentReferencesAsset(task.description, asset.id)) return true;
+      return wasFinalizedByThisLink(link, asset.id);
     }
-    return (
-      asset.surface === "description" ||
-      asset.surface === "comment" ||
-      asset.surface === "document" ||
-      asset.surface === "document_comment"
-    );
+
+    if (asset.surface === "comment" && asset.taskId) {
+      if (await isTaskAgentControlled(asset.taskId)) return false;
+      if (asset.activityId) {
+        const [comment] = await db
+          .select({ content: schema.activityTable.content })
+          .from(schema.activityTable)
+          .innerJoin(
+            schema.taskTable,
+            eq(schema.activityTable.taskId, schema.taskTable.id),
+          )
+          .where(
+            and(
+              eq(schema.activityTable.id, asset.activityId),
+              eq(schema.activityTable.taskId, asset.taskId),
+              eq(schema.activityTable.type, "comment"),
+              eq(schema.taskTable.projectId, link.resourceId),
+            ),
+          )
+          .limit(1);
+        if (comment && contentReferencesAsset(comment.content, asset.id)) return true;
+      }
+      return wasFinalizedByThisLink(link, asset.id);
+    }
+
+    if (asset.surface === "document" && asset.documentId) {
+      const [document] = await db
+        .select({ content: schema.documentTable.content })
+        .from(schema.documentTable)
+        .where(
+          and(
+            eq(schema.documentTable.id, asset.documentId),
+            eq(schema.documentTable.projectId, link.resourceId),
+            isNull(schema.documentTable.archivedAt),
+          ),
+        )
+        .limit(1);
+      if (document && contentReferencesAsset(document.content, asset.id)) return true;
+      return wasFinalizedByThisLink(link, asset.id);
+    }
+
+    // Document comments are excluded because their schema requires a real
+    // user principal; their assets are excluded with them.
+    return false;
   }
 
   if (link.resourceType === "project") {
@@ -422,6 +536,59 @@ async function getPublicActivityCommentById(commentId: string) {
   if (!comment) throw new HTTPException(404, { message: "Not found" });
   return { comment };
 }
+
+app.get("/asset-ticket/:ticket", async (c) => {
+  const ticket = c.req.param("ticket");
+  assertShareRateLimit(c, "read", hashShareToken(ticket));
+  const payload = verifyShareAssetTicket(ticket);
+  if (!payload) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+
+  // Ticket scopes a single asset to a link id, not to a project bearer token.
+  // Recheck revocation/expiry on every read, so outstanding tickets stop
+  // working immediately after the owner revokes the full link.
+  const [link] = await db
+    .select()
+    .from(schema.shareLinkTable)
+    .where(eq(schema.shareLinkTable.id, payload.linkId))
+    .limit(1);
+  if (
+    !link ||
+    link.resourceType !== "project" ||
+    link.permission !== "full" ||
+    link.revokedAt !== null ||
+    (link.expiresAt !== null && link.expiresAt.getTime() <= Date.now())
+  ) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+
+  const [asset] = await db
+    .select({
+      id: schema.assetTable.id,
+      objectKey: schema.assetTable.objectKey,
+      filename: schema.assetTable.filename,
+      mimeType: schema.assetTable.mimeType,
+      projectId: schema.assetTable.projectId,
+      taskId: schema.assetTable.taskId,
+      activityId: schema.assetTable.activityId,
+      surface: schema.assetTable.surface,
+      documentId: schema.assetTable.documentId,
+      goalCheckinId: schema.assetTable.goalCheckinId,
+    })
+    .from(schema.assetTable)
+    .where(eq(schema.assetTable.id, payload.assetId))
+    .limit(1);
+  if (!asset || !(await canShareReadAsset(link, asset))) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+  try {
+    const object = await getPrivateObject(asset.objectKey);
+    return buildAssetResponse(asset, object, "private, no-store");
+  } catch {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+});
 
 app.get("/:resourceType/:token/asset/:assetId", async (c) => {
   const resourceType = c.req.param("resourceType");
@@ -743,16 +910,17 @@ app.get("/project/:token/task/:taskId", async (c) => {
   const origin = shareOrigin(new URL(c.req.url).origin);
   return c.json({
     ...detail,
-    description:
-      detail.description && !detail.descriptionLocked
-        ? rewriteContentAssetRefs(detail.description, origin, "project", token)
-        : detail.description,
-    comments: detail.comments.map((comment) => ({
-      ...comment,
-      content: comment.content
-        ? rewriteContentAssetRefs(comment.content, origin, "project", token)
-        : comment.content,
-    })),
+    description: detail.description
+      ? await rewriteFullAssetRefs(detail.description, origin, link)
+      : detail.description,
+    comments: await Promise.all(
+      detail.comments.map(async (comment) => ({
+        ...comment,
+        content: comment.content
+          ? await rewriteFullAssetRefs(comment.content, origin, link)
+          : comment.content,
+      })),
+    ),
   });
 });
 
@@ -838,7 +1006,7 @@ app.get("/project/:token/document/:documentId", async (c) => {
   return c.json({
     ...document,
     content: document.content
-      ? rewriteContentAssetRefs(document.content, origin, "project", token)
+      ? await rewriteFullAssetRefs(document.content, origin, link)
       : document.content,
   });
 });
@@ -1005,7 +1173,15 @@ app.post("/project/:token/asset/finalize", async (c) => {
       raw,
     ),
   );
-  return c.json(await fullFinalizeUpload(link, body));
+  const asset = await fullFinalizeUpload(link, body);
+  const origin = shareOrigin(new URL(c.req.url).origin);
+  const ticket = createShareAssetTicket(link.id, asset.id);
+  return c.json({
+    ...asset,
+    // One-asset/one-hour ticket for immediate editor preview; never echo the
+    // parent project bearer token into resource content.
+    url: `${origin}/api/share/asset-ticket/${ticket}`,
+  });
 });
 
 export default app;

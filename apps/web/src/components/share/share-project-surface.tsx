@@ -1,8 +1,11 @@
+import { useNavigate } from "@tanstack/react-router";
 import { CalendarDays, FileText, SquareKanban, SquircleDashed } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import BoardToolbar from "@/components/board/board-toolbar";
+import BacklogListView from "@/components/backlog-list-view";
 import { setShareCapabilityProjectId } from "@/components/share/share-capability";
+import ShareGanttView from "@/components/share/share-gantt-view";
 import KanbanBoard from "@/components/kanban-board";
 import ListView from "@/components/list-view";
 import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
@@ -10,8 +13,10 @@ import { useGetTasks } from "@/hooks/queries/task/use-get-tasks";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useBoardSort } from "@/hooks/use-board-sort";
 import { useTaskFiltersWithLabelsSupport } from "@/hooks/use-task-filters-with-labels-support";
+import { sortTasks } from "@/lib/sort-tasks";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 import { ThemeToggle } from "@/components/public-project/theme-toggle";
+import useProjectStore from "@/store/project";
 
 // SPEC-2026-10-22 full-project-share-link: the guest work surface. Same
 // owner building blocks (toolbar, kanban, list, docs) rendered through the
@@ -21,6 +26,7 @@ import { ThemeToggle } from "@/components/public-project/theme-toggle";
 type ShareSurfaceView = "backlog" | "board" | "gantt" | "docs";
 
 export default function ShareProjectSurface({
+  token,
   projectId,
   initialView = "board",
   children,
@@ -31,25 +37,45 @@ export default function ShareProjectSurface({
   children?: ReactNode;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { data: project } = useGetTasks(projectId);
+  const { setProject } = useProjectStore();
   const { data: users } = useGetActiveWorkspaceUsers("");
   const { data: workspaceLabels = [] } = useGetLabelsByWorkspace("");
   const { viewMode, setViewMode } = useUserPreferencesStore();
   const { sort, setSort } = useBoardSort(projectId);
-  const { filters, updateFilter, clearFilters, hasActiveFilters, updateLabelFilter } =
-    useTaskFiltersWithLabelsSupport(project ?? null, projectId);
+  const {
+    filteredProject,
+    filters,
+    updateFilter,
+    clearFilters,
+    hasActiveFilters,
+    updateLabelFilter,
+  } = useTaskFiltersWithLabelsSupport(project ?? null, projectId);
   const [view, setView] = useState<ShareSurfaceView>(initialView);
 
-  // Surface the real project id to capability consumers once loaded.
+  // Surface the real project id to capability consumers and shared owner
+  // components once loaded.
   useEffect(() => {
     if (project?.id) {
       setShareCapabilityProjectId(project.id);
+      setProject(project as unknown as Parameters<typeof setProject>[0]);
     }
-  }, [project?.id]);
-
-  // useTaskFiltersWithLabelsSupport already exposes the filtered task set —
-  // reuse it instead of duplicating filter logic.
-  const filteredProject = project;
+  }, [project, setProject]);
+  const sortedProject = useMemo(() => {
+    if (!filteredProject) return null;
+    const sortTasksInColumn = (tasks: typeof filteredProject.columns[number]["tasks"]) =>
+      sortTasks(tasks, sort);
+    return {
+      ...filteredProject,
+      columns: filteredProject.columns.map((column) => ({
+        ...column,
+        tasks: sortTasksInColumn(column.tasks),
+      })),
+      archivedTasks: sortTasks(filteredProject.archivedTasks ?? [], sort),
+      plannedTasks: sortTasks(filteredProject.plannedTasks ?? [], sort),
+    };
+  }, [filteredProject, sort]);
 
   return (
     <div className="flex h-svh w-full flex-col overflow-hidden bg-background">
@@ -65,7 +91,7 @@ export default function ShareProjectSurface({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <nav className="hidden h-8 items-center gap-0.5 rounded-lg border border-border/80 bg-background p-0.5 sm:inline-flex">
+          <nav className="flex max-w-[70vw] h-8 items-center gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-background p-0.5 sm:max-w-none">
             {(
               [
                 ["backlog", SquircleDashed],
@@ -113,10 +139,24 @@ export default function ShareProjectSurface({
               onSortChange={setSort}
             />
             <div className="min-h-0 flex-1">
-              {view === "board" && filteredProject ? (
-                <KanbanBoard project={filteredProject} />
-              ) : view === "board" ? null : filteredProject ? (
-                <ListView project={filteredProject} />
+              {view === "gantt" && sortedProject ? (
+                <ShareGanttView
+                  project={sortedProject}
+                  onOpenTask={(taskId) =>
+                    navigate({
+                      to: "/share/project/$token/task/$taskId",
+                      params: { token, taskId },
+                    })
+                  }
+                />
+              ) : view === "backlog" && sortedProject ? (
+                <BacklogListView project={sortedProject} />
+              ) : view === "board" && sortedProject ? (
+                viewMode === "board" ? (
+                  <KanbanBoard project={sortedProject} />
+                ) : (
+                  <ListView project={sortedProject} />
+                )
               ) : null}
             </div>
           </div>

@@ -54,14 +54,24 @@ export function ShareCapabilityProvider({
   children,
 }: ShareCapabilityRuntime & { children: ReactNode }) {
   const previous = useRef<ShareCapabilityRuntime | null>(null);
+  const capturedPrevious = useRef(false);
+
+  // Set the runtime synchronously during render so the FIRST child queries
+  // already snapshot the capability. Capture the prior value once (including
+  // null), then restore it only if this provider still owns the active token.
+  if (!capturedPrevious.current) {
+    previous.current = runtime;
+    capturedPrevious.current = true;
+  }
+  runtime = { token, projectId };
 
   useEffect(() => {
-    previous.current = runtime;
-    runtime = { token, projectId };
     return () => {
-      runtime = previous.current;
+      if (runtime?.token === token) {
+        runtime = previous.current;
+      }
     };
-  }, [token, projectId]);
+  }, [token]);
 
   return (
     <ShareCapabilityContext.Provider value={{ token, projectId }}>

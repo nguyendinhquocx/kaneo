@@ -79,7 +79,11 @@ export function linkGrantsPermission(
   if (required === "edit") {
     return linkPermission === "edit" || linkPermission === "full";
   }
-  return true;
+  return (
+    linkPermission === "view" ||
+    linkPermission === "edit" ||
+    linkPermission === "full"
+  );
 }
 
 export async function resolveShareLink(

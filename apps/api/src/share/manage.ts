@@ -178,6 +178,37 @@ const shareManage = new Hono<{
       });
       await permissionMiddleware(c, async () => {});
 
+      // Full capabilities are deliberately narrower than ordinary share
+      // links: only an authenticated workspace owner/admin (or instance
+      // administrator) may create them, even if a custom role was granted
+      // project:share for view/edit link administration.
+      if (resourceType === "project" && permission === "full") {
+        const [user] = await db
+          .select({ role: schema.userTable.role })
+          .from(schema.userTable)
+          .where(eq(schema.userTable.id, userId))
+          .limit(1);
+        const [membership] = await db
+          .select({ role: schema.workspaceUserTable.role })
+          .from(schema.workspaceUserTable)
+          .where(
+            and(
+              eq(schema.workspaceUserTable.userId, userId),
+              eq(schema.workspaceUserTable.workspaceId, workspaceId),
+            ),
+          )
+          .limit(1);
+        if (
+          user?.role !== "admin" &&
+          membership?.role !== "admin" &&
+          membership?.role !== "owner"
+        ) {
+          throw new HTTPException(403, {
+            message: "Only workspace owners and admins can create full project links",
+          });
+        }
+      }
+
       if (
         resourceType === "project" &&
         permission === "edit" &&

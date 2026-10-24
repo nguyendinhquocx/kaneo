@@ -14,7 +14,6 @@ export type ShareFullTask = {
   number: number | null;
   title: string;
   description: string | null;
-  descriptionLocked?: boolean;
   status: string;
   priority: string | null;
   startDate: string | Date | null;
@@ -51,9 +50,10 @@ export type ShareFullMember = {
 };
 
 export type ShareFullTaskDetail = ShareFullTask & {
-  agentControlled: boolean;
   relations: Array<{
     id: string;
+    sourceTaskId: string;
+    targetTaskId: string;
     relationType: string;
     position: number | null;
     sourceTask: {
@@ -64,6 +64,8 @@ export type ShareFullTaskDetail = ShareFullTask & {
       number: number | null;
       projectId: string;
       position: number | null;
+      userId: string | null;
+      assigneeName: string | null;
     } | null;
     targetTask: {
       id: string;
@@ -73,6 +75,8 @@ export type ShareFullTaskDetail = ShareFullTask & {
       number: number | null;
       projectId: string;
       position: number | null;
+      userId: string | null;
+      assigneeName: string | null;
     } | null;
   }>;
   comments: Array<{
@@ -390,7 +394,7 @@ export async function uploadShareFullAsset({
   if (!putResponse.ok) {
     throw new Error("Upload failed");
   }
-  return finalizeShareFullUpload(token, {
+  const asset = await finalizeShareFullUpload(token, {
     ownerType,
     ownerId,
     key: ticket.key,
@@ -398,4 +402,7 @@ export async function uploadShareFullAsset({
     contentType: file.type || "application/octet-stream",
     size: file.size,
   });
+  // The editor uses a one-asset short-lived ticket for immediate preview.
+  // API mutation handlers normalize it back to `/asset/:id` before storage.
+  return asset;
 }

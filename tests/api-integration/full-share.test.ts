@@ -16,6 +16,7 @@ import {
 // atomically, and never elevates view/edit links.
 
 const storageMocks = vi.hoisted(() => ({
+  assertContentAssetKeyMatchesContext: vi.fn().mockReturnValue(true),
   createContentAssetUploadUrl: vi.fn(),
   getPrivateObjectMeta: vi.fn().mockResolvedValue({
     contentType: "image/png",
@@ -36,6 +37,8 @@ vi.mock("../../apps/api/src/storage/s3", async (importOriginal) => {
     await importOriginal<typeof import("../../apps/api/src/storage/s3")>();
   return {
     ...actual,
+    assertContentAssetKeyMatchesContext:
+      storageMocks.assertContentAssetKeyMatchesContext,
     createContentAssetUploadUrl: storageMocks.createContentAssetUploadUrl,
     getPrivateObjectMeta: storageMocks.getPrivateObjectMeta,
     getPrivateObject: storageMocks.getPrivateObject,
@@ -234,6 +237,48 @@ describe("API integration: full project share capability", () => {
     expect(Math.round(days)).toBe(30);
   });
 
+  it("requires workspace owner/admin for full links even when a custom role has project:share", async () => {
+    const member = await createWorkspaceMember({ role: "member" });
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    await db.insert(schema.workspaceRoleTable).values({
+      workspaceId: member.workspace.id,
+      role: "custom-share",
+      permission: JSON.stringify({ project: ["share"] }),
+    });
+    await db
+      .update(schema.workspaceUserTable)
+      .set({ role: "custom-share" })
+      .where(eq(schema.workspaceUserTable.userId, member.user.id));
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    const full = await app.request("/api/share-manage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        resourceType: "project",
+        resourceId: project.id,
+        permission: "full",
+      }),
+    });
+    expect(full.status).toBe(403);
+
+    // Existing link administration keeps its existing custom-role semantics.
+    const edit = await app.request("/api/share-manage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        resourceType: "project",
+        resourceId: project.id,
+        permission: "edit",
+      }),
+    });
+    expect(edit.status).toBe(200);
+  });
+
   it("allows full link creation on agent-controlled projects but keeps the edit guard", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
     const { project } = await createProjectFixture({
@@ -373,6 +418,12 @@ describe("API integration: full project share capability", () => {
       workspaceId: admin.workspace.id,
     });
     const task = await seedTask(project.id);
+    await db.insert(schema.activityTable).values({
+      taskId: task.id,
+      type: "comment",
+      userId: null,
+      content: "worker control narrative",
+    });
     await seedProjectManifest(project.id);
 
     mockAuthenticatedSession(admin.user);
@@ -399,11 +450,12 @@ describe("API integration: full project share capability", () => {
     expect(detail.status).toBe(200);
     const detailPayload = (await detail.json()) as {
       description: string | null;
-      descriptionLocked: boolean;
       comments: unknown[];
     };
     expect(detailPayload.description).toBeNull();
-    expect(detailPayload.descriptionLocked).toBe(true);
+    expect(detailPayload).not.toHaveProperty("agentControlled");
+    expect(detailPayload).not.toHaveProperty("descriptionLocked");
+    expect(detailPayload.comments).toHaveLength(0);
 
     // Structural fields stay editable for proven-ordinary tasks.
     const structural = await app.request(
@@ -415,6 +467,15 @@ describe("API integration: full project share capability", () => {
       },
     );
     expect(structural.status).toBe(200);
+
+    // Structural creation remains available, but no description mutation is
+    // accepted anywhere in the manifest-controlled project.
+    const created = await app.request(`/api/share/project/${link.token}/task`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Ordinary structural task" }),
+    });
+    expect(created.status).toBe(200);
   });
 
   it("denies the whole task when it is linked to a run", async () => {
@@ -446,12 +507,14 @@ describe("API integration: full project share capability", () => {
     const detail = await app.request(
       `/api/share/project/${link.token}/task/${controlled.id}`,
     );
-    const detailPayload = (await detail.json()) as {
-      agentControlled: boolean;
-      description: string | null;
+    expect(detail.status).toBe(404);
+
+    const projectRead = await app.request(`/api/share/project/${link.token}`);
+    const payload = (await projectRead.json()) as {
+      columns: Array<{ tasks: Array<{ id: string }> }>;
     };
-    expect(detailPayload.agentControlled).toBe(true);
-    expect(detailPayload.description).toBeNull();
+    expect(payload.columns.flatMap((column) => column.tasks).map((task) => task.id))
+      .not.toContain(controlled.id);
 
     // Ordinary tasks in the same project remain fully usable.
     const ok = await app.request(
@@ -645,6 +708,14 @@ describe("API integration: full project share capability", () => {
     });
     const taskA = await seedTask(project.id);
     const foreignTask = await seedTask(otherProject.project.id);
+    // Owner relation APIs permit same-workspace cross-project relations; the
+    // share reader must omit the foreign endpoint rather than leak its data.
+    await db.insert(schema.taskRelationTable).values({
+      sourceTaskId: taskA.id,
+      targetTaskId: foreignTask.id,
+      relationType: "related",
+      position: 0,
+    });
 
     mockAuthenticatedSession(admin.user);
     let { app } = createApp();
@@ -652,6 +723,15 @@ describe("API integration: full project share capability", () => {
 
     mockAnonymousSession();
     ({ app } = createApp());
+
+    const detail = await app.request(
+      `/api/share/project/${link.token}/task/${taskA.id}`,
+    );
+    expect(detail.status).toBe(200);
+    const detailPayload = (await detail.json()) as {
+      relations: Array<{ sourceTask: { projectId: string }; targetTask: { projectId: string } }>;
+    };
+    expect(detailPayload.relations).toHaveLength(0);
 
     const crossProject = await app.request(
       `/api/share/project/${link.token}/task/${taskA.id}/relations`,
@@ -825,13 +905,40 @@ describe("API integration: full project share capability", () => {
     });
     const good = await finalize(100);
     expect(good.status).toBe(200);
-    const asset = (await good.json()) as { id: string };
+    const asset = (await good.json()) as { id: string; url: string };
+    expect(asset.url).not.toContain(link.token);
 
-    // The asset is immediately readable through the link's asset route.
-    const assetRead = await app.request(
-      `/api/share/project/${link.token}/asset/${asset.id}`,
-    );
+    // The short-lived URL is scoped to this asset, not the parent bearer.
+    const ticketPath = new URL(asset.url).pathname;
+    expect(ticketPath).toContain("/api/share/asset-ticket/");
+    expect(ticketPath).not.toContain(link.token);
+    const assetRead = await app.request(ticketPath);
     expect(assetRead.status).toBe(200);
+
+    const update = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          description: `![upload](${asset.url})`,
+        }),
+      },
+    );
+    expect(update.status).toBe(200);
+    const [storedTask] = await db
+      .select({ description: schema.taskTable.description })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id));
+    expect(storedTask.description).not.toContain(link.token);
+    expect(storedTask.description).toContain(`/asset/${asset.id}`);
+
+    const detail = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+    );
+    const detailBody = await detail.text();
+    expect(detailBody).not.toContain(link.token);
+    expect(detailBody).toContain("/api/share/asset-ticket/");
   });
 
   it("rolls back the mutation when the audit insert fails", async () => {

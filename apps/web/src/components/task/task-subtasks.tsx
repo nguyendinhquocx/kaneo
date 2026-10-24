@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import useCreateTask from "@/hooks/mutations/task/use-create-task";
 import { useDeleteTask } from "@/hooks/mutations/task/use-delete-task";
 import { useUpdateTaskStatus } from "@/hooks/mutations/task/use-update-task-status";
+import { getShareCapability } from "@/components/share/share-capability";
 import useCreateTaskRelation from "@/hooks/mutations/task-relation/use-create-task-relation";
 import { useReorderSubtasks } from "@/hooks/mutations/task-relation/use-reorder-subtasks";
 import { useGetColumns } from "@/hooks/queries/column/use-get-columns";
@@ -55,6 +56,21 @@ export default function TaskSubtasks({
 }: TaskSubtasksProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+
+  const navigateToTask = (targetTaskId: string) => {
+    const capability = getShareCapability();
+    if (capability) {
+      navigate({
+        to: "/share/project/$token/task/$taskId",
+        params: { token: capability.token, taskId: targetTaskId },
+      });
+      return;
+    }
+    navigate({
+      to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
+      params: { workspaceId, projectId, taskId: targetTaskId },
+    });
+  };
   const [isOpen, setIsOpen] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -245,14 +261,7 @@ export default function TaskSubtasks({
         case "Enter": {
           if (focusedIndex >= 0 && focusedIndex < totalCount) {
             e.preventDefault();
-            navigate({
-              to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
-              params: {
-                workspaceId,
-                projectId,
-                taskId: subtasks[focusedIndex].task.id,
-              },
-            });
+            navigateToTask(subtasks[focusedIndex].task.id);
           }
           break;
         }
@@ -415,16 +424,7 @@ export default function TaskSubtasks({
                         selectionRadius={getSelectionRadius(index, isSelected)}
                         assignee={getAssignee(subtask.task.userId)}
                         onToggleComplete={() => handleToggleComplete(taskObj)}
-                        onNavigate={() =>
-                          navigate({
-                            to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
-                            params: {
-                              workspaceId,
-                              projectId,
-                              taskId: subtask.task.id,
-                            },
-                          })
-                        }
+                        onNavigate={() => navigateToTask(subtask.task.id)}
                         onDeleteClick={() => setDeleteTaskId(subtask.task.id)}
                         onMoveUp={() => moveSubtask(subtask.task.id, -1)}
                         onMoveDown={() => moveSubtask(subtask.task.id, 1)}

@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import CommentEditor from "@/components/activity/comment-editor";
 import { MarkdownRenderer } from "@/components/public-project/markdown-renderer";
 import ShareDialog from "@/components/share/share-dialog";
+import { getShareCapability } from "@/components/share/share-capability";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -474,7 +475,9 @@ export default function DocumentWorkspace({
           </div>
         </div>
 
-        <DocumentComments documentId={document.id} />
+        {getShareCapability() ? null : (
+          <DocumentComments documentId={document.id} />
+        )}
       </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

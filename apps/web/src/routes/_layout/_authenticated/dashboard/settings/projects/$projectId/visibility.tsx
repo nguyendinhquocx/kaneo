@@ -32,7 +32,7 @@ function RouteComponent() {
 
   const queryClient = useQueryClient();
   const { mutateAsync: updateProject } = useUpdateProject();
-  const { hasPermission } = useWorkspacePermission();
+  const { hasPermission, isAdmin } = useWorkspacePermission();
   const savingRef = useRef(false);
   const publicUrlInputRef = useRef<HTMLInputElement | null>(null);
   // `project:share` isn't in CAPABILITIES (only admin/owner/custom roles
@@ -184,6 +184,7 @@ function RouteComponent() {
                 resourceType="project"
                 resourceId={project?.id || ""}
                 canShare={canShare}
+                canCreateFull={isAdmin}
               />
             </div>
           </div>

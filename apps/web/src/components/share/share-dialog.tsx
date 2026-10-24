@@ -32,6 +32,7 @@ type ShareDialogProps = {
   resourceType: ShareResourceType;
   resourceId: string;
   canShare: boolean;
+  canCreateFull?: boolean;
 };
 
 function formatDate(value: string | null) {
@@ -47,6 +48,7 @@ export default function ShareDialog({
   resourceType,
   resourceId,
   canShare,
+  canCreateFull = false,
 }: ShareDialogProps) {
   const { t } = useTranslation("share");
   const { data: links = [] } = useGetShareLinks(resourceType, resourceId);
@@ -173,7 +175,7 @@ export default function ShareDialog({
                     {t("permission.edit")}
                   </Button>
                 ) : null}
-                {resourceType === "project" ? (
+                {resourceType === "project" && canCreateFull ? (
                   <Button
                     variant={permission === "full" ? "secondary" : "ghost"}
                     size="xs"

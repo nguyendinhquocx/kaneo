@@ -1,8 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { ShareCapabilityProvider } from "@/components/share/share-capability";
+import { useEffect } from "react";
+import { ShareCapabilityProvider, setShareCapabilityProjectId } from "@/components/share/share-capability";
 import TaskDetailsContent from "@/components/task/task-details-content";
 import TaskPropertiesSidebar from "@/components/task/task-properties-sidebar";
+import useGetTask from "@/hooks/queries/task/use-get-task";
 
 // SPEC-2026-10-22: share-scoped full-page task route. Maximize and
 // parent-task navigation land here — never on an authenticated dashboard
@@ -15,6 +17,15 @@ export const Route = createFileRoute("/share/project/$token/task/$taskId")({
 function ShareTaskFullPage() {
   const { token, taskId } = Route.useParams();
   const navigate = useNavigate();
+  const { data: task } = useGetTask(taskId);
+
+  // Populate the real project id once loaded so parent navigation can prove
+  // the target stays inside the linked project.
+  useEffect(() => {
+    if (task?.projectId) {
+      setShareCapabilityProjectId(task.projectId);
+    }
+  }, [task?.projectId]);
 
   return (
     <ShareCapabilityProvider token={token} projectId={""}>

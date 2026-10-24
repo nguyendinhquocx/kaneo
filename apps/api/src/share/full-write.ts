@@ -4,6 +4,7 @@ import db, { schema } from "../database";
 import { publishEvent } from "../events";
 import { assertBulkTaskIdsGuard } from "../execution/phase-progress";
 import {
+  assertContentAssetKeyMatchesContext,
   createContentAssetUploadUrl,
   deleteS3Object,
   getPrivateObjectMeta,
@@ -17,7 +18,6 @@ import {
   countResourceAssets,
   getFullLinkProject,
   getFullLinkUploadUsage,
-  getRedactedTaskIds,
   isProjectAgentControlledStrict,
   isTaskAgentControlled,
   listAssignableMembers,
@@ -27,6 +27,7 @@ import {
   appendShareActionAudit,
   type ResolvedShareLink,
 } from "./resolve-share-link";
+import { verifyShareAssetTicket } from "./asset-ticket";
 
 // SPEC-2026-10-22 full-project-share-link: guest mutations under a `full`
 // capability. Every write is (1) project-scoped to link.resourceId, (2)
@@ -36,6 +37,24 @@ import {
 // event broadcasts; no steering, no member notifications.
 
 export const GUEST_ACTOR_LABEL = "Share link holder";
+
+// The browser needs a capability URL to preview a just-uploaded asset before
+// a refetch, but bearer tokens must never be persisted in Markdown/API payloads.
+// Normalize those transient URLs back to the canonical token-free /asset/:id
+// reference before every guest content write; share readers wrap them again.
+function stripCapabilityAssetTokens(content: string): string {
+  const tokenFree = content.replace(
+    /(?:https?:\/\/[^/\s]+)?\/api\/share\/project\/[A-Za-z0-9_-]{43}\/asset\/([A-Za-z0-9_-]+)/g,
+    "/asset/$1",
+  );
+  return tokenFree.replace(
+    /(?:https?:\/\/[^/\s]+)?\/api\/share\/asset-ticket\/([A-Za-z0-9_.-]+)/g,
+    (match, ticket: string) => {
+      const payload = verifyShareAssetTicket(ticket, { allowExpired: true });
+      return payload ? `/asset/${payload.assetId}` : match;
+    },
+  );
+}
 
 const guestDenied = () =>
   new HTTPException(403, {
@@ -93,7 +112,11 @@ export async function fullCreateTask(
   body: FullTaskWriteBody & { title: string },
 ) {
   const project = await getFullLinkProject(link.resourceId);
-  await assertGuestDescriptionWritable(project.id);
+  // Structural task creation remains available when an unrelated manifest
+  // exists; only a caller-supplied description is denied project-wide.
+  if (body.description !== undefined) {
+    await assertGuestDescriptionWritable(project.id);
+  }
 
   const status = body.status || "to-do";
   const priority = body.priority || "no-priority";
@@ -131,7 +154,7 @@ export async function fullCreateTask(
         projectId: project.id,
         userId: body.assigneeId || null,
         title: body.title,
-        description: body.description ?? "",
+        description: stripCapabilityAssetTokens(body.description ?? ""),
         status,
         columnId: column?.id ?? null,
         position: nextPosition,
@@ -192,7 +215,10 @@ export async function fullUpdateTask(
     updates.title = body.title;
   }
   if (body.description !== undefined) {
-    updates.description = body.description;
+    updates.description =
+      body.description === null
+        ? null
+        : stripCapabilityAssetTokens(body.description);
   }
   if (body.priority !== undefined) {
     assertValidPriority(body.priority);
@@ -533,6 +559,7 @@ export async function fullCreateComment(
     throw guestDenied();
   }
 
+  const safeContent = stripCapabilityAssetTokens(content);
   const created = await db.transaction(async (tx) => {
     const [activity] = await tx
       .insert(schema.activityTable)
@@ -540,7 +567,7 @@ export async function fullCreateComment(
         taskId: task.id,
         type: "comment",
         userId: null,
-        content,
+        content: safeContent,
         // Link attribution without a fake user; own-comment checks read this.
         externalUserName: GUEST_ACTOR_LABEL,
         externalSource: "share-link",
@@ -553,7 +580,7 @@ export async function fullCreateComment(
 
     const referencedAssetIds = [
       ...new Set(
-        (content.match(/\/(?:api\/)?asset\/([a-z0-9]+)/gi) ?? []).map((ref) =>
+        (safeContent.match(/\/(?:api\/)?asset\/([a-z0-9]+)/gi) ?? []).map((ref) =>
           ref.split("/asset/")[1] ?? "",
         ),
       ),
@@ -578,8 +605,17 @@ export async function fullCreateComment(
   // Ordinary side effect: ID-only project broadcast after the durable write.
   // No agent steering, no mention/assignee notifications (T1 §D).
   await publishEvent("comment.created", {
-    ...created,
-    comment: `**${GUEST_ACTOR_LABEL}** commented:\n> ${content}`,
+    // Intentionally omit eventData (contains the private share-link id).
+    id: created.id,
+    taskId: created.taskId,
+    type: created.type,
+    content: created.content,
+    createdAt: created.createdAt,
+    updatedAt: created.updatedAt,
+    userId: null,
+    externalUserName: GUEST_ACTOR_LABEL,
+    externalSource: "share-link",
+    comment: `**${GUEST_ACTOR_LABEL}** commented:\n> ${created.content}`,
     projectId: project.id,
   });
 
@@ -607,10 +643,11 @@ export async function fullUpdateComment(
     throw guestDenied();
   }
 
+  const safeContent = stripCapabilityAssetTokens(content);
   const [updated] = await db.transaction(async (tx) => {
     const [row] = await tx
       .update(schema.activityTable)
-      .set({ content })
+      .set({ content: safeContent })
       .where(
         and(
           eq(schema.activityTable.id, comment.id),
@@ -628,8 +665,8 @@ export async function fullUpdateComment(
     throw notFound();
   }
 
-  if (comment.content !== content) {
-    deleteOrphanedAssets(comment.content, content, {
+  if (comment.content !== safeContent) {
+    deleteOrphanedAssets(comment.content, safeContent, {
       taskId: comment.taskId,
     }).catch(() => {});
   }
@@ -721,7 +758,7 @@ export async function fullCreateDocument(
       .values({
         projectId: link.resourceId,
         title: body.title,
-        content: body.content,
+        content: stripCapabilityAssetTokens(body.content),
         revision: 1,
         createdByUserId: null,
       })
@@ -754,7 +791,7 @@ export async function fullUpdateDocument(
       .update(schema.documentTable)
       .set({
         title: body.title,
-        content: body.content,
+        content: stripCapabilityAssetTokens(body.content),
         revision: body.revision + 1,
       })
       .where(
@@ -1194,9 +1231,13 @@ export async function fullDeleteLabel(link: ResolvedShareLink, labelId: string) 
 export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string) {
   const project = await getFullLinkProject(link.resourceId);
   const task = await loadProjectTask(taskId, project.id);
-  const agentControlled = await isTaskAgentControlled(task.id);
+  if (await isTaskAgentControlled(task.id)) {
+    // Execution-managed tasks are denied as whole objects, not merely
+    // redacted, per the owner-approved T1 predicate.
+    throw new HTTPException(404, { message: "Not found" });
+  }
 
-  const descriptionAllowed = !agentControlled &&
+  const descriptionAllowed =
     !(await isProjectAgentControlledStrict(project.id));
 
   const labels = await db
@@ -1239,9 +1280,17 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
           number: schema.taskTable.number,
           projectId: schema.taskTable.projectId,
           position: schema.taskTable.position,
+          userId: schema.taskTable.userId,
+          assigneeName: schema.userTable.name,
         })
         .from(schema.taskTable)
-        .where(inArray(schema.taskTable.id, endpointIds))
+        .leftJoin(schema.userTable, eq(schema.taskTable.userId, schema.userTable.id))
+        .where(
+          and(
+            inArray(schema.taskTable.id, endpointIds),
+            eq(schema.taskTable.projectId, project.id),
+          ),
+        )
     : [];
   const endpointsByProject = new Map(
     endpointTasks.map((endpoint) => [endpoint.id, endpoint]),
@@ -1249,6 +1298,8 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
   const relations = relationRows
     .map((relation) => ({
       id: relation.id,
+      sourceTaskId: relation.sourceTaskId,
+      targetTaskId: relation.targetTaskId,
       relationType: relation.relationType,
       position: relation.position,
       sourceTask: endpointsByProject.get(relation.sourceTaskId) ?? null,
@@ -1257,11 +1308,11 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
     // Cross-project endpoints are never expanded for the guest.
     .filter((relation) => relation.sourceTask && relation.targetTask);
 
-  // Activity is hidden together with the description when the task is
-  // execution-linked — bot replies would leak the execution narrative.
-  const activities = agentControlled
-    ? []
-    : await db
+  // Activity is hidden together with the description: the task-level
+  // predicate OR a project-wide manifest hides the timeline — bot replies
+  // would leak the execution narrative (spec §B, T1 §D).
+  const activities = descriptionAllowed
+    ? await db
         .select({
           id: schema.activityTable.id,
           type: schema.activityTable.type,
@@ -1276,7 +1327,8 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
         .from(schema.activityTable)
         .leftJoin(schema.userTable, eq(schema.activityTable.userId, schema.userTable.id))
         .where(eq(schema.activityTable.taskId, task.id))
-        .orderBy(asc(schema.activityTable.createdAt));
+        .orderBy(asc(schema.activityTable.createdAt))
+    : [];
 
   const actorName = (row: {
     userId: string | null;
@@ -1296,8 +1348,6 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
     number: task.number,
     title: task.title,
     description: descriptionAllowed ? task.description : null,
-    descriptionLocked: !descriptionAllowed,
-    agentControlled,
     status: task.status,
     priority: task.priority,
     startDate: task.startDate,
@@ -1319,13 +1369,6 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
         isGuest: activity.externalSource === "share-link",
       })),
   };
-}
-
-export async function fullGetTaskRedactedSet(
-  link: ResolvedShareLink,
-  taskIds: string[],
-) {
-  return getRedactedTaskIds(link.resourceId, taskIds);
 }
 
 // ---------------------------------------------------------------------------
@@ -1418,7 +1461,12 @@ async function assertGuestUploadTargetAllowed(
     if (await isTaskAgentControlled(owner.taskId)) {
       throw guestDenied();
     }
-    if (await isProjectAgentControlledStrict(owner.projectId)) {
+    // Project-wide manifest hides/makes descriptions immutable. Comments on
+    // ordinary tasks remain their own surface; task description uploads do not.
+    if (
+      owner.ownerType === "task_description" &&
+      (await isProjectAgentControlledStrict(owner.projectId))
+    ) {
       throw guestDenied();
     }
   }
@@ -1444,8 +1492,7 @@ export async function fullCreateUploadTicket(
     size: number;
   },
 ) {
-  const project = await getFullLinkProject(link.resourceId);
-  void project;
+  await getFullLinkProject(link.resourceId);
   const owner = await resolveGuestUploadOwner(input.ownerType, input.ownerId);
   assertUploadOwnerInLink(owner, link);
   await assertGuestUploadTargetAllowed(owner);
@@ -1500,8 +1547,7 @@ export async function fullFinalizeUpload(
     size: number;
   },
 ) {
-  const project = await getFullLinkProject(link.resourceId);
-  void project;
+  await getFullLinkProject(link.resourceId);
   const owner = await resolveGuestUploadOwner(input.ownerType, input.ownerId);
   assertUploadOwnerInLink(owner, link);
   await assertGuestUploadTargetAllowed(owner);
@@ -1515,14 +1561,30 @@ export async function fullFinalizeUpload(
   }
 
   const normalizedKey = input.key.trim();
-  // Key must belong to exactly this owner surface — no cross-resource writes.
+  // Key must belong to exactly this owner surface — including configured S3
+  // key prefixes — no cross-resource writes.
   if (
-    !normalizedKey.startsWith(
-      `workspace/${owner.workspaceId}/content/${owner.ownerType}/${owner.ownerId}/`,
-    )
+    !assertContentAssetKeyMatchesContext(normalizedKey, {
+      workspaceId: owner.workspaceId,
+      ownerType: owner.ownerType,
+      ownerId: owner.ownerId,
+    })
   ) {
     throw new HTTPException(400, {
       message: "Upload key does not match the content resource.",
+    });
+  }
+
+  // Refuse existing objects before HEAD/cleanup: a forged finalize must not
+  // rebind a live asset or delete its storage object as "staged cleanup".
+  const [existing] = await db
+    .select({ id: schema.assetTable.id })
+    .from(schema.assetTable)
+    .where(eq(schema.assetTable.objectKey, normalizedKey))
+    .limit(1);
+  if (existing) {
+    throw new HTTPException(409, {
+      message: "This upload key has already been finalized.",
     });
   }
 
@@ -1573,12 +1635,6 @@ export async function fullFinalizeUpload(
     });
   }
 
-  const [existing] = await db
-    .select({ id: schema.assetTable.id })
-    .from(schema.assetTable)
-    .where(eq(schema.assetTable.objectKey, normalizedKey))
-    .limit(1);
-
   const values = {
     workspaceId: owner.workspaceId,
     projectId: owner.projectId,
@@ -1597,16 +1653,34 @@ export async function fullFinalizeUpload(
   let assetId: string;
   try {
     assetId = await db.transaction(async (tx) => {
-      const [row] = existing
-        ? await tx
-            .update(schema.assetTable)
-            .set(values)
-            .where(eq(schema.assetTable.id, existing.id))
-            .returning({ id: schema.assetTable.id })
-        : await tx
-            .insert(schema.assetTable)
-            .values({ ...values, objectKey: normalizedKey })
-            .returning({ id: schema.assetTable.id });
+      // Serialize finalization per share link, then re-check quota/count while
+      // holding the row lock. The earlier checks are fast feedback only; this
+      // in-transaction check prevents concurrent uploads exceeding hard caps.
+      await tx
+        .select({ id: schema.shareLinkTable.id })
+        .from(schema.shareLinkTable)
+        .where(eq(schema.shareLinkTable.id, link.id))
+        .for("update")
+        .limit(1);
+      const [lockedUsage, lockedResourceCount] = await Promise.all([
+        getFullLinkUploadUsage({ shareLinkId: link.id }),
+        countResourceAssets(resourceAssetWhere(owner)),
+      ]);
+      if (lockedUsage.totalSize + actualLength > FULL_LINK_MAX_TOTAL_BYTES) {
+        throw new HTTPException(400, {
+          message: "Share-link upload quota exceeded (100MB total).",
+        });
+      }
+      if (lockedResourceCount >= FULL_LINK_MAX_FILES_PER_RESOURCE) {
+        throw new HTTPException(400, {
+          message: "This resource already has the maximum number of files.",
+        });
+      }
+
+      const [row] = await tx
+        .insert(schema.assetTable)
+        .values({ ...values, objectKey: normalizedKey })
+        .returning({ id: schema.assetTable.id });
       if (!row) {
         throw new HTTPException(500, { message: "Failed to persist asset" });
       }
@@ -1634,6 +1708,3 @@ export async function fullFinalizeUpload(
   };
 }
 
-export function isProjectManifestLocked(projectId: string) {
-  return isProjectAgentControlledStrict(projectId);
-}

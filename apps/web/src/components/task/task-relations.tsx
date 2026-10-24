@@ -38,6 +38,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { getShareCapability } from "@/components/share/share-capability";
 import useCreateTaskRelation from "@/hooks/mutations/task-relation/use-create-task-relation";
 import useDeleteTaskRelation from "@/hooks/mutations/task-relation/use-delete-task-relation";
 import useGetProject from "@/hooks/queries/project/use-get-project";
@@ -225,6 +226,14 @@ export default function TaskRelations({
   };
 
   const handleNavigateToTask = (linkedTaskId: string) => {
+    const capability = getShareCapability();
+    if (capability) {
+      navigate({
+        to: "/share/project/$token/task/$taskId",
+        params: { token: capability.token, taskId: linkedTaskId },
+      });
+      return;
+    }
     navigate({
       to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
       params: { workspaceId, projectId, taskId: linkedTaskId },

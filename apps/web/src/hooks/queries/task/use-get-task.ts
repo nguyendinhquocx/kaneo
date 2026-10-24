@@ -39,6 +39,9 @@ function useGetTask(taskId: string) {
     },
     enabled: Boolean(taskId),
     refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: getShareCapability() ? 10_000 : false,
+    refetchIntervalInBackground: false,
     staleTime: 0,
   });
 }
