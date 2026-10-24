@@ -81,7 +81,17 @@ async function rewriteFullAssetRefs(
     const raw = match[0];
     const absoluteOrigin = match[1];
     const assetId = match[2];
-    if (!assetId || (absoluteOrigin && new URL(absoluteOrigin).origin !== origin)) {
+    if (assetId && absoluteOrigin) {
+      try {
+        if (new URL(absoluteOrigin).origin !== origin) {
+          continue;
+        }
+      } catch {
+        // Malformed absolute URL in guest-authored content must never turn a
+        // read into a persistent 500 — keep the original text untouched.
+        continue;
+      }
+    } else if (!assetId) {
       continue;
     }
     output += content.slice(cursor, start);

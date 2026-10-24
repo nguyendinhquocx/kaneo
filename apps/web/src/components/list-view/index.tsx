@@ -26,6 +26,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { priorityColorsTaskCard } from "@/constants/priority-colors";
 import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
+import { getShareCapability } from "@/components/share/share-capability";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { cn } from "@/lib/cn";
 import { getColumnIcon } from "@/lib/column";
@@ -106,6 +107,16 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
       },
       Enter: () => {
         if (focusedTaskId && project) {
+          // SPEC-2026-10-22: capability keyboard navigation stays on the
+          // share surface.
+          const capability = getShareCapability();
+          if (capability) {
+            navigate({
+              to: "/share/project/$token/task/$taskId",
+              params: { token: capability.token, taskId: focusedTaskId },
+            });
+            return;
+          }
           navigate({
             to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
             params: {

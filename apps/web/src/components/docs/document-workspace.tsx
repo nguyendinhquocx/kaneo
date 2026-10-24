@@ -408,11 +408,13 @@ export default function DocumentWorkspace({
             {t("deleteButton")}
           </Button>
         ) : null}
-        <ShareDialog
-          resourceType="document"
-          resourceId={document.id}
-          canShare={canWrite}
-        />
+        {getShareCapability() ? null : (
+          <ShareDialog
+            resourceType="document"
+            resourceId={document.id}
+            canShare={canWrite}
+          />
+        )}
       </div>
 
       {saveState === "conflict" ? (
