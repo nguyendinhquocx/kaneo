@@ -2300,25 +2300,30 @@
       "noteSaving": "Saving…"
     },
     "invalid": {
-      "description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
-      "title": "This link is no longer valid"
+      "description": "링크가 취소되었거나 만료되었거나 잘못 입력되었습니다. 소유자에게 새 링크를 요청하세요.",
+      "title": "이 링크는 더 이상 유효하지 않습니다"
     },
     "manage": "Share",
     "neverExpires": "Does not expire",
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Full project access",
-      "fullWarning": "Anyone holding this link gets full rights inside this project for 30 days — edit tasks, comments, docs and files — and cannot be reliably identified. Share carefully; revoke any time."
+      "full": "프로젝트 전체 권한",
+      "fullWarning": "이 링크를 가진 사람은 누구나 30일 동안 이 프로젝트의 모든 권한을 가지며 작업, 댓글, 문서와 파일을 수정할 수 있습니다. 신원을 확실하게 확인할 수 없습니다. 신중하게 공유하고 필요하면 언제든 링크를 취소하세요."
     },
     "rateLimited": {
-      "description": "Slow down a little and try again shortly.",
-      "retry": "Try again",
-      "title": "Too many requests"
+      "description": "잠시 기다린 뒤 다시 시도하세요.",
+      "retry": "다시 시도",
+      "title": "요청이 너무 많습니다"
     },
     "revoke": "Revoke link",
     "revoked": "Revoked",
     "title": "공유",
+    "loading": "프로젝트 불러오는 중…",
+    "loadError": {
+      "title": "프로젝트를 불러올 수 없습니다",
+      "description": "네트워크 연결을 확인한 뒤 다시 시도하세요."
+    },
     "unsupported": "This resource type cannot be displayed here.",
     "capabilityLinks": "Capability share links",
     "capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
@@ -2363,12 +2368,12 @@
       "view": "View only"
     },
     "full": {
-      "holderBadge": "shared link",
+      "holderBadge": "공유 링크",
       "view": {
-        "backlog": "Backlog",
-        "board": "Tasks",
-        "gantt": "Gantt",
-        "docs": "Docs"
+        "backlog": "백로그",
+        "board": "작업",
+        "gantt": "간트",
+        "docs": "문서"
       }
     }
   },

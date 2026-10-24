@@ -2300,25 +2300,30 @@
       "noteSaving": "Saving…"
     },
     "invalid": {
-      "description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
-      "title": "This link is no longer valid"
+      "description": "Tautan telah dicabut, kedaluwarsa, atau salah ketik. Minta pemilik membagikan tautan baru.",
+      "title": "Tautan ini tidak lagi valid"
     },
     "manage": "Share",
     "neverExpires": "Does not expire",
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Full project access",
-      "fullWarning": "Anyone holding this link gets full rights inside this project for 30 days — edit tasks, comments, docs and files — and cannot be reliably identified. Share carefully; revoke any time."
+      "full": "Akses penuh ke proyek",
+      "fullWarning": "Siapa pun yang memegang tautan ini akan memiliki hak penuh atas proyek ini selama 30 hari dan dapat mengedit tugas, komentar, dokumen, serta file. Identitasnya tidak dapat dipastikan dengan andal. Bagikan dengan hati-hati; tautan dapat dicabut kapan saja."
     },
     "rateLimited": {
-      "description": "Slow down a little and try again shortly.",
-      "retry": "Try again",
-      "title": "Too many requests"
+      "description": "Tunggu sebentar lalu coba lagi.",
+      "retry": "Coba lagi",
+      "title": "Terlalu banyak permintaan"
     },
     "revoke": "Revoke link",
     "revoked": "Revoked",
     "title": "Bagikan",
+    "loading": "Memuat proyek…",
+    "loadError": {
+      "title": "Proyek tidak dapat dimuat",
+      "description": "Periksa koneksi lalu coba lagi."
+    },
     "unsupported": "This resource type cannot be displayed here.",
     "capabilityLinks": "Capability share links",
     "capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
@@ -2363,12 +2368,12 @@
       "view": "View only"
     },
     "full": {
-      "holderBadge": "shared link",
+      "holderBadge": "Tautan berbagi",
       "view": {
         "backlog": "Backlog",
-        "board": "Tasks",
+        "board": "Tugas",
         "gantt": "Gantt",
-        "docs": "Docs"
+        "docs": "Dokumen"
       }
     }
   },

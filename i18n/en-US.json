@@ -2353,6 +2353,11 @@
       "description": "Slow down a little and try again shortly.",
       "retry": "Try again"
     },
+    "loading": "Loading shared project…",
+    "loadError": {
+      "title": "Could not load this project",
+      "description": "Check your connection and try again."
+    },
     "unsupported": "This resource type cannot be displayed here.",
     "capabilityLinks": "Capability share links",
     "capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",

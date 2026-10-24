@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import getTasks from "@/fetchers/task/get-tasks";
+import { getShareCapability } from "@/components/share/share-capability";
 import {
   getShareFullProject,
+  type ShareFullProjectPayload,
   type ShareFullTask,
 } from "@/fetchers/share/share-full-api";
-import { getShareCapability } from "@/components/share/share-capability";
-import type Task from "@/types/task";
+import getTasks from "@/fetchers/task/get-tasks";
 import type { ProjectWithTasks } from "@/types/project";
+import type Task from "@/types/task";
 
 function mapShareTask(task: ShareFullTask): Task {
   return {
@@ -32,7 +33,30 @@ function mapShareTask(task: ShareFullTask): Task {
   };
 }
 
-export function useGetTasks(projectId: string) {
+export function mapShareFullProjectPayload(
+  payload: ShareFullProjectPayload,
+): ProjectWithTasks {
+  return {
+    id: payload.id,
+    name: payload.name,
+    slug: payload.slug,
+    icon: payload.icon,
+    description: payload.description,
+    workspaceId: "",
+    isPublic: true,
+    columns: payload.columns.map((column) => ({
+      ...column,
+      tasks: column.tasks.map(mapShareTask),
+    })),
+    archivedTasks: payload.archivedTasks.map(mapShareTask),
+    plannedTasks: payload.plannedTasks.map(mapShareTask),
+  } as unknown as ProjectWithTasks;
+}
+
+export function useGetTasks(
+  projectId: string,
+  initialShareProject?: ProjectWithTasks,
+) {
   const capability = getShareCapability();
   return useQuery({
     queryKey: capability
@@ -41,26 +65,12 @@ export function useGetTasks(projectId: string) {
     queryFn: async () => {
       if (capability) {
         const payload = await getShareFullProject(capability.token);
-        // Same shape as the owner tasks payload so board/list components
-        // render identically for capability holders.
-        return {
-          id: payload.id,
-          name: payload.name,
-          slug: payload.slug,
-          icon: payload.icon,
-          description: payload.description,
-          workspaceId: "",
-          isPublic: true,
-          columns: payload.columns.map((column) => ({
-            ...column,
-            tasks: column.tasks.map(mapShareTask),
-          })),
-          archivedTasks: payload.archivedTasks.map(mapShareTask),
-          plannedTasks: payload.plannedTasks.map(mapShareTask),
-        } as unknown as ProjectWithTasks;
+        return mapShareFullProjectPayload(payload);
       }
       return getTasks(projectId);
     },
+    initialData: capability ? initialShareProject : undefined,
+    staleTime: capability ? 10_000 : 0,
     refetchInterval: capability ? 10_000 : 30_000,
     enabled: !!projectId || Boolean(capability),
   });

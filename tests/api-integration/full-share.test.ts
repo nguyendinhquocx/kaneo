@@ -22,6 +22,9 @@ const storageMocks = vi.hoisted(() => ({
     contentType: "image/png",
     contentLength: 100,
   }),
+  getPrivateObjectPrefix: vi
+    .fn()
+    .mockResolvedValue(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])),
   getPrivateObject: vi.fn().mockResolvedValue({
     body: "fake-object-bytes",
     contentType: "image/png",
@@ -41,6 +44,7 @@ vi.mock("../../apps/api/src/storage/s3", async (importOriginal) => {
       storageMocks.assertContentAssetKeyMatchesContext,
     createContentAssetUploadUrl: storageMocks.createContentAssetUploadUrl,
     getPrivateObjectMeta: storageMocks.getPrivateObjectMeta,
+    getPrivateObjectPrefix: storageMocks.getPrivateObjectPrefix,
     getPrivateObject: storageMocks.getPrivateObject,
     deleteS3Object: storageMocks.deleteS3Object,
   };
@@ -49,29 +53,236 @@ vi.mock("../../apps/api/src/storage/s3", async (importOriginal) => {
 // Audit atomicity is driven through a mutable flag so individual tests can
 // simulate the audit insert failing mid-transaction.
 const auditMock = vi.hoisted(() => ({ fail: false }));
+const resourceCountRace = vi.hoisted(() => ({
+  enabled: false,
+  calls: 0,
+  precheckCounts: [] as number[],
+  transactionCounts: [] as number[],
+  waitForPair: null as null | (() => Promise<void>),
+}));
+const relationRace = vi.hoisted(() => ({
+  enabled: false,
+  calls: 0,
+  blockAfter: 0,
+  onBlocked: null as null | (() => void),
+  waitForRelease: null as null | (() => Promise<void>),
+}));
+const documentRace = vi.hoisted(() => ({
+  enabled: false,
+  onBlocked: null as null | (() => void),
+  waitForRelease: null as null | (() => Promise<void>),
+}));
+const agentGuardRace = vi.hoisted(() => ({
+  enabled: false,
+  kind: null as null | "task" | "project",
+  calls: 0,
+  blockAfter: 0,
+  // holdAll: every matching guard call waits for release instead of only the
+  // Nth one. Used for multi-request races where each precheck must observe
+  // the pre-seed state while every transaction sees the post-seed state.
+  holdAll: false,
+  onBlocked: null as null | (() => void),
+  waitForRelease: null as null | (() => Promise<void>),
+}));
 
-vi.mock("../../apps/api/src/share/resolve-share-link", async (importOriginal) => {
+vi.mock("../../apps/api/src/share/full-access", async (importOriginal) => {
   const actual =
     await importOriginal<
-      typeof import("../../apps/api/src/share/resolve-share-link")
+      typeof import("../../apps/api/src/share/full-access")
     >();
   return {
     ...actual,
-    appendShareActionAudit: async (
-      link: Parameters<typeof actual.appendShareActionAudit>[0],
-      action: string,
-      tx?: Parameters<typeof actual.appendShareActionAudit>[2],
-      resourceIdOverride?: string,
+    countResourceAssets: async (
+      where: Parameters<typeof actual.countResourceAssets>[0],
+      executor: Parameters<typeof actual.countResourceAssets>[1],
     ) => {
-      if (auditMock.fail) {
-        throw new Error("audit persistence unavailable");
+      const count = await actual.countResourceAssets(where, executor);
+      if (resourceCountRace.enabled && executor === undefined) {
+        resourceCountRace.precheckCounts.push(count);
+        await resourceCountRace.waitForPair?.();
+      } else if (resourceCountRace.enabled) {
+        resourceCountRace.transactionCounts.push(count);
       }
-      return actual.appendShareActionAudit(link, action, tx, resourceIdOverride);
+      return count;
+    },
+    loadProjectTask: async (...args: Parameters<typeof actual.loadProjectTask>) => {
+      const task = await actual.loadProjectTask(...args);
+      if (relationRace.enabled) {
+        relationRace.calls += 1;
+        if (relationRace.calls === relationRace.blockAfter) {
+          relationRace.onBlocked?.();
+          await relationRace.waitForRelease?.();
+        }
+      }
+      return task;
+    },
+    loadProjectDocument: async (
+      ...args: Parameters<typeof actual.loadProjectDocument>
+    ) => {
+      const document = await actual.loadProjectDocument(...args);
+      if (documentRace.enabled) {
+        // Only the FIRST call pauses — the guest update's precheck. The
+        // owner's archive goes through the same loader and must not block
+        // on its own barrier.
+        documentRace.enabled = false;
+        documentRace.onBlocked?.();
+        await documentRace.waitForRelease?.();
+      }
+      return document;
+    },
+    isTaskAgentControlled: async (...args: Parameters<typeof actual.isTaskAgentControlled>) => {
+      const controlled = await actual.isTaskAgentControlled(...args);
+      if (
+        !controlled &&
+        agentGuardRace.enabled &&
+        agentGuardRace.kind === "task"
+      ) {
+        agentGuardRace.calls += 1;
+        if (agentGuardRace.calls === agentGuardRace.blockAfter) {
+          agentGuardRace.onBlocked?.();
+          await agentGuardRace.waitForRelease?.();
+        }
+      }
+      return controlled;
+    },
+    isProjectAgentControlledStrict: async (
+      ...args: Parameters<typeof actual.isProjectAgentControlledStrict>
+    ) => {
+      const controlled = await actual.isProjectAgentControlledStrict(...args);
+      if (
+        !controlled &&
+        agentGuardRace.enabled &&
+        agentGuardRace.kind === "project"
+      ) {
+        agentGuardRace.calls += 1;
+        if (
+          agentGuardRace.holdAll ||
+          agentGuardRace.calls === agentGuardRace.blockAfter
+        ) {
+          agentGuardRace.onBlocked?.();
+          await agentGuardRace.waitForRelease?.();
+        }
+      }
+      return controlled;
     },
   };
 });
 
+vi.mock(
+  "../../apps/api/src/share/resolve-share-link",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("../../apps/api/src/share/resolve-share-link")
+      >();
+    return {
+      ...actual,
+      appendShareActionAudit: async (
+        link: Parameters<typeof actual.appendShareActionAudit>[0],
+        action: string,
+        tx?: Parameters<typeof actual.appendShareActionAudit>[2],
+        resourceIdOverride?: string,
+      ) => {
+        if (auditMock.fail) {
+          throw new Error("audit persistence unavailable");
+        }
+        return actual.appendShareActionAudit(
+          link,
+          action,
+          tx,
+          resourceIdOverride,
+        );
+      },
+    };
+  },
+);
+
 type App = ReturnType<typeof createApp>["app"];
+
+function createAgentGuardBarrier(
+  kind: "task" | "project",
+  blockAfter = 1,
+  options: { holdAll?: boolean } = {},
+) {
+  let markBlocked = () => {};
+  let releaseBlocked = () => {};
+  const blocked = new Promise<void>((resolve) => {
+    markBlocked = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    releaseBlocked = resolve;
+  });
+  agentGuardRace.enabled = true;
+  agentGuardRace.kind = kind;
+  agentGuardRace.calls = 0;
+  agentGuardRace.blockAfter = blockAfter;
+  agentGuardRace.holdAll = options.holdAll ?? false;
+  agentGuardRace.onBlocked = markBlocked;
+  agentGuardRace.waitForRelease = () => released;
+  return {
+    blocked,
+    release: releaseBlocked,
+    reset: () => {
+      agentGuardRace.enabled = false;
+      agentGuardRace.kind = null;
+      agentGuardRace.calls = 0;
+      agentGuardRace.blockAfter = 0;
+      agentGuardRace.holdAll = false;
+      agentGuardRace.onBlocked = null;
+      agentGuardRace.waitForRelease = null;
+    },
+  };
+}
+
+function createTaskMoveBarrier(blockAfter: number) {
+  let markBlocked = () => {};
+  let releaseBlocked = () => {};
+  const blocked = new Promise<void>((resolve) => {
+    markBlocked = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    releaseBlocked = resolve;
+  });
+  relationRace.enabled = true;
+  relationRace.calls = 0;
+  relationRace.blockAfter = blockAfter;
+  relationRace.onBlocked = markBlocked;
+  relationRace.waitForRelease = () => released;
+  return {
+    blocked,
+    release: releaseBlocked,
+    reset: () => {
+      relationRace.enabled = false;
+      relationRace.calls = 0;
+      relationRace.blockAfter = 0;
+      relationRace.onBlocked = null;
+      relationRace.waitForRelease = null;
+    },
+  };
+}
+
+function createDocumentArchiveBarrier() {
+  let markBlocked = () => {};
+  let releaseBlocked = () => {};
+  const blocked = new Promise<void>((resolve) => {
+    markBlocked = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    releaseBlocked = resolve;
+  });
+  documentRace.enabled = true;
+  documentRace.onBlocked = markBlocked;
+  documentRace.waitForRelease = () => released;
+  return {
+    blocked,
+    release: releaseBlocked,
+    reset: () => {
+      documentRace.enabled = false;
+      documentRace.onBlocked = null;
+      documentRace.waitForRelease = null;
+    },
+  };
+}
 
 async function createLink(
   app: App,
@@ -90,7 +301,12 @@ async function createLink(
 
 async function seedTask(
   projectId: string,
-  overrides?: Partial<{ title: string; description: string | null; status: string; userId: string | null }>,
+  overrides?: Partial<{
+    title: string;
+    description: string | null;
+    status: string;
+    userId: string | null;
+  }>,
 ) {
   // Number must stay unique per project (task_project_number_unique).
   const [{ count }] = await db
@@ -170,15 +386,6 @@ async function seedTaskRun(projectId: string, taskId: string) {
   return run;
 }
 
-async function getAuditCount(shareLinkId: string, action: string) {
-  const rows = await db
-    .select({ id: schema.shareActionAuditTable.id })
-    .from(schema.shareActionAuditTable)
-    .where(eq(schema.shareActionAuditTable.shareLinkId, shareLinkId));
-  void action;
-  return rows.length;
-}
-
 describe("API integration: full project share capability", () => {
   beforeEach(async () => {
     await resetTestDatabase();
@@ -231,9 +438,12 @@ describe("API integration: full project share capability", () => {
       .from(schema.shareLinkTable)
       .where(eq(schema.shareLinkTable.id, created.id));
     expect(link.permission).toBe("full");
-    expect(link.expiresAt).not.toBeNull();
-    const days =
-      (link.expiresAt!.getTime() - link.createdAt.getTime()) / 86_400_000;
+    const expiresAt = link.expiresAt;
+    expect(expiresAt).not.toBeNull();
+    if (!expiresAt) {
+      throw new Error("Full links must have an expiration time.");
+    }
+    const days = (expiresAt.getTime() - link.createdAt.getTime()) / 86_400_000;
     expect(Math.round(days)).toBe(30);
   });
 
@@ -277,6 +487,68 @@ describe("API integration: full project share capability", () => {
       }),
     });
     expect(edit.status).toBe(200);
+  });
+
+  it("restricts full-link listing/revocation and one-time URL to owner/admin", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const custom = await createWorkspaceMember({ role: "member" });
+    await db.insert(schema.workspaceRoleTable).values({
+      workspaceId: admin.workspace.id,
+      role: "custom-share",
+      permission: JSON.stringify({ project: ["share"] }),
+    });
+    await db.insert(schema.workspaceUserTable).values({
+      workspaceId: admin.workspace.id,
+      userId: custom.user.id,
+      role: "custom-share",
+      joinedAt: new Date(),
+    });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const full = await createLink(app, "project", project.id, "full");
+    const edit = await createLink(app, "project", project.id, "edit");
+
+    const adminList = await app.request(
+      `/api/share-manage?resourceType=project&resourceId=${project.id}`,
+    );
+    expect(adminList.status).toBe(200);
+    const adminRows = (await adminList.json()) as Array<{
+      id: string;
+      permission: string;
+      url: string | null;
+    }>;
+    expect(adminRows.find((row) => row.id === full.id)?.url).toBeNull();
+
+    mockAuthenticatedSession(custom.user);
+    ({ app } = createApp());
+
+    const customList = await app.request(
+      `/api/share-manage?resourceType=project&resourceId=${project.id}`,
+    );
+    expect(customList.status).toBe(200);
+    const customRows = (await customList.json()) as Array<{
+      id: string;
+      permission: string;
+      url: string | null;
+    }>;
+    expect(customRows.some((row) => row.id === full.id)).toBe(false);
+    expect(customRows.find((row) => row.id === edit.id)?.url).toContain(
+      edit.token,
+    );
+
+    const fullRevoke = await app.request(`/api/share-manage/${full.id}`, {
+      method: "DELETE",
+    });
+    expect(fullRevoke.status).toBe(403);
+    const [persistedFull] = await db
+      .select({ revokedAt: schema.shareLinkTable.revokedAt })
+      .from(schema.shareLinkTable)
+      .where(eq(schema.shareLinkTable.id, full.id));
+    expect(persistedFull?.revokedAt).toBeNull();
   });
 
   it("allows full link creation on agent-controlled projects but keeps the edit guard", async () => {
@@ -387,7 +659,10 @@ describe("API integration: full project share capability", () => {
       }),
     });
     expect(created.status).toBe(200);
-    const task = (await created.json()) as { id: string; status: string };
+    const createdPayload = (await created.json()) as Record<string, unknown>;
+    expect(createdPayload).not.toHaveProperty("executionState");
+    expect(createdPayload).not.toHaveProperty("taskRevision");
+    const task = createdPayload as { id: string; status: string };
     expect(task.status).toBe("planned");
 
     const updated = await app.request(
@@ -399,6 +674,9 @@ describe("API integration: full project share capability", () => {
       },
     );
     expect(updated.status).toBe(200);
+    const updatedPayload = (await updated.json()) as Record<string, unknown>;
+    expect(updatedPayload).not.toHaveProperty("executionState");
+    expect(updatedPayload).not.toHaveProperty("taskRevision");
 
     const deleted = await app.request(
       `/api/share/project/${link.token}/task/${task.id}`,
@@ -412,18 +690,235 @@ describe("API integration: full project share capability", () => {
     expect(gone).toBeUndefined();
   });
 
+  it("rechecks task execution markers in the mutation transaction for task, comment, label, and upload writes", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const updateTask = await seedTask(project.id, { title: "Update task" });
+    const commentTask = await seedTask(project.id, { title: "Comment task" });
+    const labelTask = await seedTask(project.id, { title: "Label task" });
+    const uploadTask = await seedTask(project.id, { title: "Upload task" });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const addRunAfterPrecheck = async (
+      taskId: string,
+      request: () => Promise<Response>,
+    ) => {
+      const barrier = createAgentGuardBarrier("task");
+      const pending = request();
+      try {
+        await barrier.blocked;
+        await seedTaskRun(project.id, taskId);
+        const [run] = await db
+          .select({ id: schema.taskRunTable.id })
+          .from(schema.taskRunTable)
+          .where(eq(schema.taskRunTable.taskId, taskId));
+        expect(run).toBeTruthy();
+        barrier.release();
+        return await pending;
+      } finally {
+        barrier.release();
+        barrier.reset();
+      }
+    };
+
+    const update = await addRunAfterPrecheck(updateTask.id, () =>
+      app.request(
+        `/api/share/project/${link.token}/task/${updateTask.id}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ priority: "high" }),
+        },
+      ),
+    );
+    expect(update.status).toBe(403);
+    const [unchangedTask] = await db
+      .select({ priority: schema.taskTable.priority })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, updateTask.id));
+    expect(unchangedTask?.priority).toBe(updateTask.priority);
+
+    const comment = await addRunAfterPrecheck(commentTask.id, () =>
+      app.request(
+        `/api/share/project/${link.token}/task/${commentTask.id}/comments`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: "must not persist" }),
+        },
+      ),
+    );
+    expect(comment.status).toBe(403);
+    const [commentCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.activityTable)
+      .where(eq(schema.activityTable.taskId, commentTask.id));
+    expect(Number(commentCount?.count)).toBe(0);
+
+    const label = await addRunAfterPrecheck(labelTask.id, () =>
+      app.request(
+        `/api/share/project/${link.token}/task/${labelTask.id}/labels`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "must-not-persist", color: "#000000" }),
+        },
+      ),
+    );
+    expect(label.status).toBe(403);
+    const [labelCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.labelTable)
+      .where(eq(schema.labelTable.taskId, labelTask.id));
+    expect(Number(labelCount?.count)).toBe(0);
+
+    storageMocks.getPrivateObjectMeta.mockResolvedValue({
+      contentType: "image/png",
+      contentLength: 100,
+    });
+    storageMocks.getPrivateObjectPrefix.mockResolvedValue(
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+    storageMocks.deleteS3Object.mockClear();
+    const finalize = await addRunAfterPrecheck(uploadTask.id, () =>
+      app.request(`/api/share/project/${link.token}/asset/finalize`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ownerType: "task_description",
+          ownerId: uploadTask.id,
+          key: `workspace/${admin.workspace.id}/content/task_description/${uploadTask.id}/staged.png`,
+          filename: "staged.png",
+          contentType: "image/png",
+          size: 100,
+        }),
+      }),
+    );
+    expect(finalize.status).toBe(403);
+    expect(storageMocks.deleteS3Object).toHaveBeenCalledOnce();
+    const [assetCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.assetTable)
+      .where(eq(schema.assetTable.taskId, uploadTask.id));
+    expect(Number(assetCount?.count)).toBe(0);
+  }, 15_000);
+
+  it("rechecks the project manifest inside task-description and upload transactions", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const task = await seedTask(project.id, { title: "Description task" });
+    const [{ count: taskCount }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.projectId, project.id));
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    storageMocks.getPrivateObjectMeta.mockResolvedValue({
+      contentType: "image/png",
+      contentLength: 100,
+    });
+    storageMocks.getPrivateObjectPrefix.mockResolvedValue(
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+    storageMocks.deleteS3Object.mockClear();
+    // holdAll keeps all three prechecks paused until the manifest is seeded:
+    // every request authorizes against the pre-seed state, then must fail in
+    // its transaction against the post-seed state (the TOCTOU window).
+    const barrier = createAgentGuardBarrier("project", 3, { holdAll: true });
+    const update = app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ description: "must remain unchanged" }),
+      },
+    );
+    const create = app.request(`/api/share/project/${link.token}/task`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        title: "Must not be created",
+        description: "must not persist",
+      }),
+    });
+    const stagedKey = `workspace/${admin.workspace.id}/content/task_description/${task.id}/manifest-race.png`;
+    const upload = app.request(
+      `/api/share/project/${link.token}/asset/finalize`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ownerType: "task_description",
+          ownerId: task.id,
+          key: stagedKey,
+          filename: "manifest-race.png",
+          contentType: "image/png",
+          size: 100,
+        }),
+      },
+    );
+    try {
+      await barrier.blocked;
+      await seedProjectManifest(project.id);
+      barrier.release();
+      const [updateResponse, createResponse, uploadResponse] =
+        await Promise.all([update, create, upload]);
+      expect(updateResponse.status).toBe(403);
+      const createBody = await createResponse.text();
+      expect(createResponse.status, createBody).toBe(403);
+      expect(uploadResponse.status).toBe(403);
+      expect(storageMocks.deleteS3Object).toHaveBeenCalledWith(stagedKey);
+    } finally {
+      barrier.release();
+      barrier.reset();
+    }
+
+    const [updatedTask] = await db
+      .select({ description: schema.taskTable.description })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id));
+    expect(updatedTask?.description).toBe("Existing description");
+    const [remainingTaskCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.projectId, project.id));
+    expect(Number(remainingTaskCount?.count)).toBe(Number(taskCount));
+  }, 15_000);
+
   it("hides descriptions project-wide under a manifest but keeps structural edits working", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
     const { project } = await createProjectFixture({
       workspaceId: admin.workspace.id,
     });
     const task = await seedTask(project.id);
-    await db.insert(schema.activityTable).values({
-      taskId: task.id,
-      type: "comment",
-      userId: null,
-      content: "worker control narrative",
-    });
+    await db.insert(schema.activityTable).values([
+      {
+        taskId: task.id,
+        type: "comment",
+        userId: null,
+        content: "worker control narrative",
+      },
+      {
+        taskId: task.id,
+        type: "comment",
+        userId: admin.user.id,
+        content: "Member comment",
+      },
+    ]);
     await seedProjectManifest(project.id);
 
     mockAuthenticatedSession(admin.user);
@@ -450,12 +945,36 @@ describe("API integration: full project share capability", () => {
     expect(detail.status).toBe(200);
     const detailPayload = (await detail.json()) as {
       description: string | null;
-      comments: unknown[];
+      comments: Array<{ content: string; authorName: string }>;
     };
     expect(detailPayload.description).toBeNull();
     expect(detailPayload).not.toHaveProperty("agentControlled");
     expect(detailPayload).not.toHaveProperty("descriptionLocked");
-    expect(detailPayload.comments).toHaveLength(0);
+    expect(detailPayload.comments.map((comment) => comment.content)).toEqual([
+      "Member comment",
+    ]);
+    expect(JSON.stringify(detailPayload)).not.toContain(
+      "worker control narrative",
+    );
+
+    const postedComment = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}/comments`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content: "Share comment" }),
+      },
+    );
+    expect(postedComment.status).toBe(200);
+    const refetchedDetail = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+    );
+    const refetchedPayload = (await refetchedDetail.json()) as {
+      comments: Array<{ content: string; authorName: string }>;
+    };
+    expect(refetchedPayload.comments.map((comment) => comment.content)).toEqual(
+      ["Member comment", "Share comment"],
+    );
 
     // Structural fields stay editable for proven-ordinary tasks.
     const structural = await app.request(
@@ -513,8 +1032,9 @@ describe("API integration: full project share capability", () => {
     const payload = (await projectRead.json()) as {
       columns: Array<{ tasks: Array<{ id: string }> }>;
     };
-    expect(payload.columns.flatMap((column) => column.tasks).map((task) => task.id))
-      .not.toContain(controlled.id);
+    expect(
+      payload.columns.flatMap((column) => column.tasks).map((task) => task.id),
+    ).not.toContain(controlled.id);
 
     // Ordinary tasks in the same project remain fully usable.
     const ok = await app.request(
@@ -553,7 +1073,10 @@ describe("API integration: full project share capability", () => {
       },
     );
     expect(created.status).toBe(200);
-    const comment = (await created.json()) as { id: string; authorName: string };
+    const comment = (await created.json()) as {
+      id: string;
+      authorName: string;
+    };
     expect(comment.authorName).toBe("Share link holder");
 
     const [activity] = await db
@@ -564,9 +1087,7 @@ describe("API integration: full project share capability", () => {
     expect(activity.externalUserName).toBe("Share link holder");
 
     // No steering, no notifications — side-effect matrix T1 §D.
-    const notifications = await db
-      .select()
-      .from(schema.notificationTable);
+    const notifications = await db.select().from(schema.notificationTable);
     expect(notifications).toHaveLength(0);
     const controlRequests = await db
       .select()
@@ -590,6 +1111,112 @@ describe("API integration: full project share capability", () => {
     );
     expect(removed.status).toBe(200);
   });
+
+  it("rechecks project scope before guest comment and label edit/delete transactions", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const otherProject = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+      name: "Other project",
+    });
+    const updateTask = await seedTask(project.id, { title: "Comment update" });
+    const deleteTask = await seedTask(project.id, { title: "Comment delete" });
+    const labelTask = await seedTask(project.id, { title: "Label delete" });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const createComment = async (taskId: string, content: string) => {
+      const response = await app.request(
+        `/api/share/project/${link.token}/task/${taskId}/comments`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content }),
+        },
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()) as { id: string };
+    };
+    const commentToUpdate = await createComment(updateTask.id, "keep me");
+    const commentToDelete = await createComment(deleteTask.id, "also keep me");
+    const [label] = await db
+      .insert(schema.labelTable)
+      .values({
+        taskId: labelTask.id,
+        workspaceId: admin.workspace.id,
+        name: "keep-label",
+        color: "#000000",
+      })
+      .returning();
+
+    const moveDuringGuard = async (
+      taskId: string,
+      request: () => Promise<Response>,
+    ) => {
+      const barrier = createAgentGuardBarrier("task");
+      const pending = request();
+      try {
+        await barrier.blocked;
+        await db
+          .update(schema.taskTable)
+          .set({ projectId: otherProject.project.id })
+          .where(eq(schema.taskTable.id, taskId));
+        barrier.release();
+        return await pending;
+      } finally {
+        barrier.release();
+        barrier.reset();
+      }
+    };
+
+    const updated = await moveDuringGuard(updateTask.id, () =>
+      app.request(
+        `/api/share/project/${link.token}/comment/${commentToUpdate.id}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: "must not change" }),
+        },
+      ),
+    );
+    expect(updated.status).toBe(404);
+    const [unchangedComment] = await db
+      .select({ content: schema.activityTable.content })
+      .from(schema.activityTable)
+      .where(eq(schema.activityTable.id, commentToUpdate.id));
+    expect(unchangedComment?.content).toBe("keep me");
+
+    const deleted = await moveDuringGuard(deleteTask.id, () =>
+      app.request(
+        `/api/share/project/${link.token}/comment/${commentToDelete.id}`,
+        { method: "DELETE" },
+      ),
+    );
+    expect(deleted.status).toBe(404);
+    const [remainingComment] = await db
+      .select({ id: schema.activityTable.id })
+      .from(schema.activityTable)
+      .where(eq(schema.activityTable.id, commentToDelete.id));
+    expect(remainingComment?.id).toBe(commentToDelete.id);
+
+    const removedLabel = await moveDuringGuard(labelTask.id, () =>
+      app.request(`/api/share/project/${link.token}/label/${label.id}`, {
+        method: "DELETE",
+      }),
+    );
+    expect(removedLabel.status).toBe(404);
+    const [remainingLabel] = await db
+      .select({ id: schema.labelTable.id })
+      .from(schema.labelTable)
+      .where(eq(schema.labelTable.id, label.id));
+    expect(remainingLabel?.id).toBe(label.id);
+  }, 15_000);
 
   it("refuses comment edits from a different link and denies comments on execution-linked tasks", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
@@ -679,7 +1306,11 @@ describe("API integration: full project share capability", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "Guest doc", content: "# Changed", revision: 1 }),
+        body: JSON.stringify({
+          title: "Guest doc",
+          content: "# Changed",
+          revision: 1,
+        }),
       },
     );
     expect(updated.status).toBe(200);
@@ -695,6 +1326,160 @@ describe("API integration: full project share capability", () => {
       { method: "DELETE" },
     );
     expect(deleted.status).toBe(200);
+  });
+
+  it("never writes into a document archived before the update transaction", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const created = await app.request(
+      `/api/share/project/${link.token}/documents`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Doc", content: "# Before archive" }),
+      },
+    );
+    expect(created.status).toBe(200);
+    const document = (await created.json()) as { id: string; revision: number };
+
+    const archived = await app.request(
+      `/api/share/project/${link.token}/document/${document.id}/archive`,
+      { method: "POST" },
+    );
+    expect(archived.status).toBe(200);
+
+    // Same revision the guest saw before the archive: the update must lose
+    // to the archive instead of writing content into an archived document.
+    const update = await app.request(
+      `/api/share/project/${link.token}/document/${document.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Doc",
+          content: "# After archive",
+          revision: document.revision,
+        }),
+      },
+    );
+    expect(update.status).toBe(404);
+
+    const [row] = await db
+      .select({ content: schema.documentTable.content })
+      .from(schema.documentTable)
+      .where(eq(schema.documentTable.id, document.id));
+    expect(row?.content).toBe("# Before archive");
+  });
+
+  it("never writes into a document archived between precheck and commit", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const created = await app.request(
+      `/api/share/project/${link.token}/documents`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Doc", content: "# Before archive" }),
+      },
+    );
+    expect(created.status).toBe(200);
+    const document = (await created.json()) as { id: string; revision: number };
+
+    const barrier = createDocumentArchiveBarrier();
+    try {
+      const update = app.request(
+        `/api/share/project/${link.token}/document/${document.id}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            title: "Doc",
+            content: "# After archive",
+            revision: document.revision,
+          }),
+        },
+      );
+      await barrier.blocked;
+      const archive = await app.request(
+        `/api/share/project/${link.token}/document/${document.id}/archive`,
+        { method: "POST" },
+      );
+      expect(archive.status).toBe(200);
+      barrier.release();
+      const response = await update;
+      // The in-transaction archive check must win over the stale precheck.
+      expect(response.status).toBe(409);
+    } finally {
+      barrier.release();
+      barrier.reset();
+    }
+
+    const [row] = await db
+      .select({ content: schema.documentTable.content })
+      .from(schema.documentTable)
+      .where(eq(schema.documentTable.id, document.id));
+    expect(row?.content).toBe("# Before archive");
+  });
+
+  it("rechecks the root project inside the transaction before deleting", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const otherProject = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+      name: "Other project",
+    });
+    const task = await seedTask(project.id);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const barrier = createTaskMoveBarrier(1);
+    const deletion = app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      { method: "DELETE" },
+    );
+    try {
+      await barrier.blocked;
+      await db
+        .update(schema.taskTable)
+        .set({ projectId: otherProject.project.id })
+        .where(eq(schema.taskTable.id, task.id));
+      barrier.release();
+      const response = await deletion;
+      expect(response.status).toBe(404);
+    } finally {
+      barrier.release();
+      barrier.reset();
+    }
+
+    const [movedTask] = await db
+      .select({ projectId: schema.taskTable.projectId })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id));
+    expect(movedTask?.projectId).toBe(otherProject.project.id);
   });
 
   it("fails closed on cross-project relations and allows in-project ones", async () => {
@@ -729,7 +1514,10 @@ describe("API integration: full project share capability", () => {
     );
     expect(detail.status).toBe(200);
     const detailPayload = (await detail.json()) as {
-      relations: Array<{ sourceTask: { projectId: string }; targetTask: { projectId: string } }>;
+      relations: Array<{
+        sourceTask: { projectId: string };
+        targetTask: { projectId: string };
+      }>;
     };
     expect(detailPayload.relations).toHaveLength(0);
 
@@ -788,6 +1576,158 @@ describe("API integration: full project share capability", () => {
     expect(deniedDelete.status).toBe(404);
   });
 
+  it("refuses task deletion when its cascade would remove a cross-project relation", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const otherProject = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+      name: "Other project",
+    });
+    const task = await seedTask(project.id);
+    const foreignTask = await seedTask(otherProject.project.id);
+    const [relation] = await db
+      .insert(schema.taskRelationTable)
+      .values({
+        sourceTaskId: task.id,
+        targetTaskId: foreignTask.id,
+        relationType: "related",
+        position: 0,
+      })
+      .returning();
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const response = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      { method: "DELETE" },
+    );
+    expect(response.status).toBe(409);
+
+    const [remainingTask] = await db
+      .select({ id: schema.taskTable.id })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id));
+    const [remainingRelation] = await db
+      .select({ id: schema.taskRelationTable.id })
+      .from(schema.taskRelationTable)
+      .where(eq(schema.taskRelationTable.id, relation.id));
+    expect(remainingTask?.id).toBe(task.id);
+    expect(remainingRelation?.id).toBe(relation.id);
+  });
+
+  it("rechecks both relation endpoints after a concurrent project move", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const otherProject = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+      name: "Other project",
+    });
+    const createSource = await seedTask(project.id, { title: "Create source" });
+    const createTarget = await seedTask(project.id, { title: "Create target" });
+    const deleteSource = await seedTask(project.id, { title: "Delete source" });
+    const deleteTarget = await seedTask(project.id, { title: "Delete target" });
+    const parent = await seedTask(project.id, { title: "Parent" });
+    const child = await seedTask(project.id, { title: "Child" });
+    const [relationToDelete] = await db
+      .insert(schema.taskRelationTable)
+      .values({
+        sourceTaskId: deleteSource.id,
+        targetTaskId: deleteTarget.id,
+        relationType: "related",
+        position: 0,
+      })
+      .returning();
+    const [subtaskRelation] = await db
+      .insert(schema.taskRelationTable)
+      .values({
+        sourceTaskId: parent.id,
+        targetTaskId: child.id,
+        relationType: "subtask",
+        position: 0,
+      })
+      .returning();
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const moveDuringPrecheck = async (
+      blockAfter: number,
+      taskId: string,
+      request: () => Promise<Response>,
+    ) => {
+      const barrier = createTaskMoveBarrier(blockAfter);
+      const pendingRequest = request();
+      try {
+        await barrier.blocked;
+        await db
+          .update(schema.taskTable)
+          .set({ projectId: otherProject.project.id })
+          .where(eq(schema.taskTable.id, taskId));
+        barrier.release();
+        return await pendingRequest;
+      } finally {
+        barrier.release();
+        barrier.reset();
+      }
+    };
+
+    const createResponse = await moveDuringPrecheck(2, createTarget.id, () =>
+      app.request(
+        `/api/share/project/${link.token}/task/${createSource.id}/relations`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            targetTaskId: createTarget.id,
+            relationType: "related",
+          }),
+        },
+      ),
+    );
+    expect(createResponse.status).toBe(404);
+
+    const deleteResponse = await moveDuringPrecheck(2, deleteTarget.id, () =>
+      app.request(`/api/share/project/${link.token}/relation/${relationToDelete.id}`, {
+        method: "DELETE",
+      }),
+    );
+    expect(deleteResponse.status).toBe(404);
+    const [remainingRelation] = await db
+      .select({ id: schema.taskRelationTable.id })
+      .from(schema.taskRelationTable)
+      .where(eq(schema.taskRelationTable.id, relationToDelete.id));
+    expect(remainingRelation?.id).toBe(relationToDelete.id);
+
+    const reorderResponse = await moveDuringPrecheck(2, child.id, () =>
+      app.request(
+        `/api/share/project/${link.token}/task/${parent.id}/subtasks/reorder`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ orderedTargetTaskIds: [child.id] }),
+        },
+      ),
+    );
+    expect(reorderResponse.status).toBe(404);
+    const [unchangedSubtask] = await db
+      .select({ position: schema.taskRelationTable.position })
+      .from(schema.taskRelationTable)
+      .where(eq(schema.taskRelationTable.id, subtaskRelation.id));
+    expect(unchangedSubtask?.position).toBe(0);
+  }, 15_000);
+
   it("serves the member directory with only id, name, and avatar", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
     const { project } = await createProjectFixture({
@@ -802,16 +1742,14 @@ describe("API integration: full project share capability", () => {
     mockAnonymousSession();
     ({ app } = createApp());
 
-    const members = await app.request(`/api/share/project/${full.token}/members`);
+    const members = await app.request(
+      `/api/share/project/${full.token}/members`,
+    );
     expect(members.status).toBe(200);
     const payload = (await members.json()) as Array<Record<string, unknown>>;
     expect(payload.length).toBeGreaterThan(0);
     for (const member of payload) {
-      expect(Object.keys(member).sort()).toEqual([
-        "avatarUrl",
-        "id",
-        "name",
-      ]);
+      expect(Object.keys(member).sort()).toEqual(["avatarUrl", "id", "name"]);
       expect(member.id).toBeTruthy();
     }
 
@@ -820,6 +1758,145 @@ describe("API integration: full project share capability", () => {
     );
     expect(denied.status).toBe(404);
   });
+
+  it("hides custom-role users from the assignee directory and assignment API", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const task = await seedTask(project.id);
+    const custom = await createWorkspaceMember({
+      userName: "Custom Share Role",
+    });
+    await db.insert(schema.workspaceRoleTable).values({
+      workspaceId: admin.workspace.id,
+      role: "custom-share",
+      permission: JSON.stringify({ project: ["share"] }),
+    });
+    await db.insert(schema.workspaceUserTable).values({
+      workspaceId: admin.workspace.id,
+      userId: custom.user.id,
+      role: "custom-share",
+      joinedAt: new Date(),
+    });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const membersResponse = await app.request(
+      `/api/share/project/${link.token}/members`,
+    );
+    expect(membersResponse.status).toBe(200);
+    const members = (await membersResponse.json()) as Array<{ id: string }>;
+    expect(members.some((member) => member.id === custom.user.id)).toBe(false);
+
+    const assignment = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assigneeId: custom.user.id }),
+      },
+    );
+    expect(assignment.status).toBe(400);
+  });
+
+  it("serializes the per-resource upload cap across different full links", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const task = await seedTask(project.id);
+    await db.insert(schema.assetTable).values(
+      Array.from({ length: 19 }, (_, index) => ({
+        workspaceId: admin.workspace.id,
+        projectId: project.id,
+        taskId: task.id,
+        objectKey: `workspace/${admin.workspace.id}/content/task_description/${task.id}/existing-${index}.png`,
+        filename: `existing-${index}.png`,
+        mimeType: "image/png",
+        size: 10,
+        surface: "description",
+      })),
+    );
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const firstLink = await createLink(app, "project", project.id, "full");
+    const secondLink = await createLink(app, "project", project.id, "full");
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+    storageMocks.getPrivateObjectMeta.mockResolvedValue({
+      contentType: "image/png",
+      contentLength: 100,
+    });
+    storageMocks.getPrivateObjectPrefix.mockResolvedValue(
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+
+    const finalize = (token: string, key: string) =>
+      app.request(`/api/share/project/${token}/asset/finalize`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ownerType: "task_description",
+          ownerId: task.id,
+          key,
+          filename: `${key}.png`,
+          contentType: "image/png",
+          size: 100,
+        }),
+      });
+    let releasePrecheckPair = () => {};
+    const precheckPair = new Promise<void>((resolve) => {
+      releasePrecheckPair = resolve;
+    });
+    resourceCountRace.enabled = true;
+    resourceCountRace.calls = 0;
+    resourceCountRace.precheckCounts = [];
+    resourceCountRace.transactionCounts = [];
+    resourceCountRace.waitForPair = async () => {
+      resourceCountRace.calls += 1;
+      if (resourceCountRace.calls === 2) {
+        releasePrecheckPair();
+      }
+      await precheckPair;
+    };
+    let responses: Response[];
+    try {
+      responses = await Promise.all([
+        finalize(
+          firstLink.token,
+          `workspace/${admin.workspace.id}/content/task_description/${task.id}/first.png`,
+        ),
+        finalize(
+          secondLink.token,
+          `workspace/${admin.workspace.id}/content/task_description/${task.id}/second.png`,
+        ),
+      ]);
+    } finally {
+      resourceCountRace.enabled = false;
+      resourceCountRace.waitForPair = null;
+    }
+    expect(resourceCountRace.precheckCounts).toEqual([19, 19]);
+    expect(resourceCountRace.transactionCounts.sort((a, b) => a - b)).toEqual([
+      19, 20,
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 400,
+    ]);
+
+    const [count] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.assetTable)
+      .where(eq(schema.assetTable.taskId, task.id));
+    expect(Number(count?.count)).toBe(20);
+  }, 15_000);
 
   it("enforces the upload MIME allowlist, size cap, and actual-object verification", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
@@ -869,19 +1946,39 @@ describe("API integration: full project share capability", () => {
     const upload = (await ok.json()) as { key: string; uploadUrl: string };
     expect(upload.uploadUrl).toBeTruthy();
 
-    const finalize = (size: number, contentType = "image/png") =>
+    const finalize = (
+      size: number,
+      contentType = "image/png",
+      key = upload.key,
+    ) =>
       app.request(`/api/share/project/${link.token}/asset/finalize`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ownerType: "task_description",
           ownerId: task.id,
-          key: upload.key,
+          key,
           filename: "file.png",
           contentType,
           size,
         }),
       });
+
+    storageMocks.deleteS3Object.mockClear();
+    const invalidMime = await finalize(100, "application/octet-stream");
+    expect(invalidMime.status).toBe(400);
+    expect(storageMocks.deleteS3Object).toHaveBeenCalledWith(upload.key);
+
+    storageMocks.deleteS3Object.mockClear();
+    const invalidSize = await finalize(11 * 1024 * 1024);
+    expect(invalidSize.status).toBe(400);
+    expect(storageMocks.deleteS3Object).toHaveBeenCalledWith(upload.key);
+
+    storageMocks.deleteS3Object.mockClear();
+    storageMocks.assertContentAssetKeyMatchesContext.mockReturnValueOnce(false);
+    const wrongScope = await finalize(100, "image/png", "other-resource/file.png");
+    expect(wrongScope.status).toBe(400);
+    expect(storageMocks.deleteS3Object).not.toHaveBeenCalled();
 
     storageMocks.getPrivateObjectMeta.mockResolvedValue({
       contentType: "image/png",
@@ -903,6 +2000,18 @@ describe("API integration: full project share capability", () => {
       contentType: "image/png",
       contentLength: 100,
     });
+    storageMocks.getPrivateObjectPrefix.mockResolvedValue(
+      new Uint8Array([
+        60, 33, 100, 111, 99, 116, 121, 112, 101, 32, 104, 116, 109, 108,
+      ]),
+    );
+    const spoofedImage = await finalize(100);
+    expect(spoofedImage.status).toBe(400);
+    expect(storageMocks.deleteS3Object).toHaveBeenCalled();
+
+    storageMocks.getPrivateObjectPrefix.mockResolvedValue(
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
     const good = await finalize(100);
     expect(good.status).toBe(200);
     const asset = (await good.json()) as { id: string; url: string };
@@ -939,6 +2048,91 @@ describe("API integration: full project share capability", () => {
     const detailBody = await detail.text();
     expect(detailBody).not.toContain(link.token);
     expect(detailBody).toContain("/api/share/asset-ticket/");
+
+    storageMocks.deleteS3Object.mockClear();
+    const duplicateFinalize = await finalize(100);
+    expect(duplicateFinalize.status).toBe(409);
+    expect(storageMocks.deleteS3Object).not.toHaveBeenCalled();
+  });
+
+  it("keeps the committed object when concurrent finalizes collide on one key", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const task = await seedTask(project.id);
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const ticket = await app.request(
+      `/api/share/project/${link.token}/asset/upload-ticket`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ownerType: "task_description",
+          ownerId: task.id,
+          filename: "race.png",
+          contentType: "image/png",
+          size: 100,
+        }),
+      },
+    );
+    const { key } = (await ticket.json()) as { key: string };
+
+    storageMocks.getPrivateObjectMeta.mockResolvedValue({
+      contentType: "image/png",
+      contentLength: 100,
+    });
+    storageMocks.getPrivateObjectPrefix.mockResolvedValue(
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+    storageMocks.deleteS3Object.mockClear();
+
+    const finalizeRequest = () =>
+      app.request(`/api/share/project/${link.token}/asset/finalize`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ownerType: "task_description",
+          ownerId: task.id,
+          key,
+          filename: "race.png",
+          contentType: "image/png",
+          size: 100,
+        }),
+      });
+
+    // holdAll parks BOTH prechecks while both still see an empty asset
+    // table; the loser must then fail inside its transaction WITHOUT
+    // deleting the storage object the winner just committed.
+    const barrier = createAgentGuardBarrier("project", 2, { holdAll: true });
+    let first: Response;
+    let second: Response;
+    try {
+      const a = finalizeRequest();
+      const b = finalizeRequest();
+      await barrier.blocked;
+      barrier.release();
+      [first, second] = await Promise.all([a, b]);
+    } finally {
+      barrier.release();
+      barrier.reset();
+    }
+
+    expect([first.status, second.status].sort((x, y) => x - y)).toEqual([
+      200, 409,
+    ]);
+    expect(storageMocks.deleteS3Object).not.toHaveBeenCalledWith(key);
+    const [assetCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.assetTable)
+      .where(eq(schema.assetTable.objectKey, key));
+    expect(Number(assetCount?.count)).toBe(1);
   });
 
   it("rolls back the mutation when the audit insert fails", async () => {
@@ -1043,7 +2237,7 @@ describe("API integration: full project share capability", () => {
     expect(revoked.revokedAt).not.toBeNull();
   });
 
-  it("never exposes the raw token outside the authenticated create/list response", async () => {
+  it("never exposes the full bearer token outside the authorized create response", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
     const { project } = await createProjectFixture({
       workspaceId: admin.workspace.id,

@@ -25,8 +25,10 @@ import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { getColumnIcon } from "@/lib/column";
 import { generateLink } from "@/lib/generate-link";
 import { getInitials } from "@/lib/get-initials";
+import { getShareCapability } from "@/components/share/share-capability";
 import { getPriorityLabel } from "@/lib/i18n/domain";
 import { getPriorityIcon } from "@/lib/priority";
+import { getTaskLinkPath } from "@/lib/task-link";
 import { toast } from "@/lib/toast";
 import useProjectStore from "@/store/project";
 import type Task from "@/types/task";
@@ -88,7 +90,13 @@ export default function TaskCardContextMenuContent({
   }, [workspaceUsers]);
 
   const handleCopyTaskLink = () => {
-    const path = `/dashboard/workspace/${taskCardContext.worskpaceId}/project/${taskCardContext.projectId}/task/${task.id}`;
+    const capability = getShareCapability();
+    const path = getTaskLinkPath({
+      taskId: task.id,
+      workspaceId: taskCardContext.worskpaceId,
+      projectId: taskCardContext.projectId,
+      shareToken: capability?.token,
+    });
     const taskLink = generateLink(path);
 
     navigator.clipboard.writeText(taskLink);

@@ -1,8 +1,44 @@
 import { resolveApiBaseUrl } from "@kaneo/libs";
+import type { ShareFullProjectPayload } from "@/fetchers/share/share-full-api";
+import { ShareRequestError } from "@/fetchers/share/share-request-error";
+import type { PublicProjectPayload } from "@/types/public-project";
 
 const apiBase = resolveApiBaseUrl(
   import.meta.env.VITE_API_URL as string | undefined,
 );
+
+export type ShareProjectPayload =
+  | (PublicProjectPayload & { scope?: "view" | "edit" })
+  | ShareFullProjectPayload;
+
+export function isFullProjectShare(
+  payload: ShareProjectPayload,
+): payload is ShareFullProjectPayload {
+  return payload.scope === "full";
+}
+
+export async function getShareProjectPayload(
+  token: string,
+): Promise<ShareProjectPayload> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/share/project/${token}`, {
+      credentials: "omit",
+    });
+  } catch {
+    throw new ShareRequestError("error");
+  }
+  if (response.status === 403 || response.status === 404) {
+    throw new ShareRequestError("invalid");
+  }
+  if (response.status === 429) {
+    throw new ShareRequestError("rateLimited");
+  }
+  if (!response.ok) {
+    throw new ShareRequestError("error");
+  }
+  return (await response.json()) as ShareProjectPayload;
+}
 
 // R4-T4: authenticated mutation shapes are not part of the generated hono
 // client types for share-scoped public writes, so the reader calls them via

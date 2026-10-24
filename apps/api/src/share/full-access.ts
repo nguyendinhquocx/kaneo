@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, or, type SQL, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 
@@ -9,6 +9,9 @@ import db, { schema } from "../database";
 // membership, no execution surface.
 
 const notFound = () => new HTTPException(404, { message: "Not found" });
+const ASSIGNABLE_WORKSPACE_ROLES = ["owner", "admin", "member"] as const;
+type ShareTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type ShareQueryExecutor = typeof db | ShareTransaction;
 
 export type FullLinkProject = {
   id: string;
@@ -76,16 +79,41 @@ export async function loadProjectTask(taskId: string, projectId: string) {
     .select()
     .from(schema.taskTable)
     .where(
-      and(eq(schema.taskTable.id, taskId), eq(schema.taskTable.projectId, projectId)),
+      and(
+        eq(schema.taskTable.id, taskId),
+        eq(schema.taskTable.projectId, projectId),
+      ),
     )
     .limit(1);
   if (!task) throw notFound();
   return task;
 }
 
+export async function loadProjectDocument(
+  documentId: string,
+  projectId: string,
+) {
+  const [document] = await db
+    .select()
+    .from(schema.documentTable)
+    .where(
+      and(
+        eq(schema.documentTable.id, documentId),
+        eq(schema.documentTable.projectId, projectId),
+      ),
+    )
+    .limit(1);
+  if (!document || document.archivedAt !== null) {
+    throw notFound();
+  }
+  return document;
+}
+
 // Tasks participating in runs, schedules, or manifest phase cards are omitted
 // as whole objects; their title/status and relations are execution data too.
-export async function getDeniedTaskIds(taskIds: string[]): Promise<Set<string>> {
+export async function getDeniedTaskIds(
+  taskIds: string[],
+): Promise<Set<string>> {
   const denied = new Set<string>();
   if (taskIds.length === 0) return denied;
   const [runs, schedules, phaseCards] = await Promise.all([
@@ -145,11 +173,14 @@ export async function listAssignableMembers(workspaceId: string) {
       avatarUrl: schema.userTable.image,
     })
     .from(schema.workspaceUserTable)
-    .innerJoin(schema.userTable, eq(schema.workspaceUserTable.userId, schema.userTable.id))
+    .innerJoin(
+      schema.userTable,
+      eq(schema.workspaceUserTable.userId, schema.userTable.id),
+    )
     .where(
       and(
         eq(schema.workspaceUserTable.workspaceId, workspaceId),
-        ne(schema.workspaceUserTable.role, "viewer"),
+        inArray(schema.workspaceUserTable.role, ASSIGNABLE_WORKSPACE_ROLES),
       ),
     )
     .orderBy(schema.userTable.name);
@@ -158,15 +189,16 @@ export async function listAssignableMembers(workspaceId: string) {
 export async function assertGuestAssigneeAllowed(
   assigneeId: string,
   workspaceId: string,
+  executor: ShareQueryExecutor = db,
 ) {
-  const members = await db
+  const members = await executor
     .select({ id: schema.workspaceUserTable.id })
     .from(schema.workspaceUserTable)
     .where(
       and(
         eq(schema.workspaceUserTable.userId, assigneeId),
         eq(schema.workspaceUserTable.workspaceId, workspaceId),
-        ne(schema.workspaceUserTable.role, "viewer"),
+        inArray(schema.workspaceUserTable.role, ASSIGNABLE_WORKSPACE_ROLES),
       ),
     )
     .limit(1);
@@ -179,8 +211,10 @@ export async function assertGuestAssigneeAllowed(
 
 export async function getFullLinkUploadUsage(options: {
   shareLinkId: string;
+  executor?: ShareQueryExecutor;
 }): Promise<{ totalSize: number; fileCount: number }> {
-  const auditRows = await db
+  const executor = options.executor ?? db;
+  const auditRows = await executor
     .select({ resourceId: schema.shareActionAuditTable.resourceId })
     .from(schema.shareActionAuditTable)
     .where(
@@ -191,7 +225,7 @@ export async function getFullLinkUploadUsage(options: {
     );
   const assetIds = auditRows.map((row) => row.resourceId);
   if (assetIds.length === 0) return { totalSize: 0, fileCount: 0 };
-  const [usage] = await db
+  const [usage] = await executor
     .select({
       totalSize: sql<number>`coalesce(sum(${schema.assetTable.size}), 0)`,
       fileCount: sql<number>`count(*)`,
@@ -204,8 +238,11 @@ export async function getFullLinkUploadUsage(options: {
   };
 }
 
-export async function countResourceAssets(where: SQL | undefined): Promise<number> {
-  const [row] = await db
+export async function countResourceAssets(
+  where: SQL | undefined,
+  executor: ShareQueryExecutor = db,
+): Promise<number> {
+  const [row] = await executor
     .select({ fileCount: sql<number>`count(*)` })
     .from(schema.assetTable)
     .where(where);
@@ -239,7 +276,10 @@ export async function buildFullProjectPayload(resourceId: string) {
 
   const [deniedIds, redactedDescriptions] = await Promise.all([
     getDeniedTaskIds(allTasks.map((task) => task.id)),
-    getRedactedTaskIds(resourceId, allTasks.map((task) => task.id)),
+    getRedactedTaskIds(
+      resourceId,
+      allTasks.map((task) => task.id),
+    ),
   ]);
   const tasks = allTasks.filter((task) => !deniedIds.has(task.id));
 
@@ -307,7 +347,11 @@ export async function buildFullProjectPayload(resourceId: string) {
         .filter((task) => task.status === column.slug)
         .map(toFullTask),
     })),
-    archivedTasks: tasks.filter((task) => task.status === "archived").map(toFullTask),
-    plannedTasks: tasks.filter((task) => task.status === "planned").map(toFullTask),
+    archivedTasks: tasks
+      .filter((task) => task.status === "archived")
+      .map(toFullTask),
+    plannedTasks: tasks
+      .filter((task) => task.status === "planned")
+      .map(toFullTask),
   };
 }

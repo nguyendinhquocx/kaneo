@@ -2353,6 +2353,11 @@
       "description": "Chờ một chút rồi thử lại nhé.",
       "retry": "Thử lại"
     },
+    "loading": "Đang tải dự án…",
+    "loadError": {
+      "title": "Không tải được dự án",
+      "description": "Kiểm tra kết nối rồi thử lại."
+    },
     "unsupported": "Loại tài nguyên này không hiển thị được ở đây.",
     "capabilityLinks": "Link chia sẻ giới hạn",
     "capabilityLinksHint": "Link giới hạn phạm vi cho dự án này. Khác với URL công khai ở trên, mỗi link cấp rõ quyền xem hoặc sửa và có thể thu hồi.",
@@ -2364,15 +2369,15 @@
     },
     "full": {
       "holderBadge": "link chia sẻ",
-      "view.backlog": "Backlog",
-      "view.board": "Tasks",
+      "view.backlog": "Việc tồn đọng",
+      "view.board": "Công việc",
       "view.gantt": "Gantt",
-      "view.docs": "Docs",
+      "view.docs": "Tài liệu",
       "view": {
-        "backlog": "Backlog",
-        "board": "Tasks",
+        "backlog": "Việc tồn đọng",
+        "board": "Công việc",
         "gantt": "Gantt",
-        "docs": "Docs"
+        "docs": "Tài liệu"
       }
     }
   },

@@ -1,18 +1,24 @@
-import { and, asc, eq, inArray, max, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, max, or } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import { publishEvent } from "../events";
 import { assertBulkTaskIdsGuard } from "../execution/phase-progress";
+import { deleteOrphanedAssets } from "../storage/cleanup-assets";
 import {
   assertContentAssetKeyMatchesContext,
   createContentAssetUploadUrl,
   deleteS3Object,
   getPrivateObjectMeta,
+  getPrivateObjectPrefix,
+  isImageContentType,
   validateFullLinkUploadInput,
 } from "../storage/s3";
-import { assertValidPriority, assertValidTaskStatus } from "../task/validate-task-fields";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
-import { deleteOrphanedAssets } from "../storage/cleanup-assets";
+import {
+  assertValidPriority,
+  assertValidTaskStatus,
+} from "../task/validate-task-fields";
+import { verifyShareAssetTicket } from "./asset-ticket";
 import {
   assertGuestAssigneeAllowed,
   countResourceAssets,
@@ -21,13 +27,13 @@ import {
   isProjectAgentControlledStrict,
   isTaskAgentControlled,
   listAssignableMembers,
+  loadProjectDocument,
   loadProjectTask,
 } from "./full-access";
 import {
   appendShareActionAudit,
   type ResolvedShareLink,
 } from "./resolve-share-link";
-import { verifyShareAssetTicket } from "./asset-ticket";
 
 // SPEC-2026-10-22 full-project-share-link: guest mutations under a `full`
 // capability. Every write is (1) project-scoped to link.resourceId, (2)
@@ -95,6 +101,27 @@ export type FullTaskWriteBody = {
   labels?: Array<{ name: string; color: string }>;
 };
 
+function toFullTaskMutationDto(
+  task: typeof schema.taskTable.$inferSelect,
+  labels: Array<{ id: string; name: string; color: string | null }>,
+) {
+  return {
+    id: task.id,
+    projectId: task.projectId,
+    number: task.number,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    startDate: task.startDate,
+    dueDate: task.dueDate,
+    position: task.position,
+    createdAt: task.createdAt,
+    assigneeId: task.userId,
+    labels,
+  };
+}
+
 async function assertGuestDescriptionWritable(
   projectId: string,
   taskId?: string,
@@ -105,6 +132,23 @@ async function assertGuestDescriptionWritable(
   if (taskId && (await isTaskAgentControlled(taskId))) {
     throw guestDenied();
   }
+}
+
+async function lockProjectForDescription(tx: Tx, projectId: string) {
+  const [project] = await tx
+    .select({ id: schema.projectTable.id })
+    .from(schema.projectTable)
+    .where(eq(schema.projectTable.id, projectId))
+    .for("update")
+    .limit(1);
+  if (!project) throw notFound();
+
+  const [manifest] = await tx
+    .select({ id: schema.executionManifestTable.id })
+    .from(schema.executionManifestTable)
+    .where(eq(schema.executionManifestTable.projectId, projectId))
+    .limit(1);
+  if (manifest) throw guestDenied();
 }
 
 export async function fullCreateTask(
@@ -147,6 +191,14 @@ export async function fullCreateTask(
   const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
 
   const created = await db.transaction(async (tx) => {
+    if (body.description !== undefined) {
+      await lockProjectForDescription(tx, project.id);
+    }
+    if (body.assigneeId) {
+      // Re-validate membership under the transaction: a member removed
+      // between the precheck and this commit must not receive the task.
+      await assertGuestAssigneeAllowed(body.assigneeId, project.workspaceId, tx);
+    }
     const taskNumber = await claimTaskNumber(project.id, tx);
     const [task] = await tx
       .insert(schema.taskTable)
@@ -167,30 +219,38 @@ export async function fullCreateTask(
     if (!task) {
       throw new HTTPException(500, { message: "Failed to create task" });
     }
-    if (body.labels && body.labels.length > 0) {
-      await tx.insert(schema.labelTable).values(
-        body.labels.slice(0, 20).map((label) => ({
-          taskId: task.id,
-          workspaceId: project.workspaceId,
-          name: label.name,
-          color: label.color,
-        })),
-      );
-    }
+    const labels =
+      body.labels && body.labels.length > 0
+        ? await tx
+            .insert(schema.labelTable)
+            .values(
+              body.labels.slice(0, 20).map((label) => ({
+                taskId: task.id,
+                workspaceId: project.workspaceId,
+                name: label.name,
+                color: label.color,
+              })),
+            )
+            .returning({
+              id: schema.labelTable.id,
+              name: schema.labelTable.name,
+              color: schema.labelTable.color,
+            })
+        : [];
     await audit(tx, link, "task.create");
-    return task;
+    return { task, labels };
   });
 
   await publishEvent("task.created", {
-    ...created,
-    taskId: created.id,
-    userId: created.userId ?? "",
+    ...created.task,
+    taskId: created.task.id,
+    userId: created.task.userId ?? "",
     currentUserId: "",
     type: "created",
     content: null,
   });
 
-  return created;
+  return toFullTaskMutationDto(created.task, created.labels);
 }
 
 export async function fullUpdateTask(
@@ -248,7 +308,16 @@ export async function fullUpdateTask(
     updates.position = body.position;
   }
 
-  const [updated] = await db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
+    if (body.description !== undefined) {
+      await lockProjectForDescription(tx, project.id);
+    }
+    if (body.assigneeId) {
+      // Re-validate membership under the transaction: a member removed
+      // between the precheck and this commit must not receive the task.
+      await assertGuestAssigneeAllowed(body.assigneeId, project.workspaceId, tx);
+    }
+    await lockOrdinaryProjectTasks(tx, project.id, [task.id]);
     const [row] = await tx
       .update(schema.taskTable)
       .set(updates)
@@ -260,27 +329,35 @@ export async function fullUpdateTask(
       )
       .returning();
     if (!row) {
-      return [] as typeof row[];
+      return null;
     }
+    const labels = await tx
+      .select({
+        id: schema.labelTable.id,
+        name: schema.labelTable.name,
+        color: schema.labelTable.color,
+      })
+      .from(schema.labelTable)
+      .where(eq(schema.labelTable.taskId, row.id));
     await audit(tx, link, "task.update");
-    return [row];
+    return { task: row, labels };
   });
   if (!updated) {
     throw notFound();
   }
 
-  if (task.description !== updated.description) {
-    deleteOrphanedAssets(task.description, updated.description, {
+  if (task.description !== updated.task.description) {
+    deleteOrphanedAssets(task.description, updated.task.description, {
       taskId: task.id,
     }).catch(() => {});
   }
 
   await publishEvent("task.updated", {
-    taskId: updated.id,
-    projectId: updated.projectId,
-    title: updated.title,
-    status: updated.status,
-    userId: updated.userId ?? "",
+    taskId: updated.task.id,
+    projectId: updated.task.projectId,
+    title: updated.task.title,
+    status: updated.task.status,
+    userId: updated.task.userId ?? "",
   });
   if (updates.status && updates.status !== task.status) {
     await publishEvent("task-relation.refresh", {
@@ -289,13 +366,10 @@ export async function fullUpdateTask(
     });
   }
 
-  return updated;
+  return toFullTaskMutationDto(updated.task, updated.labels);
 }
 
-export async function fullDeleteTask(
-  link: ResolvedShareLink,
-  taskId: string,
-) {
+export async function fullDeleteTask(link: ResolvedShareLink, taskId: string) {
   const project = await getFullLinkProject(link.resourceId);
   const task = await loadProjectTask(taskId, project.id);
   if (await isTaskAgentControlled(task.id)) {
@@ -304,9 +378,17 @@ export async function fullDeleteTask(
 
   const deletion = await db.transaction(async (tx) => {
     const [lockedRoot] = await tx
-      .select({ id: schema.taskTable.id, projectId: schema.taskTable.projectId })
+      .select({
+        id: schema.taskTable.id,
+        projectId: schema.taskTable.projectId,
+      })
       .from(schema.taskTable)
-      .where(eq(schema.taskTable.id, task.id))
+      .where(
+        and(
+          eq(schema.taskTable.id, task.id),
+          eq(schema.taskTable.projectId, project.id),
+        ),
+      )
       .for("update")
       .limit(1);
     if (!lockedRoot) {
@@ -332,7 +414,9 @@ export async function fullDeleteTask(
         )
         .for("update");
 
-      if (childRelations.some((relation) => relation.targetTaskId === task.id)) {
+      if (
+        childRelations.some((relation) => relation.targetTaskId === task.id)
+      ) {
         throw new HTTPException(409, {
           message: "Cannot delete a cyclic subtask tree",
         });
@@ -464,6 +548,36 @@ export async function fullDeleteTask(
         ),
       )
       .for("update");
+    const relationEndpointIds = [
+      ...new Set(
+        relations.flatMap((relation) => [
+          relation.sourceTaskId,
+          relation.targetTaskId,
+        ]),
+      ),
+    ];
+    const relationEndpoints =
+      relationEndpointIds.length > 0
+        ? await tx
+            .select({
+              id: schema.taskTable.id,
+              projectId: schema.taskTable.projectId,
+            })
+            .from(schema.taskTable)
+            .where(inArray(schema.taskTable.id, relationEndpointIds))
+            .orderBy(schema.taskTable.id)
+            .for("update")
+        : [];
+    if (
+      relationEndpoints.length !== relationEndpointIds.length ||
+      relationEndpoints.some((endpoint) => endpoint.projectId !== project.id)
+    ) {
+      // Deleting a task cascades its relation rows. Never let that cascade
+      // mutate a project the bearer link does not own.
+      throw new HTTPException(409, {
+        message: "This task cannot be deleted right now.",
+      });
+    }
     const assetRows = await tx
       .select({ objectKey: schema.assetTable.objectKey })
       .from(schema.assetTable)
@@ -472,13 +586,21 @@ export async function fullDeleteTask(
 
     const deletedTasks = await tx
       .delete(schema.taskTable)
-      .where(inArray(schema.taskTable.id, deletionIds))
+      .where(
+        and(
+          inArray(schema.taskTable.id, deletionIds),
+          eq(schema.taskTable.projectId, project.id),
+        ),
+      )
       .returning({
         id: schema.taskTable.id,
         projectId: schema.taskTable.projectId,
         title: schema.taskTable.title,
       });
-    if (!deletedTasks.some((deleted) => deleted.id === lockedRoot.id)) {
+    if (
+      deletedTasks.length !== deletionIds.length ||
+      !deletedTasks.some((deleted) => deleted.id === lockedRoot.id)
+    ) {
       throw notFound();
     }
 
@@ -520,6 +642,14 @@ export async function fullDeleteTask(
 // Comments (dedicated guest path — no steering, no notifications)
 // ---------------------------------------------------------------------------
 
+function getCommentShareLinkId(eventData: unknown): string | undefined {
+  const shareLinkId =
+    typeof eventData === "object" && eventData !== null
+      ? (eventData as Record<string, unknown>).shareLinkId
+      : undefined;
+  return typeof shareLinkId === "string" ? shareLinkId : undefined;
+}
+
 async function loadGuestComment(commentId: string, projectId: string) {
   const [row] = await db
     .select({
@@ -529,7 +659,10 @@ async function loadGuestComment(commentId: string, projectId: string) {
       eventData: schema.activityTable.eventData,
     })
     .from(schema.activityTable)
-    .innerJoin(schema.taskTable, eq(schema.activityTable.taskId, schema.taskTable.id))
+    .innerJoin(
+      schema.taskTable,
+      eq(schema.activityTable.taskId, schema.taskTable.id),
+    )
     .where(
       and(
         eq(schema.activityTable.id, commentId),
@@ -541,11 +674,39 @@ async function loadGuestComment(commentId: string, projectId: string) {
   if (!row) {
     throw notFound();
   }
-  const shareLinkId =
-    typeof row.eventData === "object" && row.eventData !== null
-      ? (row.eventData as Record<string, unknown>).shareLinkId
-      : undefined;
-  return { ...row, shareLinkId: typeof shareLinkId === "string" ? shareLinkId : undefined };
+  return { ...row, shareLinkId: getCommentShareLinkId(row.eventData) };
+}
+
+async function lockGuestCommentForMutation(
+  tx: Tx,
+  projectId: string,
+  commentId: string,
+  taskId: string,
+  shareLinkId: string,
+) {
+  await lockOrdinaryProjectTasks(tx, projectId, [taskId]);
+  const [comment] = await tx
+    .select({
+      id: schema.activityTable.id,
+      taskId: schema.activityTable.taskId,
+      type: schema.activityTable.type,
+      content: schema.activityTable.content,
+      eventData: schema.activityTable.eventData,
+    })
+    .from(schema.activityTable)
+    .where(
+      and(
+        eq(schema.activityTable.id, commentId),
+        eq(schema.activityTable.taskId, taskId),
+        eq(schema.activityTable.type, "comment"),
+      ),
+    )
+    .for("update")
+    .limit(1);
+  if (!comment || getCommentShareLinkId(comment.eventData) !== shareLinkId) {
+    throw notFound();
+  }
+  return comment;
 }
 
 export async function fullCreateComment(
@@ -561,6 +722,7 @@ export async function fullCreateComment(
 
   const safeContent = stripCapabilityAssetTokens(content);
   const created = await db.transaction(async (tx) => {
+    await lockOrdinaryProjectTasks(tx, project.id, [task.id]);
     const [activity] = await tx
       .insert(schema.activityTable)
       .values({
@@ -580,8 +742,8 @@ export async function fullCreateComment(
 
     const referencedAssetIds = [
       ...new Set(
-        (safeContent.match(/\/(?:api\/)?asset\/([a-z0-9]+)/gi) ?? []).map((ref) =>
-          ref.split("/asset/")[1] ?? "",
+        (safeContent.match(/\/(?:api\/)?asset\/([a-z0-9]+)/gi) ?? []).map(
+          (ref) => ref.split("/asset/")[1] ?? "",
         ),
       ),
     ].filter(Boolean);
@@ -644,42 +806,45 @@ export async function fullUpdateComment(
   }
 
   const safeContent = stripCapabilityAssetTokens(content);
-  const [updated] = await db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
+    const lockedComment = await lockGuestCommentForMutation(
+      tx,
+      project.id,
+      comment.id,
+      comment.taskId,
+      link.id,
+    );
     const [row] = await tx
       .update(schema.activityTable)
       .set({ content: safeContent })
       .where(
         and(
-          eq(schema.activityTable.id, comment.id),
+          eq(schema.activityTable.id, lockedComment.id),
+          eq(schema.activityTable.taskId, lockedComment.taskId),
           eq(schema.activityTable.type, "comment"),
         ),
       )
       .returning();
-    if (!row) {
-      return [] as typeof row[];
-    }
+    if (!row) throw notFound();
     await audit(tx, link, "comment.update");
-    return [row];
+    return { row, oldContent: lockedComment.content };
   });
-  if (!updated) {
-    throw notFound();
-  }
 
-  if (comment.content !== safeContent) {
-    deleteOrphanedAssets(comment.content, safeContent, {
+  if (updated.oldContent !== safeContent) {
+    deleteOrphanedAssets(updated.oldContent, safeContent, {
       taskId: comment.taskId,
     }).catch(() => {});
   }
 
   await publishEvent("comment.updated", {
-    ...updated,
+    ...updated.row,
     projectId: project.id,
     userId: "",
   });
 
   return {
-    id: updated.id,
-    content: updated.content,
+    id: updated.row.id,
+    content: updated.row.content,
     authorName: GUEST_ACTOR_LABEL,
   };
 }
@@ -697,27 +862,35 @@ export async function fullDeleteComment(
     throw guestDenied();
   }
 
-  const [deleted] = await db.transaction(async (tx) => {
+  const deleted = await db.transaction(async (tx) => {
+    const lockedComment = await lockGuestCommentForMutation(
+      tx,
+      project.id,
+      comment.id,
+      comment.taskId,
+      link.id,
+    );
     const [row] = await tx
       .delete(schema.activityTable)
-      .where(eq(schema.activityTable.id, comment.id))
+      .where(
+        and(
+          eq(schema.activityTable.id, lockedComment.id),
+          eq(schema.activityTable.taskId, lockedComment.taskId),
+          eq(schema.activityTable.type, "comment"),
+        ),
+      )
       .returning();
-    if (!row) {
-      return [] as typeof row[];
-    }
+    if (!row) throw notFound();
     await audit(tx, link, "comment.delete");
-    return [row];
+    return { row, content: lockedComment.content };
   });
-  if (!deleted) {
-    throw notFound();
-  }
 
-  deleteOrphanedAssets(comment.content, null, {
+  deleteOrphanedAssets(deleted.content, null, {
     taskId: comment.taskId,
   }).catch(() => {});
 
   await publishEvent("comment.deleted", {
-    ...deleted,
+    ...deleted.row,
     projectId: project.id,
     userId: "",
   });
@@ -728,23 +901,6 @@ export async function fullDeleteComment(
 // ---------------------------------------------------------------------------
 // Project documents
 // ---------------------------------------------------------------------------
-
-async function loadProjectDocument(documentId: string, projectId: string) {
-  const [document] = await db
-    .select()
-    .from(schema.documentTable)
-    .where(
-      and(
-        eq(schema.documentTable.id, documentId),
-        eq(schema.documentTable.projectId, projectId),
-      ),
-    )
-    .limit(1);
-  if (!document || document.archivedAt !== null) {
-    throw notFound();
-  }
-  return document;
-}
 
 export async function fullCreateDocument(
   link: ResolvedShareLink,
@@ -798,11 +954,14 @@ export async function fullUpdateDocument(
         and(
           eq(schema.documentTable.id, document.id),
           eq(schema.documentTable.revision, body.revision),
+          // An archive committed between the precheck and this transaction
+          // must win: never write content into an archived document.
+          isNull(schema.documentTable.archivedAt),
         ),
       )
       .returning();
     if (!row) {
-      return [] as typeof row[];
+      return [] as (typeof row)[];
     }
     await audit(tx, link, "document.update");
     return [row];
@@ -842,7 +1001,7 @@ export async function fullSetDocumentArchived(
       .where(eq(schema.documentTable.id, document.id))
       .returning();
     if (!row) {
-      return [] as typeof row[];
+      return [] as (typeof row)[];
     }
     await audit(tx, link, archived ? "document.archive" : "document.unarchive");
     return [row];
@@ -881,7 +1040,9 @@ export async function fullDeleteDocument(
       .from(schema.assetTable)
       .where(eq(schema.assetTable.documentId, document.id))
       .for("update");
-    await tx.delete(schema.documentTable).where(eq(schema.documentTable.id, document.id));
+    await tx
+      .delete(schema.documentTable)
+      .where(eq(schema.documentTable.id, document.id));
     await audit(tx, link, "document.delete");
     return rows.map((row) => row.objectKey);
   });
@@ -929,6 +1090,57 @@ export async function fullGetDocument(
 
 const RELATION_TYPES = new Set(["subtask", "blocks", "related"]);
 
+async function lockOrdinaryProjectTasks(
+  tx: Tx,
+  projectId: string,
+  taskIds: string[],
+) {
+  const orderedIds = [...new Set(taskIds)].sort();
+  const tasks =
+    orderedIds.length > 0
+      ? await tx
+          .select({
+            id: schema.taskTable.id,
+            projectId: schema.taskTable.projectId,
+          })
+          .from(schema.taskTable)
+          .where(inArray(schema.taskTable.id, orderedIds))
+          .orderBy(schema.taskTable.id)
+          .for("update")
+      : [];
+  if (
+    tasks.length !== orderedIds.length ||
+    tasks.some((task) => task.projectId !== projectId)
+  ) {
+    throw notFound();
+  }
+  if (orderedIds.length === 0) return;
+
+  const [run] = await tx
+    .select({ id: schema.taskRunTable.id })
+    .from(schema.taskRunTable)
+    .where(inArray(schema.taskRunTable.taskId, orderedIds))
+    .limit(1);
+  const [schedule] = await tx
+    .select({ id: schema.executionScheduleTable.id })
+    .from(schema.executionScheduleTable)
+    .where(inArray(schema.executionScheduleTable.taskId, orderedIds))
+    .limit(1);
+  const [phaseCard] = await tx
+    .select({ id: schema.executionPhaseCardTable.id })
+    .from(schema.executionPhaseCardTable)
+    .where(
+      or(
+        inArray(schema.executionPhaseCardTable.fullTaskId, orderedIds),
+        inArray(schema.executionPhaseCardTable.childTaskId, orderedIds),
+      ),
+    )
+    .limit(1);
+  if (run || schedule || phaseCard) {
+    throw guestDenied();
+  }
+}
+
 export async function fullCreateRelation(
   link: ResolvedShareLink,
   sourceTaskId: string,
@@ -949,7 +1161,10 @@ export async function fullCreateRelation(
   // agent-control relations — reads and writes fail closed together.
   const sourceTask = await loadProjectTask(sourceTaskId, project.id);
   const targetTask = await loadProjectTask(targetTaskId, project.id);
-  if ((await isTaskAgentControlled(sourceTask.id)) || (await isTaskAgentControlled(targetTask.id))) {
+  if (
+    (await isTaskAgentControlled(sourceTask.id)) ||
+    (await isTaskAgentControlled(targetTask.id))
+  ) {
     throw guestDenied();
   }
 
@@ -977,14 +1192,32 @@ export async function fullCreateRelation(
   }
 
   const created = await db.transaction(async (tx) => {
+    await lockOrdinaryProjectTasks(tx, project.id, [sourceTaskId, targetTaskId]);
+    const [existingRelation] = await tx
+      .select({ id: schema.taskRelationTable.id })
+      .from(schema.taskRelationTable)
+      .where(
+        and(
+          eq(schema.taskRelationTable.relationType, relationType),
+          or(
+            and(
+              eq(schema.taskRelationTable.sourceTaskId, sourceTaskId),
+              eq(schema.taskRelationTable.targetTaskId, targetTaskId),
+            ),
+            and(
+              eq(schema.taskRelationTable.sourceTaskId, targetTaskId),
+              eq(schema.taskRelationTable.targetTaskId, sourceTaskId),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+    if (existingRelation) {
+      throw new HTTPException(409, { message: "This relation already exists" });
+    }
+
     let position = 0;
     if (relationType === "subtask") {
-      await tx
-        .select({ id: schema.taskTable.id })
-        .from(schema.taskTable)
-        .where(eq(schema.taskTable.id, sourceTaskId))
-        .for("update")
-        .limit(1);
       const [maxPosition] = await tx
         .select({ value: max(schema.taskRelationTable.position) })
         .from(schema.taskRelationTable)
@@ -1032,53 +1265,80 @@ export async function fullDeleteRelation(
   relationId: string,
 ) {
   const project = await getFullLinkProject(link.resourceId);
-
-  const [rel] = await db
+  const [prechecked] = await db
     .select({
-      id: schema.taskRelationTable.id,
       sourceTaskId: schema.taskRelationTable.sourceTaskId,
       targetTaskId: schema.taskRelationTable.targetTaskId,
-      relationType: schema.taskRelationTable.relationType,
     })
     .from(schema.taskRelationTable)
     .where(eq(schema.taskRelationTable.id, relationId))
     .limit(1);
-  if (!rel) {
-    throw notFound();
-  }
-
-  // Fail closed unless BOTH endpoints are proven ordinary tasks of the
-  // linked project.
-  await loadProjectTask(rel.sourceTaskId, project.id);
-  await loadProjectTask(rel.targetTaskId, project.id);
+  if (!prechecked) throw notFound();
+  await loadProjectTask(prechecked.sourceTaskId, project.id);
+  await loadProjectTask(prechecked.targetTaskId, project.id);
   if (
-    (await isTaskAgentControlled(rel.sourceTaskId)) ||
-    (await isTaskAgentControlled(rel.targetTaskId))
+    (await isTaskAgentControlled(prechecked.sourceTaskId)) ||
+    (await isTaskAgentControlled(prechecked.targetTaskId))
   ) {
     throw guestDenied();
   }
 
-  const [deleted] = await db.transaction(async (tx) => {
+  const deleted = await db.transaction(async (tx) => {
+    const [candidate] = await tx
+      .select({
+        sourceTaskId: schema.taskRelationTable.sourceTaskId,
+        targetTaskId: schema.taskRelationTable.targetTaskId,
+      })
+      .from(schema.taskRelationTable)
+      .where(eq(schema.taskRelationTable.id, relationId))
+      .limit(1);
+    if (!candidate) throw notFound();
+
+    // Lock and revalidate both endpoints in the same transaction as delete.
+    await lockOrdinaryProjectTasks(tx, project.id, [
+      candidate.sourceTaskId,
+      candidate.targetTaskId,
+    ]);
+    const [relation] = await tx
+      .select({
+        id: schema.taskRelationTable.id,
+        sourceTaskId: schema.taskRelationTable.sourceTaskId,
+        targetTaskId: schema.taskRelationTable.targetTaskId,
+        relationType: schema.taskRelationTable.relationType,
+      })
+      .from(schema.taskRelationTable)
+      .where(eq(schema.taskRelationTable.id, relationId))
+      .for("update")
+      .limit(1);
+    if (
+      !relation ||
+      relation.sourceTaskId !== candidate.sourceTaskId ||
+      relation.targetTaskId !== candidate.targetTaskId
+    ) {
+      throw notFound();
+    }
+
     const [row] = await tx
       .delete(schema.taskRelationTable)
-      .where(eq(schema.taskRelationTable.id, rel.id))
+      .where(
+        and(
+          eq(schema.taskRelationTable.id, relation.id),
+          eq(schema.taskRelationTable.sourceTaskId, relation.sourceTaskId),
+          eq(schema.taskRelationTable.targetTaskId, relation.targetTaskId),
+        ),
+      )
       .returning();
-    if (!row) {
-      return [] as typeof row[];
-    }
+    if (!row) throw notFound();
     await audit(tx, link, "task-relation.delete");
-    return [row];
+    return row;
   });
-  if (!deleted) {
-    throw notFound();
-  }
 
   await publishEvent("task-relation.deleted", {
     projectId: project.id,
     userId: "",
-    taskId: rel.sourceTaskId,
-    sourceTaskId: rel.sourceTaskId,
-    targetTaskId: rel.targetTaskId,
+    taskId: deleted.sourceTaskId,
+    sourceTaskId: deleted.sourceTaskId,
+    targetTaskId: deleted.targetTaskId,
   });
   await publishEvent("task-relation.refresh", {
     projectId: project.id,
@@ -1108,36 +1368,43 @@ export async function fullReorderSubtasks(
     }
   }
 
-  const relations = await db
-    .select({
-      id: schema.taskRelationTable.id,
-      targetTaskId: schema.taskRelationTable.targetTaskId,
-    })
-    .from(schema.taskRelationTable)
-    .where(
-      and(
-        eq(schema.taskRelationTable.sourceTaskId, parent.id),
-        eq(schema.taskRelationTable.relationType, "subtask"),
-      ),
-    );
-  const relationByTaskId = new Map(
-    relations.map((relation) => [relation.targetTaskId, relation.id]),
-  );
-  const orderedRelationIds: string[] = [];
-  for (const childId of orderedTargetTaskIds) {
-    const relationId = relationByTaskId.get(childId);
-    if (!relationId) {
-      throw notFound();
-    }
-    orderedRelationIds.push(relationId);
-  }
-
   await db.transaction(async (tx) => {
-    for (const [index, relationId] of orderedRelationIds.entries()) {
-      await tx
+    await lockOrdinaryProjectTasks(tx, project.id, [
+      parentTaskId,
+      ...orderedTargetTaskIds,
+    ]);
+    const relations = await tx
+      .select({
+        id: schema.taskRelationTable.id,
+        targetTaskId: schema.taskRelationTable.targetTaskId,
+      })
+      .from(schema.taskRelationTable)
+      .where(
+        and(
+          eq(schema.taskRelationTable.sourceTaskId, parentTaskId),
+          eq(schema.taskRelationTable.relationType, "subtask"),
+        ),
+      )
+      .for("update");
+    const relationByTaskId = new Map(
+      relations.map((relation) => [relation.targetTaskId, relation.id]),
+    );
+    for (const [index, childId] of orderedTargetTaskIds.entries()) {
+      const relationId = relationByTaskId.get(childId);
+      if (!relationId) throw notFound();
+      const [updated] = await tx
         .update(schema.taskRelationTable)
         .set({ position: index })
-        .where(eq(schema.taskRelationTable.id, relationId));
+        .where(
+          and(
+            eq(schema.taskRelationTable.id, relationId),
+            eq(schema.taskRelationTable.sourceTaskId, parentTaskId),
+            eq(schema.taskRelationTable.targetTaskId, childId),
+            eq(schema.taskRelationTable.relationType, "subtask"),
+          ),
+        )
+        .returning({ id: schema.taskRelationTable.id });
+      if (!updated) throw notFound();
     }
     await audit(tx, link, "task-relation.reorder");
   });
@@ -1165,6 +1432,7 @@ export async function fullCreateLabel(
   }
 
   const created = await db.transaction(async (tx) => {
+    await lockOrdinaryProjectTasks(tx, project.id, [task.id]);
     const [label] = await tx
       .insert(schema.labelTable)
       .values({
@@ -1195,14 +1463,17 @@ export async function fullCreateLabel(
   return created;
 }
 
-export async function fullDeleteLabel(link: ResolvedShareLink, labelId: string) {
+export async function fullDeleteLabel(
+  link: ResolvedShareLink,
+  labelId: string,
+) {
   const project = await getFullLinkProject(link.resourceId);
   const [label] = await db
     .select({ id: schema.labelTable.id, taskId: schema.labelTable.taskId })
     .from(schema.labelTable)
     .where(eq(schema.labelTable.id, labelId))
     .limit(1);
-  if (!label || !label.taskId) {
+  if (!label?.taskId) {
     throw notFound();
   }
   const task = await loadProjectTask(label.taskId, project.id);
@@ -1210,15 +1481,33 @@ export async function fullDeleteLabel(link: ResolvedShareLink, labelId: string) 
     throw guestDenied();
   }
 
-  await db.transaction(async (tx) => {
-    await tx.delete(schema.labelTable).where(eq(schema.labelTable.id, label.id));
+  const deleted = await db.transaction(async (tx) => {
+    await lockOrdinaryProjectTasks(tx, project.id, [task.id]);
+    const [lockedLabel] = await tx
+      .select({ id: schema.labelTable.id, taskId: schema.labelTable.taskId })
+      .from(schema.labelTable)
+      .where(eq(schema.labelTable.id, label.id))
+      .for("update")
+      .limit(1);
+    if (!lockedLabel || lockedLabel.taskId !== task.id) throw notFound();
+    const [row] = await tx
+      .delete(schema.labelTable)
+      .where(
+        and(
+          eq(schema.labelTable.id, lockedLabel.id),
+          eq(schema.labelTable.taskId, task.id),
+        ),
+      )
+      .returning({ id: schema.labelTable.id });
+    if (!row) throw notFound();
     await audit(tx, link, "label.delete");
+    return row;
   });
 
   await publishEvent("task.label_deleted", {
     taskId: task.id,
     projectId: project.id,
-    labelId: label.id,
+    labelId: deleted.id,
     userId: "",
   });
   return { success: true };
@@ -1228,7 +1517,10 @@ export async function fullDeleteLabel(link: ResolvedShareLink, labelId: string) 
 // Guest task detail + relations read (project-scoped expansion)
 // ---------------------------------------------------------------------------
 
-export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string) {
+export async function fullGetTaskDetail(
+  link: ResolvedShareLink,
+  taskId: string,
+) {
   const project = await getFullLinkProject(link.resourceId);
   const task = await loadProjectTask(taskId, project.id);
   if (await isTaskAgentControlled(task.id)) {
@@ -1237,8 +1529,9 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
     throw new HTTPException(404, { message: "Not found" });
   }
 
-  const descriptionAllowed =
-    !(await isProjectAgentControlledStrict(project.id));
+  const descriptionAllowed = !(await isProjectAgentControlledStrict(
+    project.id,
+  ));
 
   const labels = await db
     .select({
@@ -1267,7 +1560,10 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
     );
   const endpointIds = [
     ...new Set(
-      relationRows.flatMap((relation) => [relation.sourceTaskId, relation.targetTaskId]),
+      relationRows.flatMap((relation) => [
+        relation.sourceTaskId,
+        relation.targetTaskId,
+      ]),
     ),
   ];
   const endpointTasks = endpointIds.length
@@ -1284,7 +1580,10 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
           assigneeName: schema.userTable.name,
         })
         .from(schema.taskTable)
-        .leftJoin(schema.userTable, eq(schema.taskTable.userId, schema.userTable.id))
+        .leftJoin(
+          schema.userTable,
+          eq(schema.taskTable.userId, schema.userTable.id),
+        )
         .where(
           and(
             inArray(schema.taskTable.id, endpointIds),
@@ -1308,27 +1607,42 @@ export async function fullGetTaskDetail(link: ResolvedShareLink, taskId: string)
     // Cross-project endpoints are never expanded for the guest.
     .filter((relation) => relation.sourceTask && relation.targetTask);
 
-  // Activity is hidden together with the description: the task-level
-  // predicate OR a project-wide manifest hides the timeline — bot replies
-  // would leak the execution narrative (spec §B, T1 §D).
-  const activities = descriptionAllowed
-    ? await db
-        .select({
-          id: schema.activityTable.id,
-          type: schema.activityTable.type,
-          content: schema.activityTable.content,
-          createdAt: schema.activityTable.createdAt,
-          userId: schema.activityTable.userId,
-          userName: schema.userTable.name,
-          userImage: schema.userTable.image,
-          externalUserName: schema.activityTable.externalUserName,
-          externalSource: schema.activityTable.externalSource,
-        })
-        .from(schema.activityTable)
-        .leftJoin(schema.userTable, eq(schema.activityTable.userId, schema.userTable.id))
-        .where(eq(schema.activityTable.taskId, task.id))
-        .orderBy(asc(schema.activityTable.createdAt))
-    : [];
+  // Only comments belong in this DTO. In a project with a manifest, also
+  // exclude bot/system comments: they can contain execution narrative. Human
+  // member comments and link-attributed comments remain visible on ordinary
+  // tasks so a successful guest post survives refetch.
+  const activityScope = descriptionAllowed
+    ? and(
+        eq(schema.activityTable.taskId, task.id),
+        eq(schema.activityTable.type, "comment"),
+      )
+    : and(
+        eq(schema.activityTable.taskId, task.id),
+        eq(schema.activityTable.type, "comment"),
+        or(
+          isNotNull(schema.activityTable.userId),
+          eq(schema.activityTable.externalSource, "share-link"),
+        ),
+      );
+  const activities = await db
+    .select({
+      id: schema.activityTable.id,
+      type: schema.activityTable.type,
+      content: schema.activityTable.content,
+      createdAt: schema.activityTable.createdAt,
+      userId: schema.activityTable.userId,
+      userName: schema.userTable.name,
+      userImage: schema.userTable.image,
+      externalUserName: schema.activityTable.externalUserName,
+      externalSource: schema.activityTable.externalSource,
+    })
+    .from(schema.activityTable)
+    .leftJoin(
+      schema.userTable,
+      eq(schema.activityTable.userId, schema.userTable.id),
+    )
+    .where(activityScope)
+    .orderBy(asc(schema.activityTable.createdAt));
 
   const actorName = (row: {
     userId: string | null;
@@ -1379,6 +1693,58 @@ const FULL_LINK_MAX_BYTES_PER_FILE = 10 * 1024 * 1024;
 const FULL_LINK_MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 const FULL_LINK_MAX_FILES_PER_RESOURCE = 20;
 
+function asciiAt(bytes: Uint8Array, offset: number, length: number): string {
+  return String.fromCharCode(...bytes.subarray(offset, offset + length));
+}
+
+function hasContainerBrand(bytes: Uint8Array, brands: string[]): boolean {
+  if (asciiAt(bytes, 4, 4) !== "ftyp") return false;
+  for (let offset = 8; offset + 4 <= bytes.length; offset += 4) {
+    if (brands.includes(asciiAt(bytes, offset, 4))) return true;
+  }
+  return false;
+}
+
+function hasPngSignature(bytes: Uint8Array): boolean {
+  return [137, 80, 78, 71, 13, 10, 26, 10].every(
+    (value, index) => bytes[index] === value,
+  );
+}
+
+function hasValidImageSignature(
+  contentType: string,
+  bytes: Uint8Array,
+): boolean {
+  switch (contentType) {
+    case "image/png":
+    case "image/apng":
+      return hasPngSignature(bytes);
+    case "image/jpeg":
+    case "image/jpg":
+      return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    case "image/gif":
+      return ["GIF87a", "GIF89a"].includes(asciiAt(bytes, 0, 6));
+    case "image/webp":
+      return asciiAt(bytes, 0, 4) === "RIFF" && asciiAt(bytes, 8, 4) === "WEBP";
+    case "image/avif":
+      return hasContainerBrand(bytes, ["avif", "avis"]);
+    case "image/heic":
+      return hasContainerBrand(bytes, ["heic", "heix", "hevc", "hevx"]);
+    case "image/heif":
+      return hasContainerBrand(bytes, [
+        "heif",
+        "heim",
+        "heis",
+        "hevc",
+        "hevx",
+        "mif1",
+        "msf1",
+      ]);
+    default:
+      return false;
+  }
+}
+
 type UploadOwnerType = "task_description" | "task_comment" | "document";
 
 type UploadOwnerSurface = {
@@ -1390,6 +1756,41 @@ type UploadOwnerSurface = {
   ownerId: string;
   surface: string;
 };
+
+async function lockUploadResource(tx: Tx, owner: UploadOwnerSurface) {
+  if (owner.taskId) {
+    const [task] = await tx
+      .select({
+        id: schema.taskTable.id,
+        projectId: schema.taskTable.projectId,
+      })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, owner.taskId))
+      .for("update");
+    if (!task || task.projectId !== owner.projectId) throw notFound();
+    return;
+  }
+  if (owner.documentId) {
+    const [document] = await tx
+      .select({
+        id: schema.documentTable.id,
+        projectId: schema.documentTable.projectId,
+        archivedAt: schema.documentTable.archivedAt,
+      })
+      .from(schema.documentTable)
+      .where(eq(schema.documentTable.id, owner.documentId))
+      .for("update");
+    if (
+      !document ||
+      document.projectId !== owner.projectId ||
+      document.archivedAt !== null
+    ) {
+      throw notFound();
+    }
+    return;
+  }
+  throw notFound();
+}
 
 async function resolveGuestUploadOwner(
   ownerType: UploadOwnerType,
@@ -1403,7 +1804,10 @@ async function resolveGuestUploadOwner(
         workspaceId: schema.projectTable.workspaceId,
       })
       .from(schema.taskTable)
-      .innerJoin(schema.projectTable, eq(schema.taskTable.projectId, schema.projectTable.id))
+      .innerJoin(
+        schema.projectTable,
+        eq(schema.taskTable.projectId, schema.projectTable.id),
+      )
       .where(eq(schema.taskTable.id, ownerId))
       .limit(1);
     if (!task) {
@@ -1428,7 +1832,10 @@ async function resolveGuestUploadOwner(
       workspaceId: schema.projectTable.workspaceId,
     })
     .from(schema.documentTable)
-    .innerJoin(schema.projectTable, eq(schema.documentTable.projectId, schema.projectTable.id))
+    .innerJoin(
+      schema.projectTable,
+      eq(schema.documentTable.projectId, schema.projectTable.id),
+    )
     .where(eq(schema.documentTable.id, ownerId))
     .limit(1);
   if (!document || document.archivedAt !== null) {
@@ -1454,9 +1861,7 @@ function assertUploadOwnerInLink(
   }
 }
 
-async function assertGuestUploadTargetAllowed(
-  owner: UploadOwnerSurface,
-) {
+async function assertGuestUploadTargetAllowed(owner: UploadOwnerSurface) {
   if (owner.taskId) {
     if (await isTaskAgentControlled(owner.taskId)) {
       throw guestDenied();
@@ -1470,6 +1875,20 @@ async function assertGuestUploadTargetAllowed(
       throw guestDenied();
     }
   }
+}
+
+async function assertGuestUploadTargetAllowedInTransaction(
+  tx: Tx,
+  owner: UploadOwnerSurface,
+) {
+  if (owner.ownerType === "task_description") {
+    await lockProjectForDescription(tx, owner.projectId);
+  }
+  if (owner.taskId) {
+    await lockOrdinaryProjectTasks(tx, owner.projectId, [owner.taskId]);
+    return;
+  }
+  await lockUploadResource(tx, owner);
 }
 
 function resourceAssetWhere(owner: UploadOwnerSurface) {
@@ -1550,15 +1969,6 @@ export async function fullFinalizeUpload(
   await getFullLinkProject(link.resourceId);
   const owner = await resolveGuestUploadOwner(input.ownerType, input.ownerId);
   assertUploadOwnerInLink(owner, link);
-  await assertGuestUploadTargetAllowed(owner);
-
-  try {
-    validateFullLinkUploadInput(input.contentType, input.size);
-  } catch (error) {
-    throw new HTTPException(400, {
-      message: error instanceof Error ? error.message : "Invalid upload",
-    });
-  }
 
   const normalizedKey = input.key.trim();
   // Key must belong to exactly this owner surface — including configured S3
@@ -1588,6 +1998,27 @@ export async function fullFinalizeUpload(
     });
   }
 
+  try {
+    validateFullLinkUploadInput(input.contentType, input.size);
+  } catch (error) {
+    await deleteS3Object(normalizedKey).catch(() => {});
+    throw new HTTPException(400, {
+      message: error instanceof Error ? error.message : "Invalid upload",
+    });
+  }
+  if (input.size > FULL_LINK_MAX_BYTES_PER_FILE) {
+    await deleteS3Object(normalizedKey).catch(() => {});
+    throw new HTTPException(400, {
+      message: "Upload exceeds the 10MB per-file share-link limit.",
+    });
+  }
+  try {
+    await assertGuestUploadTargetAllowed(owner);
+  } catch (error) {
+    await deleteS3Object(normalizedKey).catch(() => {});
+    throw error;
+  }
+
   // Verify the ACTUAL staged object before trusting declared metadata.
   let actual: { contentType?: string; contentLength?: number };
   try {
@@ -1598,7 +2029,8 @@ export async function fullFinalizeUpload(
     });
   }
   const actualLength = actual.contentLength ?? 0;
-  const actualType = (actual.contentType ?? "").toLowerCase().split(";")[0]?.trim() ?? "";
+  const actualType =
+    (actual.contentType ?? "").toLowerCase().split(";")[0]?.trim() ?? "";
   if (actualLength <= 0 || actualLength !== input.size) {
     await deleteS3Object(normalizedKey).catch(() => {});
     throw new HTTPException(400, {
@@ -1616,6 +2048,24 @@ export async function fullFinalizeUpload(
     throw new HTTPException(400, {
       message: "Upload exceeds the 10MB per-file share-link limit.",
     });
+  }
+
+  if (isImageContentType(actualType)) {
+    let prefix: Uint8Array;
+    try {
+      prefix = await getPrivateObjectPrefix(normalizedKey);
+    } catch {
+      await deleteS3Object(normalizedKey).catch(() => {});
+      throw new HTTPException(503, {
+        message: "Could not verify the uploaded image. Try uploading it again.",
+      });
+    }
+    if (!hasValidImageSignature(actualType, prefix)) {
+      await deleteS3Object(normalizedKey).catch(() => {});
+      throw new HTTPException(400, {
+        message: "Uploaded image bytes do not match the declared image type.",
+      });
+    }
   }
 
   const [usage, resourceCount] = await Promise.all([
@@ -1653,18 +2103,20 @@ export async function fullFinalizeUpload(
   let assetId: string;
   try {
     assetId = await db.transaction(async (tx) => {
-      // Serialize finalization per share link, then re-check quota/count while
-      // holding the row lock. The earlier checks are fast feedback only; this
-      // in-transaction check prevents concurrent uploads exceeding hard caps.
+      // Serialize finalization per share link, then re-check resource scope,
+      // agent-control state, and quota/count under the matching row locks.
       await tx
         .select({ id: schema.shareLinkTable.id })
         .from(schema.shareLinkTable)
         .where(eq(schema.shareLinkTable.id, link.id))
         .for("update")
         .limit(1);
+      // The cap belongs to the shared resource, not to a bearer link. Lock
+      // its row so finalizations through different links serialize as well.
+      await assertGuestUploadTargetAllowedInTransaction(tx, owner);
       const [lockedUsage, lockedResourceCount] = await Promise.all([
-        getFullLinkUploadUsage({ shareLinkId: link.id }),
-        countResourceAssets(resourceAssetWhere(owner)),
+        getFullLinkUploadUsage({ shareLinkId: link.id, executor: tx }),
+        countResourceAssets(resourceAssetWhere(owner), tx),
       ]);
       if (lockedUsage.totalSize + actualLength > FULL_LINK_MAX_TOTAL_BYTES) {
         throw new HTTPException(400, {
@@ -1674,6 +2126,19 @@ export async function fullFinalizeUpload(
       if (lockedResourceCount >= FULL_LINK_MAX_FILES_PER_RESOURCE) {
         throw new HTTPException(400, {
           message: "This resource already has the maximum number of files.",
+        });
+      }
+
+      const [duplicateKey] = await tx
+        .select({ id: schema.assetTable.id })
+        .from(schema.assetTable)
+        .where(eq(schema.assetTable.objectKey, normalizedKey))
+        .limit(1);
+      if (duplicateKey) {
+        // A concurrent finalize committed this key while we waited for the
+        // link lock. Fail without touching its storage object.
+        throw new HTTPException(409, {
+          message: "This upload key has already been finalized.",
         });
       }
 
@@ -1690,8 +2155,24 @@ export async function fullFinalizeUpload(
       return row.id;
     });
   } catch (error) {
-    // Transaction failed: the staged object must never stay addressable.
-    await deleteS3Object(normalizedKey).catch(() => {});
+    // Transaction failed. Delete the staged object ONLY when no committed
+    // asset owns the key: a concurrent finalize that committed first (or a
+    // duplicate-key rejection from one) must keep its storage object, or a
+    // harmless retry would destroy another request's live attachment.
+    const isDuplicateKeyError =
+      (error as { code?: string }).code === "23505";
+    let keyCommitted = isDuplicateKeyError;
+    if (!keyCommitted) {
+      const [committed] = await db
+        .select({ id: schema.assetTable.id })
+        .from(schema.assetTable)
+        .where(eq(schema.assetTable.objectKey, normalizedKey))
+        .limit(1);
+      keyCommitted = Boolean(committed);
+    }
+    if (!keyCommitted) {
+      await deleteS3Object(normalizedKey).catch(() => {});
+    }
     throw error;
   }
 
@@ -1707,4 +2188,3 @@ export async function fullFinalizeUpload(
     size: actualLength,
   };
 }
-

@@ -20,10 +20,10 @@ import {
   shareLinkTokenAad,
 } from "./token";
 
-// Authenticated share-link management. Creating, listing and revoking a
-// capability link requires `project:share` (API keys need the matching scope).
-// Raw tokens are never stored in plaintext or logged; R4 stores AEAD ciphertext
-// and returns a decrypted URL only to an authorized share manager.
+// Authenticated share-link management. Ordinary view/edit links retain the
+// existing `project:share` behavior. Full-link create/list/revoke is narrower:
+// only workspace owner/admin (or instance admin) may manage them, and listing
+// never re-reveals a full bearer URL after its one-time create response.
 
 const EDIT_LINK_TTL_DAYS = 30;
 
@@ -103,6 +103,43 @@ async function lookupResourceWorkspaceId(
   return row?.workspaceId ?? null;
 }
 
+async function hasFullLinkAdminAccess(
+  userId: string,
+  workspaceId: string,
+): Promise<boolean> {
+  const [user, membership] = await Promise.all([
+    db
+      .select({ role: schema.userTable.role })
+      .from(schema.userTable)
+      .where(eq(schema.userTable.id, userId))
+      .limit(1),
+    db
+      .select({ role: schema.workspaceUserTable.role })
+      .from(schema.workspaceUserTable)
+      .where(
+        and(
+          eq(schema.workspaceUserTable.userId, userId),
+          eq(schema.workspaceUserTable.workspaceId, workspaceId),
+        ),
+      )
+      .limit(1),
+  ]);
+
+  return (
+    user[0]?.role === "admin" ||
+    membership[0]?.role === "admin" ||
+    membership[0]?.role === "owner"
+  );
+}
+
+async function assertFullLinkAdmin(userId: string, workspaceId: string) {
+  if (!(await hasFullLinkAdminAccess(userId, workspaceId))) {
+    throw new HTTPException(403, {
+      message: "Only workspace owners and admins can manage full project links",
+    });
+  }
+}
+
 const shareManage = new Hono<{
   Variables: {
     userId: string;
@@ -178,35 +215,10 @@ const shareManage = new Hono<{
       });
       await permissionMiddleware(c, async () => {});
 
-      // Full capabilities are deliberately narrower than ordinary share
-      // links: only an authenticated workspace owner/admin (or instance
-      // administrator) may create them, even if a custom role was granted
-      // project:share for view/edit link administration.
+      // A custom role may manage view/edit links, but full capabilities are
+      // owner/admin-only even if it carries project:share.
       if (resourceType === "project" && permission === "full") {
-        const [user] = await db
-          .select({ role: schema.userTable.role })
-          .from(schema.userTable)
-          .where(eq(schema.userTable.id, userId))
-          .limit(1);
-        const [membership] = await db
-          .select({ role: schema.workspaceUserTable.role })
-          .from(schema.workspaceUserTable)
-          .where(
-            and(
-              eq(schema.workspaceUserTable.userId, userId),
-              eq(schema.workspaceUserTable.workspaceId, workspaceId),
-            ),
-          )
-          .limit(1);
-        if (
-          user?.role !== "admin" &&
-          membership?.role !== "admin" &&
-          membership?.role !== "owner"
-        ) {
-          throw new HTTPException(403, {
-            message: "Only workspace owners and admins can create full project links",
-          });
-        }
+        await assertFullLinkAdmin(userId, workspaceId);
       }
 
       if (
@@ -345,6 +357,10 @@ const shareManage = new Hono<{
       });
       await permissionMiddleware(c, async () => {});
 
+      const canManageFullLinks =
+        resourceType === "project"
+          ? await hasFullLinkAdminAccess(c.get("userId"), workspaceId)
+          : false;
       const conditions = [
         eq(schema.shareLinkTable.resourceType, resourceType),
         eq(schema.shareLinkTable.resourceId, resourceId),
@@ -373,13 +389,19 @@ const shareManage = new Hono<{
         process.env.KANEO_CLIENT_URL || "http://localhost:5173"
       ).replace(/\/$/, "");
 
+      const visibleLinks = canManageFullLinks
+        ? links
+        : links.filter((link) => link.permission !== "full");
+
       return c.json(
-        links.map((link) => {
+        visibleLinks.map((link) => {
           const active =
             link.revokedAt === null &&
             (link.expiresAt === null || link.expiresAt.getTime() > Date.now());
           let url: string | null = null;
-          if (active && link.tokenCiphertext) {
+          // Full URLs are one-time secrets. The creator already received it
+          // in the create response; listing exposes metadata only.
+          if (link.permission !== "full" && active && link.tokenCiphertext) {
             try {
               const rawToken = decryptShareToken(
                 link.tokenCiphertext,
@@ -444,6 +466,9 @@ const shareManage = new Hono<{
         project: ["share"],
       });
       await permissionMiddleware(c, async () => {});
+      if (link.permission === "full") {
+        await assertFullLinkAdmin(c.get("userId"), link.workspaceId);
+      }
 
       await db
         .update(schema.shareLinkTable)

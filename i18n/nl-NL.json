@@ -2300,25 +2300,30 @@
       "noteSaving": "Saving…"
     },
     "invalid": {
-      "description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
-      "title": "This link is no longer valid"
+      "description": "De link is ingetrokken, verlopen of verkeerd getypt. Vraag de eigenaar om een nieuwe link.",
+      "title": "Deze link is niet meer geldig"
     },
     "manage": "Share",
     "neverExpires": "Does not expire",
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Full project access",
-      "fullWarning": "Anyone holding this link gets full rights inside this project for 30 days — edit tasks, comments, docs and files — and cannot be reliably identified. Share carefully; revoke any time."
+      "full": "Volledige projecttoegang",
+      "fullWarning": "Iedereen met deze link heeft 30 dagen lang volledige rechten in dit project en kan taken, reacties, documenten en bestanden bewerken. De identiteit kan niet betrouwbaar worden vastgesteld. Deel de link zorgvuldig; je kunt hem altijd intrekken."
     },
     "rateLimited": {
-      "description": "Slow down a little and try again shortly.",
-      "retry": "Try again",
-      "title": "Too many requests"
+      "description": "Wacht even en probeer het daarna opnieuw.",
+      "retry": "Opnieuw proberen",
+      "title": "Te veel verzoeken"
     },
     "revoke": "Revoke link",
     "revoked": "Revoked",
     "title": "Delen",
+    "loading": "Project laden…",
+    "loadError": {
+      "title": "Project kan niet worden geladen",
+      "description": "Controleer je verbinding en probeer het opnieuw."
+    },
     "unsupported": "This resource type cannot be displayed here.",
     "capabilityLinks": "Capability share links",
     "capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
@@ -2363,12 +2368,12 @@
       "view": "View only"
     },
     "full": {
-      "holderBadge": "shared link",
+      "holderBadge": "Gedeelde link",
       "view": {
         "backlog": "Backlog",
-        "board": "Tasks",
+        "board": "Taken",
         "gantt": "Gantt",
-        "docs": "Docs"
+        "docs": "Documenten"
       }
     }
   },

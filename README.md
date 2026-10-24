@@ -48,7 +48,7 @@ We believe the best tools are **invisible**. They should amplify your team's nat
 - **Project Docs** — write Markdown pages per project with member comments, conflict-safe saves (revision CAS), and a raw `text/markdown` endpoint agents can fetch without an account
 - **Weekly Goals** — track recurring goals on a Monday–Sunday matrix with one check-in per day, a separate Markdown note per day, weekly targets, and archive that keeps history
 - **Rich content attachments** — paste screenshots inline or attach files in task descriptions, comments, Docs, and goal notes; files stay in private object storage
-- **Scoped share links** — view/edit exactly one project, document, or goal; create view-only links for one task description or individual comment. Edit links expire after 30 days, every link is revocable, agent-controlled projects refuse public writes, and each anonymous change is audited by link ID. Self-host share-link creation requires `SHARE_TOKEN_ENCRYPTION_KEY`; see `ENVIRONMENT_SETUP.md`.
+- **Scoped share links** — view/edit links grant one resource; a separate full-project link lets an unauthenticated holder work on ordinary tasks, comments, Docs, and files inside one project. Only workspace owners/admins can create or manage full links; the URL is shown once, expires after 30 days, and can be revoked. It grants no cross-project, workspace/account, integration, or agent-control access. Holders cannot be reliably identified; anonymous mutations are audited by link ID. Legacy view/edit behavior stays unchanged. Self-host share-link creation requires `SHARE_TOKEN_ENCRYPTION_KEY`; see `ENVIRONMENT_SETUP.md`.
 
 Learn more about Kaneo's features and capabilities in our [documentation](https://kaneo.app/docs/core).
 

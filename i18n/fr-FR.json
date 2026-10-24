@@ -2300,25 +2300,30 @@
       "noteSaving": "Saving…"
     },
     "invalid": {
-      "description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
-      "title": "This link is no longer valid"
+      "description": "Le lien a été révoqué, a expiré ou a été mal saisi. Demande au propriétaire d’en partager un nouveau.",
+      "title": "Ce lien n’est plus valide"
     },
     "manage": "Share",
     "neverExpires": "Does not expire",
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Full project access",
-      "fullWarning": "Anyone holding this link gets full rights inside this project for 30 days — edit tasks, comments, docs and files — and cannot be reliably identified. Share carefully; revoke any time."
+      "full": "Accès complet au projet",
+      "fullWarning": "Toute personne qui détient ce lien dispose de tous les droits sur ce projet pendant 30 jours et peut modifier les tâches, commentaires, documents et fichiers. Son identité ne peut pas être vérifiée de manière fiable. Partage ce lien avec prudence ; tu peux le révoquer à tout moment."
     },
     "rateLimited": {
-      "description": "Slow down a little and try again shortly.",
-      "retry": "Try again",
-      "title": "Too many requests"
+      "description": "Attends un instant et réessaie.",
+      "retry": "Réessayer",
+      "title": "Trop de requêtes"
     },
     "revoke": "Revoke link",
     "revoked": "Revoked",
     "title": "Partager",
+    "loading": "Chargement du projet…",
+    "loadError": {
+      "title": "Impossible de charger le projet",
+      "description": "Vérifie ta connexion, puis réessaie."
+    },
     "unsupported": "This resource type cannot be displayed here.",
     "capabilityLinks": "Capability share links",
     "capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
@@ -2363,12 +2368,12 @@
       "view": "View only"
     },
     "full": {
-      "holderBadge": "shared link",
+      "holderBadge": "Lien partagé",
       "view": {
-        "backlog": "Backlog",
-        "board": "Tasks",
+        "backlog": "À traiter",
+        "board": "Tâches",
         "gantt": "Gantt",
-        "docs": "Docs"
+        "docs": "Documents"
       }
     }
   },

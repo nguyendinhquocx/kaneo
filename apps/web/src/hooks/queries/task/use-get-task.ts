@@ -1,14 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import getTask from "@/fetchers/task/get-task";
-import { getShareFullTaskDetail } from "@/fetchers/share/share-full-api";
 import { getShareCapability } from "@/components/share/share-capability";
+import { getShareFullTaskDetail } from "@/fetchers/share/share-full-api";
+import getTask from "@/fetchers/task/get-task";
 import type Task from "@/types/task";
 
 function useGetTask(taskId: string) {
+  const capability = getShareCapability();
   return useQuery({
-    queryKey: ["task", taskId],
+    queryKey: capability
+      ? ["share-full", capability.token, "task", taskId]
+      : ["task", taskId],
     queryFn: async (): Promise<Task> => {
-      const capability = getShareCapability();
       if (capability) {
         const detail = await getShareFullTaskDetail(capability.token, taskId);
         // Capability detail maps onto the owner Task shape so the same
@@ -40,7 +42,7 @@ function useGetTask(taskId: string) {
     enabled: Boolean(taskId),
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
-    refetchInterval: getShareCapability() ? 10_000 : false,
+    refetchInterval: capability ? 10_000 : false,
     refetchIntervalInBackground: false,
     staleTime: 0,
   });

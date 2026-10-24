@@ -1,22 +1,27 @@
 import { useNavigate } from "@tanstack/react-router";
-import { CalendarDays, FileText, SquareKanban, SquircleDashed } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  CalendarDays,
+  FileText,
+  SquareKanban,
+  SquircleDashed,
+} from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import BoardToolbar from "@/components/board/board-toolbar";
 import BacklogListView from "@/components/backlog-list-view";
-import { setShareCapabilityProjectId } from "@/components/share/share-capability";
-import ShareGanttView from "@/components/share/share-gantt-view";
+import BoardToolbar from "@/components/board/board-toolbar";
 import KanbanBoard from "@/components/kanban-board";
 import ListView from "@/components/list-view";
+import { ThemeToggle } from "@/components/public-project/theme-toggle";
+import { setShareCapabilityProjectId } from "@/components/share/share-capability";
+import ShareGanttView from "@/components/share/share-gantt-view";
 import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
-import { useGetTasks } from "@/hooks/queries/task/use-get-tasks";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useBoardSort } from "@/hooks/use-board-sort";
 import { useTaskFiltersWithLabelsSupport } from "@/hooks/use-task-filters-with-labels-support";
 import { sortTasks } from "@/lib/sort-tasks";
-import { useUserPreferencesStore } from "@/store/user-preferences";
-import { ThemeToggle } from "@/components/public-project/theme-toggle";
 import useProjectStore from "@/store/project";
+import { useUserPreferencesStore } from "@/store/user-preferences";
+import type { ProjectWithTasks } from "@/types/project";
 
 // SPEC-2026-10-22 full-project-share-link: the guest work surface. Same
 // owner building blocks (toolbar, kanban, list, docs) rendered through the
@@ -29,16 +34,17 @@ export default function ShareProjectSurface({
   token,
   projectId,
   initialView = "board",
+  project,
   children,
 }: {
   token: string;
   projectId: string;
+  project: ProjectWithTasks;
   initialView?: ShareSurfaceView;
   children?: ReactNode;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data: project } = useGetTasks(projectId);
   const { setProject } = useProjectStore();
   const { data: users } = useGetActiveWorkspaceUsers("");
   const { data: workspaceLabels = [] } = useGetLabelsByWorkspace("");
@@ -64,8 +70,9 @@ export default function ShareProjectSurface({
   }, [project, setProject]);
   const sortedProject = useMemo(() => {
     if (!filteredProject) return null;
-    const sortTasksInColumn = (tasks: typeof filteredProject.columns[number]["tasks"]) =>
-      sortTasks(tasks, sort);
+    const sortTasksInColumn = (
+      tasks: (typeof filteredProject.columns)[number]["tasks"],
+    ) => sortTasks(tasks, sort);
     return {
       ...filteredProject,
       columns: filteredProject.columns.map((column) => ({

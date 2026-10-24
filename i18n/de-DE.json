@@ -2334,25 +2334,30 @@
       "replace": "Ersatzlink erstellen und kopieren"
     },
     "invalid": {
-      "description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
-      "title": "This link is no longer valid"
+      "description": "Der Link wurde widerrufen, ist abgelaufen oder wurde falsch eingegeben. Bitte den Inhaber um einen neuen Link.",
+      "title": "Dieser Link ist nicht mehr gültig"
     },
     "manage": "Share",
     "neverExpires": "Does not expire",
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Full project access",
-      "fullWarning": "Anyone holding this link gets full rights inside this project for 30 days — edit tasks, comments, docs and files — and cannot be reliably identified. Share carefully; revoke any time."
+      "full": "Voller Projektzugriff",
+      "fullWarning": "Jede Person mit diesem Link erhält 30 Tage lang volle Rechte in diesem Projekt und kann Aufgaben, Kommentare, Docs und Dateien bearbeiten. Die Identität lässt sich nicht zuverlässig feststellen. Teile den Link mit Bedacht; du kannst ihn jederzeit widerrufen."
     },
     "rateLimited": {
-      "description": "Slow down a little and try again shortly.",
-      "retry": "Try again",
-      "title": "Too many requests"
+      "description": "Bitte warte kurz und versuche es dann erneut.",
+      "retry": "Erneut versuchen",
+      "title": "Zu viele Anfragen"
     },
     "revoke": "Revoke link",
     "revoked": "Revoked",
     "title": "Teilen",
+    "loading": "Projekt wird geladen…",
+    "loadError": {
+      "title": "Projekt konnte nicht geladen werden",
+      "description": "Prüfe deine Verbindung und versuche es erneut."
+    },
     "unsupported": "This resource type cannot be displayed here.",
     "capabilityLinks": "Capability share links",
     "capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
@@ -2363,12 +2368,12 @@
       "revokeFailed": "Could not revoke the link"
     },
     "full": {
-      "holderBadge": "shared link",
+      "holderBadge": "Freigabelink",
       "view": {
         "backlog": "Backlog",
-        "board": "Tasks",
+        "board": "Aufgaben",
         "gantt": "Gantt",
-        "docs": "Docs"
+        "docs": "Dokumente"
       }
     }
   },

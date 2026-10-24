@@ -54,7 +54,9 @@ export default function ShareDialog({
   const { data: links = [] } = useGetShareLinks(resourceType, resourceId);
   const createLink = useCreateShareLink();
   const revokeLink = useRevokeShareLink();
-  const [permission, setPermission] = useState<"view" | "edit" | "full">("view");
+  const [permission, setPermission] = useState<"view" | "edit" | "full">(
+    "view",
+  );
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [legacyLinkId, setLegacyLinkId] = useState<string | null>(null);
   const supportsEdit =
@@ -155,53 +157,55 @@ export default function ShareDialog({
           {/* R3-T4: content padding mirrors the header (p-6) so rows and the
         URL input never touch the rounded border. */}
           <div className="space-y-3 p-6 pt-0">
-            <div className="flex items-center gap-2">
-              <div className="flex flex-1 gap-0.5 rounded-lg border border-border/80 bg-background p-0.5">
+            <div className="space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 flex-1 gap-0.5 rounded-lg border border-border/80 bg-background p-0.5">
+                  <Button
+                    variant={permission === "view" ? "secondary" : "ghost"}
+                    size="xs"
+                    onClick={() => setPermission("view")}
+                    className="min-h-11 min-w-0 flex-1 whitespace-normal px-1 text-center text-xs sm:min-h-8"
+                  >
+                    {t("permission.view")}
+                  </Button>
+                  {supportsEdit ? (
+                    <Button
+                      variant={permission === "edit" ? "secondary" : "ghost"}
+                      size="xs"
+                      onClick={() => setPermission("edit")}
+                      className="min-h-11 min-w-0 flex-1 whitespace-normal px-1 text-center text-xs sm:min-h-8"
+                    >
+                      {t("permission.edit")}
+                    </Button>
+                  ) : null}
+                  {resourceType === "project" && canCreateFull ? (
+                    <Button
+                      variant={permission === "full" ? "secondary" : "ghost"}
+                      size="xs"
+                      onClick={() => setPermission("full")}
+                      className="min-h-11 min-w-0 flex-1 whitespace-normal px-1 text-center text-xs sm:min-h-8"
+                    >
+                      {t("permission.full")}
+                    </Button>
+                  ) : null}
+                </div>
                 <Button
-                  variant={permission === "view" ? "secondary" : "ghost"}
                   size="xs"
-                  onClick={() => setPermission("view")}
-                  className="h-11 flex-1 text-xs sm:h-6"
+                  className="min-h-11 w-full sm:w-auto sm:min-h-6"
+                  onClick={handleCreate}
+                  disabled={createLink.isPending}
                 >
-                  {t("permission.view")}
+                  {createLink.isPending ? t("creating") : t("create")}
                 </Button>
-                {supportsEdit ? (
-                  <Button
-                    variant={permission === "edit" ? "secondary" : "ghost"}
-                    size="xs"
-                    onClick={() => setPermission("edit")}
-                    className="h-11 flex-1 text-xs sm:h-6"
-                  >
-                    {t("permission.edit")}
-                  </Button>
-                ) : null}
-                {resourceType === "project" && canCreateFull ? (
-                  <Button
-                    variant={permission === "full" ? "secondary" : "ghost"}
-                    size="xs"
-                    onClick={() => setPermission("full")}
-                    className="h-11 flex-1 text-xs sm:h-6"
-                  >
-                    {t("permission.full")}
-                  </Button>
-                ) : null}
               </div>
               {resourceType === "project" && permission === "full" ? (
                 <p
                   role="note"
-                  className="rounded-md border border-border/80 bg-muted/40 p-2 text-[11px] text-muted-foreground"
+                  className="w-full break-words rounded-md border border-border/80 bg-muted/40 p-2 text-[11px] text-muted-foreground"
                 >
                   {t("permission.fullWarning")}
                 </p>
               ) : null}
-              <Button
-                size="xs"
-                className="min-h-11 sm:min-h-6"
-                onClick={handleCreate}
-                disabled={createLink.isPending}
-              >
-                {createLink.isPending ? t("creating") : t("create")}
-              </Button>
             </div>
 
             {newLink ? (
@@ -248,8 +252,8 @@ export default function ShareDialog({
                       {link.permission === "full"
                         ? t("permission.full")
                         : link.permission === "edit"
-                        ? t("permission.edit")
-                        : t("permission.view")}
+                          ? t("permission.edit")
+                          : t("permission.view")}
                     </span>
                     <span className="text-[11px] text-muted-foreground">
                       {link.expiresAt

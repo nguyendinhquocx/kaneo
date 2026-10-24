@@ -1,4 +1,5 @@
 import { resolveApiBaseUrl } from "@kaneo/libs";
+import { ShareRequestError } from "@/fetchers/share/share-request-error";
 
 const apiBase = resolveApiBaseUrl(
   import.meta.env.VITE_API_URL as string | undefined,
@@ -113,6 +114,7 @@ async function request<T>(
   const { json, ...rest } = init ?? {};
   const response = await fetch(`${apiBase}/share/project/${token}${path}`, {
     ...rest,
+    credentials: "omit",
     headers: {
       ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(rest.headers ?? {}),
@@ -121,6 +123,12 @@ async function request<T>(
   });
   if (response.status === 409) {
     throw new ShareFullConflictError();
+  }
+  if (response.status === 403 || response.status === 404) {
+    throw new ShareRequestError("invalid");
+  }
+  if (response.status === 429) {
+    throw new ShareRequestError("rateLimited");
   }
   if (!response.ok) {
     throw await parseError(response);
@@ -255,11 +263,12 @@ export function updateShareFullDocument(
   documentId: string,
   body: { title: string; content: string; revision: number },
 ) {
-  return request<{ id: string; title: string; content: string; revision: number }>(
-    token,
-    `/document/${documentId}`,
-    { method: "PUT", json: body },
-  );
+  return request<{
+    id: string;
+    title: string;
+    content: string;
+    revision: number;
+  }>(token, `/document/${documentId}`, { method: "PUT", json: body });
 }
 
 export function setShareFullDocumentArchived(
@@ -283,7 +292,10 @@ export function deleteShareFullDocument(token: string, documentId: string) {
 export function createShareFullRelation(
   token: string,
   taskId: string,
-  body: { targetTaskId: string; relationType: "subtask" | "blocks" | "related" },
+  body: {
+    targetTaskId: string;
+    relationType: "subtask" | "blocks" | "related";
+  },
 ) {
   return request<{ id: string }>(token, `/task/${taskId}/relations`, {
     method: "POST",
@@ -341,11 +353,11 @@ export function createShareFullUploadTicket(
     size: number;
   },
 ) {
-  return request<{ key: string; uploadUrl: string; headers: Record<string, string> }>(
-    token,
-    "/asset/upload-ticket",
-    { method: "POST", json: body },
-  );
+  return request<{
+    key: string;
+    uploadUrl: string;
+    headers: Record<string, string>;
+  }>(token, "/asset/upload-ticket", { method: "POST", json: body });
 }
 
 export function finalizeShareFullUpload(

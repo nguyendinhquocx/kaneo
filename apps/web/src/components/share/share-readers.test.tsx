@@ -1,9 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  ShareFullProjectPayload,
+} from "@/fetchers/share/share-full-api";
+import type { ShareProjectPayload } from "@/fetchers/share/share-public-api";
 import DocumentShareReader from "./document-share-reader";
 import GoalShareReader from "./goal-share-reader";
 import ProjectShareReader from "./project-share-reader";
+import ShareLinkState from "./share-link-state";
+import ShareProjectRouteContent from "./share-project-route-content";
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
@@ -40,13 +46,89 @@ function renderWithQueryClient(ui: React.ReactNode) {
 }
 
 const project = {
+  id: "project-1",
   name: "Shared project",
   slug: "SHR",
+  icon: null,
   description: null,
-  columns: [{ id: "column-1", name: "To do", slug: "to-do", tasks: [] }],
+  isPublic: true,
+  columns: [
+    {
+      id: "column-1",
+      name: "To do",
+      slug: "to-do",
+      icon: null,
+      isFinal: false,
+      tasks: [],
+    },
+  ],
   archivedTasks: [],
   plannedTasks: [],
 };
+
+describe("project share scope routing", () => {
+  it("keeps view/edit links on the legacy reader and mounts full only for full scope", () => {
+    const fullSurface = (payload: ShareFullProjectPayload) => (
+      <div data-testid="full-surface">{payload.scope}</div>
+    );
+    const { rerender } = renderWithQueryClient(
+      <ShareProjectRouteContent
+        token="view-token"
+        data={{ ...project, scope: "view" } as ShareProjectPayload}
+        fullSurface={fullSurface}
+      />,
+    );
+    expect(screen.getByTestId("public-kanban")).toBeVisible();
+    expect(screen.queryByTestId("full-surface")).toBeNull();
+
+    rerender(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ShareProjectRouteContent
+          token="edit-token"
+          data={{ ...project, scope: "edit" } as ShareProjectPayload}
+          fullSurface={fullSurface}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: "edit" })).toBeVisible();
+    expect(screen.queryByTestId("full-surface")).toBeNull();
+
+    rerender(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ShareProjectRouteContent
+          token="full-token"
+          data={{ scope: "full" } as ShareProjectPayload}
+          fullSurface={fullSurface}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("full-surface")).toHaveTextContent("full");
+  });
+});
+
+describe("share-link recovery states", () => {
+  it("explains invalid/revoked links and does not offer a login redirect", () => {
+    renderWithQueryClient(<ShareLinkState kind="invalid" />);
+
+    expect(screen.getByText("invalid.title")).toBeVisible();
+    expect(screen.getByText("invalid.description")).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: /sign|log in|register/i }),
+    ).toBeNull();
+  });
+
+  it("offers retry for a recoverable load error", () => {
+    const onRetry = vi.fn();
+    renderWithQueryClient(<ShareLinkState kind="error" onRetry={onRetry} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "rateLimited.retry" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+});
 
 describe("public share edit affordances", () => {
   it("keeps a view-only document read-only and reveals its editor from the edit button", () => {

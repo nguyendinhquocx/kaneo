@@ -34,6 +34,8 @@ import { formatDateShort } from "@/lib/format";
 import { getInitials } from "@/lib/get-initials";
 import { getPriorityLabel, getStatusDisplayLabel } from "@/lib/i18n/domain";
 import { getPriorityIcon } from "@/lib/priority";
+import { generateLink } from "@/lib/generate-link";
+import { getTaskLinkPath } from "@/lib/task-link";
 import { toast } from "@/lib/toast";
 import { getShareCapability } from "@/components/share/share-capability";
 import TaskAssigneePopover from "./task-assignee-popover";
@@ -116,12 +118,17 @@ export default function TaskPropertiesSidebar({
   );
 
   const handleCopyTaskLink = () => {
-    // SPEC-2026-10-22: capability holders copy the share-scoped URL — never
-    // an internal dashboard URL.
+    if (!taskId) return;
+    // Both task-copy affordances use the same capability-aware path builder.
     const capability = getShareCapability();
-    const url = capability
-      ? `${window.location.origin}/share/project/${capability.token}/task/${taskId}`
-      : `${window.location.origin}/dashboard/workspace/${workspaceId}/project/${projectId}/task/${taskId}`;
+    const url = generateLink(
+      getTaskLinkPath({
+        taskId,
+        workspaceId,
+        projectId,
+        shareToken: capability?.token,
+      }),
+    );
     navigator.clipboard.writeText(url);
     toast.message(t("tasks:properties.copyTaskLink"));
   };
@@ -161,6 +168,7 @@ export default function TaskPropertiesSidebar({
                         "text-foreground border-r-0",
                         canMoveTask ? "rounded-none" : "rounded-r-none",
                       )}
+                      aria-label={t("tasks:properties.copyTaskLink")}
                       onClick={() => handleCopyTaskLink()}
                     >
                       <Copy className="size-4" />
@@ -181,6 +189,7 @@ export default function TaskPropertiesSidebar({
                       variant="outline"
                       size="sm"
                       className="text-foreground rounded-l-none"
+                      aria-label={t("tasks:properties.copyTaskBranch")}
                       onClick={() => handleCopyTaskBranch()}
                     >
                       <GitBranch className="size-4" />
@@ -350,6 +359,7 @@ export default function TaskPropertiesSidebar({
                           "text-foreground border-r-0",
                           canMoveTask ? "rounded-none" : "rounded-r-none",
                         )}
+                        aria-label={t("tasks:properties.copyTaskLink")}
                         onClick={() => handleCopyTaskLink()}
                       >
                         <Copy className="size-4" />
@@ -370,6 +380,7 @@ export default function TaskPropertiesSidebar({
                         variant="outline"
                         size="sm"
                         className="text-foreground rounded-l-none"
+                        aria-label={t("tasks:properties.copyTaskBranch")}
                         onClick={() => handleCopyTaskBranch()}
                       >
                         <GitBranch className="size-4" />
@@ -541,6 +552,7 @@ export default function TaskPropertiesSidebar({
                             "text-foreground border-r-0",
                             canMoveTask ? "rounded-none" : "rounded-r-none",
                           )}
+                          aria-label={t("tasks:properties.copyTaskLink")}
                           onClick={() => handleCopyTaskLink()}
                         >
                           <Copy className="size-4" />
@@ -554,25 +566,28 @@ export default function TaskPropertiesSidebar({
                         />
                       </TooltipContent>
                     </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-foreground rounded-l-none"
-                          onClick={() => handleCopyTaskBranch()}
-                        >
-                          <GitBranch className="size-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <KbdSequence
-                          keys={["Ctrl", "Shift", "G"]}
-                          description={t("tasks:properties.copyTaskBranch")}
-                          separator=""
-                        />
-                      </TooltipContent>
-                    </Tooltip>
+                    {shareCapability ? null : (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-foreground rounded-l-none"
+                            aria-label={t("tasks:properties.copyTaskBranch")}
+                            onClick={() => handleCopyTaskBranch()}
+                          >
+                            <GitBranch className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <KbdSequence
+                            keys={["Ctrl", "Shift", "G"]}
+                            description={t("tasks:properties.copyTaskBranch")}
+                            separator=""
+                          />
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </TooltipProvider>
                 </div>
               </div>

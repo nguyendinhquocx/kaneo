@@ -345,13 +345,12 @@ const fullLinkAllowedMimeTypes = new Set([
 ]);
 
 export function isFullLinkAllowedContentType(contentType: string): boolean {
-  return fullLinkAllowedMimeTypes.has(contentType.toLowerCase().split(";")[0]?.trim() ?? "");
+  return fullLinkAllowedMimeTypes.has(
+    contentType.toLowerCase().split(";")[0]?.trim() ?? "",
+  );
 }
 
-export function validateFullLinkUploadInput(
-  contentType: string,
-  size: number,
-) {
+export function validateFullLinkUploadInput(contentType: string, size: number) {
   if (!isFullLinkAllowedContentType(contentType)) {
     throw new Error(
       "This file type is not allowed through a share link. Allowed: images, PDF, Word, Excel, PowerPoint, plain text, Markdown, CSV, JSON, XML.",
@@ -433,9 +432,10 @@ export function assertTaskImageKeyMatchesContext(
   return key.startsWith(fullPrefix);
 }
 
-export async function getPrivateObjectMeta(
-  key: string,
-): Promise<{ contentType: string | undefined; contentLength: number | undefined }> {
+export async function getPrivateObjectMeta(key: string): Promise<{
+  contentType: string | undefined;
+  contentLength: number | undefined;
+}> {
   const config = getStorageConfig();
   const client = getClient(config);
   const response = await client.send(
@@ -448,6 +448,28 @@ export async function getPrivateObjectMeta(
     contentType: response.ContentType,
     contentLength: response.ContentLength,
   };
+}
+
+export async function getPrivateObjectPrefix(
+  key: string,
+  maxBytes = 64,
+): Promise<Uint8Array> {
+  const config = getStorageConfig();
+  const client = getClient(config);
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      Range: `bytes=0-${Math.max(0, maxBytes - 1)}`,
+    }),
+  );
+  if (!response.Body) {
+    throw new Error("Storage object body is missing.");
+  }
+  if (!("transformToByteArray" in response.Body)) {
+    throw new Error("Storage object body cannot be read as bytes.");
+  }
+  return new Uint8Array(await response.Body.transformToByteArray());
 }
 
 export async function getPrivateObject(key: string): Promise<AssetObject> {

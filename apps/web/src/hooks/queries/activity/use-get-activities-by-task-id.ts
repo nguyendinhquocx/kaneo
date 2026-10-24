@@ -1,13 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
+import { getShareCapability } from "@/components/share/share-capability";
 import getActivitesByTaskId from "@/fetchers/activity/get-activites-by-task-id";
 import { getShareFullTaskDetail } from "@/fetchers/share/share-full-api";
-import { getShareCapability } from "@/components/share/share-capability";
 
 function useGetActivitiesByTaskId(taskId: string) {
+  const capability = getShareCapability();
   return useQuery({
-    queryKey: ["activities", taskId],
+    queryKey: capability
+      ? ["share-full", capability.token, "task", taskId, "activities"]
+      : ["activities", taskId],
+    enabled: Boolean(taskId),
+    refetchInterval: capability ? 10_000 : false,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
-      const capability = getShareCapability();
       if (capability) {
         // Guest visibility: comments only, attributed via the share link.
         // Execution-linked tasks hide their timeline server-side.

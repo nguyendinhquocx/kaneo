@@ -2362,25 +2362,30 @@
       "noteSaving": "Saving…"
     },
     "invalid": {
-      "description": "The link was revoked, expired, or mistyped. Ask the owner to share a new link.",
-      "title": "This link is no longer valid"
+      "description": "Ссылка отозвана, истекла или введена с ошибкой. Попросите владельца прислать новую ссылку.",
+      "title": "Эта ссылка больше недействительна"
     },
     "manage": "Share",
     "neverExpires": "Does not expire",
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Full project access",
-      "fullWarning": "Anyone holding this link gets full rights inside this project for 30 days — edit tasks, comments, docs and files — and cannot be reliably identified. Share carefully; revoke any time."
+      "full": "Полный доступ к проекту",
+      "fullWarning": "Любой, у кого есть эта ссылка, получает полные права в проекте на 30 дней и может редактировать задачи, комментарии, документы и файлы. Надёжно установить личность такого пользователя нельзя. Делитесь ссылкой осторожно; её можно отозвать в любой момент."
     },
     "rateLimited": {
-      "description": "Slow down a little and try again shortly.",
-      "retry": "Try again",
-      "title": "Too many requests"
+      "description": "Немного подождите и попробуйте ещё раз.",
+      "retry": "Попробовать снова",
+      "title": "Слишком много запросов"
     },
     "revoke": "Revoke link",
     "revoked": "Revoked",
     "title": "Поделиться",
+    "loading": "Загрузка проекта…",
+    "loadError": {
+      "title": "Не удалось загрузить проект",
+      "description": "Проверьте подключение и попробуйте ещё раз."
+    },
     "unsupported": "This resource type cannot be displayed here.",
     "capabilityLinks": "Capability share links",
     "capabilityLinksHint": "Scoped links for this project. Unlike the public URL above, each link grants view or edit explicitly and can be revoked.",
@@ -2425,12 +2430,12 @@
       "view": "View only"
     },
     "full": {
-      "holderBadge": "shared link",
+      "holderBadge": "Ссылка общего доступа",
       "view": {
-        "backlog": "Backlog",
-        "board": "Tasks",
-        "gantt": "Gantt",
-        "docs": "Docs"
+        "backlog": "Бэклог",
+        "board": "Задачи",
+        "gantt": "Гант",
+        "docs": "Документы"
       }
     }
   },

@@ -89,9 +89,15 @@ function legacyLink(permission: "view" | "edit" = "view") {
 
 function renderShareDialog(
   resourceType: "project" | "task_description" = "project",
+  canCreateFull = false,
 ) {
   return render(
-    <ShareDialog resourceType={resourceType} resourceId="project-1" canShare />,
+    <ShareDialog
+      resourceType={resourceType}
+      resourceId="project-1"
+      canShare
+      canCreateFull={canCreateFull}
+    />,
   );
 }
 
@@ -101,6 +107,17 @@ describe("share dialog permission controls", () => {
 
     expect(screen.getByText("share.permission.view")).toBeVisible();
     expect(screen.queryByText("share.permission.edit")).toBeNull();
+  });
+
+  it("shows the full permission warning only when full-link creation is authorized", () => {
+    renderShareDialog("project", true);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "share.permission.full" }),
+    );
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "share.permission.fullWarning",
+    );
   });
 
   it("creates an edit link only after selecting the edit scope", () => {
@@ -176,6 +193,35 @@ describe("copy share links", () => {
       resourceType: "project",
       resourceId: "project-1",
       permission: "edit",
+    });
+    expect(mocks.revokeAsync).not.toHaveBeenCalled();
+  });
+
+  it("creates a new full link instead of revealing the stored full URL", async () => {
+    mocks.links = [{ ...legacyLink(), permission: "full" }];
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    mocks.createAsync.mockResolvedValue({
+      id: "replacement-full",
+      url: "https://kaneo/share/full-new",
+    });
+
+    renderShareDialog("project", true);
+    fireEvent.click(screen.getByRole("button", { name: "share.manage" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "share.legacy.copyReplacement" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "share.legacy.replace" }),
+    );
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("https://kaneo/share/full-new"),
+    );
+    expect(mocks.createAsync).toHaveBeenCalledWith({
+      resourceType: "project",
+      resourceId: "project-1",
+      permission: "full",
     });
     expect(mocks.revokeAsync).not.toHaveBeenCalled();
   });
