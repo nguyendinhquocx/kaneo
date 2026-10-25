@@ -1,6 +1,6 @@
 # Kaneo Wave uatfix4 Deployment Receipt — 2026-10-25
 
-## Result: APPLIED & VERIFIED (backup-verify repin pending owner sudo)
+## Result: APPLIED & VERIFIED (complete)
 
 Owner-approved production UAT follow-up commit `b0eb792f` deployed to ProDesk after the independent security reviewer flagged the unshared lane-lock protocol and the UI reviewer's mobile/accessibility findings.
 
@@ -15,6 +15,7 @@ Owner-approved production UAT follow-up commit `b0eb792f` deployed to ProDesk af
 | Compose SHA256 | `314899585bce6cb69f3a09275b41c1f055e40989589edf8d470b5d286f3c6a33` (image pin only; no service/topology change) |
 | Backup wrapper | `87bf9ab191ea063dba4c3f7db3ab54ee3ddee2bc017fe1078bed9159e6f9ae0c` (uatfix4 pair: previous=uatfix3, candidate=uatfix4) |
 | Install metadata | `source_revision=b0eb792f72f3055e0429a8fa382e686783e9af61`, wrapper `87bf9ab1…` (sync-recovery-metadata rebind PASS) |
+| Fresh backup | `kaneo-20261025T121146Z` — ciphertext `e96c75548b10d66d8ee7669129aba47c2305b8105e588117ae1d4d8e6f748471`, receipt `52018d6c329f13f0a38e2336cfad192be4fedd0bf2b778243babae593c1a895a`, strict-verified against the uatfix4 source identity and R2-mirrored |
 
 ## Shipped fixes
 
@@ -42,8 +43,7 @@ API unit 264/264 · API integration 211/211 (22 files) · web 74/74 (29 files) �
 - Guarded deploy PASS: backup pre-flight guard, atomic compose flip (old pin → new pin), digest-pinned pull, rolling restart, health wait, migration verify, post-flip wrapper guard. Container healthy on `2d421f5c…`.
 - `kaneo-sync-recovery-metadata` rebind PASS (metadata now pins b0eb792f + uatfix4 pair).
 - Fresh encrypted snapshot created and strict-verified by the repinned snapshot adapter; R2 mirror step returned PASS in the same sudo run (exit 0).
-- Pending at receipt time: staging the repinned `kaneo-backup-verify` needs one more owner sudo (interactive runner dropped the TTY twice). Until staged, `kaneo-backup-verify` reports `latest receipt source identity is not baseline or candidate` because the outbox head is the new uatfix4 receipt — expected, not an outage. Owner runs:
-  `ssh -t prodesk-home 'sudo sh -c "install -o root -g root -m 0555 /home/quoc/kaneo-wave-uatfix4/backup-verify.uatfix4.sh /usr/local/lib/home-server-recovery/kaneo-backup-verify"; sudo -n /usr/local/lib/home-server-recovery/kaneo-backup-verify'`
+- `kaneo-backup-verify` repinned (`3db9cd06…` via `stage-verify.sh`) and now PASSes against the uatfix4 receipt `kaneo-20261025T121146Z` — independently re-verified from the laptop over BatchMode SSH.`
 
 ## Follow-up
 
