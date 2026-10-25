@@ -109,15 +109,13 @@ describe("share dialog permission controls", () => {
     expect(screen.queryByText("share.permission.edit")).toBeNull();
   });
 
-  it("shows the full permission warning only when full-link creation is authorized", () => {
+  it("does not render a full-permission warning block anymore", () => {
     renderShareDialog("project", true);
 
     fireEvent.click(
       screen.getByRole("button", { name: "share.permission.full" }),
     );
-    expect(screen.getByRole("note")).toHaveTextContent(
-      "share.permission.fullWarning",
-    );
+    expect(screen.queryByRole("note")).toBeNull();
   });
 
   it("creates an edit link only after selecting the edit scope", () => {

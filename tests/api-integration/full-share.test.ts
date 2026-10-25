@@ -627,6 +627,56 @@ describe("API integration: full project share capability", () => {
     expect(editTask).toBeUndefined();
   });
 
+  it("exposes column ids as slugs so the kanban drag contract holds", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const read = await app.request(`/api/share/project/${link.token}`);
+    expect(read.status).toBe(200);
+    const payload = (await read.json()) as {
+      columns: Array<{ id: string; slug: string }>;
+    };
+    expect(payload.columns.length).toBeGreaterThan(0);
+    // The kanban drag layer writes column.id back into task.status and the
+    // server validates task.status against column slugs. A nanoid column id
+    // here turns every drag into a 400 storm (owner UAT regression).
+    for (const column of payload.columns) {
+      expect(column.id).toBe(column.slug);
+    }
+
+    const firstColumn = payload.columns[0];
+    const created = await app.request(`/api/share/project/${link.token}/task`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "drag contract", status: firstColumn.id }),
+    });
+    expect(created.status).toBe(200);
+    const createdTask = (await created.json()) as {
+      id: string;
+      status: string;
+    };
+    const moved = await app.request(
+      `/api/share/project/${link.token}/task/${createdTask.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: payload.columns[1]?.id ?? firstColumn.id,
+          position: 1,
+        }),
+      },
+    );
+    expect(moved.status).toBe(200);
+  });
+
   it("creates, updates, and deletes tasks with the extended full surface", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
     const { project } = await createProjectFixture({

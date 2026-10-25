@@ -2193,7 +2193,8 @@
       "prStatusOpen": "Abierta",
       "dueWithDate": "Vencimiento: {{date}}",
       "created": "Fecha de creación",
-      "dueDateLabel": "Fecha de vencimiento"
+      "dueDateLabel": "Fecha de vencimiento",
+      "noDescription": "Aún sin descripción."
     },
     "theme": {
       "switchToLight": "Cambiar a modo día",
@@ -2308,8 +2309,7 @@
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Acceso completo al proyecto",
-      "fullWarning": "Cualquier persona que tenga este enlace tendrá todos los permisos en este proyecto durante 30 días y podrá editar tareas, comentarios, documentos y archivos. No se puede verificar su identidad de forma fiable. Compártelo con cuidado; puedes revocarlo cuando quieras."
+      "full": "Full"
     },
     "rateLimited": {
       "description": "Espera un momento y vuelve a intentarlo.",

@@ -10,8 +10,11 @@ function useGetActivitiesByTaskId(taskId: string) {
       ? ["share-full", capability.token, "task", taskId, "activities"]
       : ["activities", taskId],
     enabled: Boolean(taskId),
-    refetchInterval: capability ? 10_000 : false,
+    refetchInterval: capability
+      ? (query) => (query.state.error ? false : 10_000)
+      : false,
     refetchIntervalInBackground: false,
+    retry: capability ? false : undefined,
     queryFn: async () => {
       if (capability) {
         // Guest visibility: comments only, attributed via the share link.

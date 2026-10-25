@@ -2193,7 +2193,8 @@
       "prStatusOpen": "Açık",
       "dueWithDate": "Bitiş {{date}}",
       "created": "Oluşturuldu",
-      "dueDateLabel": "Bitiş Tarihi"
+      "dueDateLabel": "Bitiş Tarihi",
+      "noDescription": "Henüz açıklama yok."
     },
     "theme": {
       "switchToLight": "Açık moduna geç",
@@ -2308,8 +2309,7 @@
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Projeye tam erişim",
-      "fullWarning": "Bu bağlantıya sahip olan herkes 30 gün boyunca projede tüm yetkilere sahip olur; görevleri, yorumları, belgeleri ve dosyaları düzenleyebilir. Kimliği güvenilir biçimde doğrulanamaz. Dikkatli paylaş; bağlantıyı istediğin zaman iptal edebilirsin."
+      "full": "Full"
     },
     "rateLimited": {
       "description": "Biraz bekle ve kısa süre sonra yeniden dene.",

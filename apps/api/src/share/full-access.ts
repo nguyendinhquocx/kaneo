@@ -338,7 +338,10 @@ export async function buildFullProjectPayload(resourceId: string) {
     description: project.description,
     scope: "full" as const,
     columns: projectColumns.map((column) => ({
-      id: column.id,
+      // The kanban drag layer sends column.id back as task.status, so the
+      // id must be the slug exactly like the owner payload (get-tasks.ts):
+      // the server validates status against column slugs, not row ids.
+      id: column.slug,
       slug: column.slug,
       name: column.name,
       icon: column.icon,

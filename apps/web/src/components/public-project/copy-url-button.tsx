@@ -25,19 +25,23 @@ export function CopyUrlButton() {
       variant="ghost"
       size="sm"
       onClick={handleCopyUrl}
-      className="h-8 gap-2"
+      aria-label={
+        copied
+          ? t("publicProject:copyUrl.copied")
+          : t("publicProject:copyUrl.share")
+      }
+      className="h-8 shrink-0 gap-2"
     >
       {copied ? (
-        <>
-          <Check className="h-3 w-3" />
-          <span className="text-xs">{t("publicProject:copyUrl.copied")}</span>
-        </>
+        <Check className="h-3 w-3" />
       ) : (
-        <>
-          <Copy className="h-3 w-3" />
-          <span className="text-xs">{t("publicProject:copyUrl.share")}</span>
-        </>
+        <Copy className="h-3 w-3" />
       )}
+      <span className="hidden whitespace-nowrap text-xs sm:inline">
+        {copied
+          ? t("publicProject:copyUrl.copied")
+          : t("publicProject:copyUrl.share")}
+      </span>
     </Button>
   );
 }

@@ -10,9 +10,13 @@ const buckets = new Map<string, Bucket>();
 const WINDOW_MS = Number(process.env.SHARE_RATE_LIMIT_WINDOW_MS ?? 60_000);
 
 // Read lazily so integration tests can tighten limits via process.env.
+// Reads are idempotent GETs and one full-share board tick (project poll +
+// activity/detail refresh + docs list) plus ordinary interleaved drags can
+// legitimately reach a few requests per second, so the default is set well
+// above the old 60/minute that tripped during normal guest usage.
 function limits() {
   return {
-    read: Number(process.env.SHARE_RATE_LIMIT_READ ?? 60),
+    read: Number(process.env.SHARE_RATE_LIMIT_READ ?? 240),
     write: Number(process.env.SHARE_RATE_LIMIT_WRITE ?? 20),
   };
 }

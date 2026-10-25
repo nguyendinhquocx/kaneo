@@ -2193,7 +2193,8 @@
       "prStatusOpen": "Offen",
       "dueWithDate": "Fällig {{date}}",
       "created": "Erstellt",
-      "dueDateLabel": "Fälligkeitsdatum"
+      "dueDateLabel": "Fälligkeitsdatum",
+      "noDescription": "Noch keine Beschreibung."
     },
     "theme": {
       "switchToLight": "Zu hellem Modus wechseln",
@@ -2342,8 +2343,7 @@
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Voller Projektzugriff",
-      "fullWarning": "Jede Person mit diesem Link erhält 30 Tage lang volle Rechte in diesem Projekt und kann Aufgaben, Kommentare, Docs und Dateien bearbeiten. Die Identität lässt sich nicht zuverlässig feststellen. Teile den Link mit Bedacht; du kannst ihn jederzeit widerrufen."
+      "full": "Full"
     },
     "rateLimited": {
       "description": "Bitte warte kurz und versuche es dann erneut.",

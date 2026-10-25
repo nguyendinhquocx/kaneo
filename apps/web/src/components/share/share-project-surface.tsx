@@ -93,12 +93,12 @@ export default function ShareProjectSurface({
           <span className="truncate text-sm font-semibold text-foreground">
             {project?.name ?? ""}
           </span>
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+          <span className="shrink-0 whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
             {t("share:full.holderBadge")}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <nav className="flex max-w-[70vw] h-8 items-center gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-background p-0.5 sm:max-w-none">
+          <nav className="flex h-8 max-w-[60vw] items-center gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-background p-0.5 sm:max-w-none">
             {(
               [
                 ["backlog", SquircleDashed],
@@ -111,15 +111,18 @@ export default function ShareProjectSurface({
                 key={key}
                 type="button"
                 aria-pressed={view === key}
+                aria-label={t(`share:full.view.${key}`)}
                 onClick={() => setView(key)}
-                className={`flex h-6 items-center gap-1.5 rounded-md px-2 text-xs ${
+                className={`flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs ${
                   view === key
                     ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon className="size-3.5" />
-                {t(`share:full.view.${key}`)}
+                <span className="hidden sm:inline">
+                  {t(`share:full.view.${key}`)}
+                </span>
               </button>
             ))}
           </nav>

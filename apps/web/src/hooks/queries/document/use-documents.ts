@@ -47,9 +47,15 @@ export function useGetDocuments(projectId: string, includeArchived = false) {
       return listDocuments(projectId, includeArchived);
     },
     enabled: Boolean(capability || projectId),
-    refetchInterval: capability ? 10_000 : false,
+    // A 429/invalid error must not keep a 10s poll hammering the share
+    // limiter; the error state shows recovery UI and polling resumes on the
+    // next successful fetch.
+    refetchInterval: capability
+      ? (query) => (query.state.error ? false : 10_000)
+      : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
+    retry: capability ? false : undefined,
   });
 }
 
@@ -74,9 +80,12 @@ export function useGetDocument(id: string | null) {
       return getDocument(id as string);
     },
     enabled: Boolean(id),
-    refetchInterval: capability ? 10_000 : false,
+    refetchInterval: capability
+      ? (query) => (query.state.error ? false : 10_000)
+      : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
+    retry: capability ? false : undefined,
   });
 }
 

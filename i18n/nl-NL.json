@@ -2193,7 +2193,8 @@
       "prStatusOpen": "Open",
       "dueWithDate": "Vervalt op {{date}}",
       "created": "Aangemaakt",
-      "dueDateLabel": "Einddatum"
+      "dueDateLabel": "Einddatum",
+      "noDescription": "Nog geen beschrijving."
     },
     "theme": {
       "switchToLight": "Wissel naar lichte modus",
@@ -2308,8 +2309,7 @@
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Volledige projecttoegang",
-      "fullWarning": "Iedereen met deze link heeft 30 dagen lang volledige rechten in dit project en kan taken, reacties, documenten en bestanden bewerken. De identiteit kan niet betrouwbaar worden vastgesteld. Deel de link zorgvuldig; je kunt hem altijd intrekken."
+      "full": "Full"
     },
     "rateLimited": {
       "description": "Wacht even en probeer het daarna opnieuw.",

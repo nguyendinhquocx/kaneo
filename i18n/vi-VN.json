@@ -2193,7 +2193,8 @@
       "prStatusOpen": "Mở",
       "dueWithDate": "Đến hạn {{date}}",
       "created": "Đã tạo",
-      "dueDateLabel": "Ngày đến hạn"
+      "dueDateLabel": "Ngày đến hạn",
+      "noDescription": "Chưa có mô tả."
     },
     "theme": {
       "switchToLight": "Chuyển sang chế độ sáng",
@@ -2269,8 +2270,7 @@
     "permission": {
       "view": "Xem",
       "edit": "Sửa",
-      "full": "Toàn quyền dự án",
-      "fullWarning": "Bất kỳ ai giữ link này đều có toàn quyền trong dự án này trong 30 ngày — sửa task, bình luận, docs và tệp — và không thể xác minh danh tính. Chia sẻ cẩn thận; thu hồi bất cứ lúc nào."
+      "full": "Full"
     },
     "create": "Tạo link",
     "creating": "Đang tạo…",

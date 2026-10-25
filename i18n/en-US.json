@@ -2193,7 +2193,8 @@
       "prStatusOpen": "Open",
       "dueWithDate": "Due {{date}}",
       "created": "Created",
-      "dueDateLabel": "Due Date"
+      "dueDateLabel": "Due Date",
+      "noDescription": "No description yet."
     },
     "theme": {
       "switchToLight": "Switch to light mode",
@@ -2269,8 +2270,7 @@
     "permission": {
       "view": "View",
       "edit": "Edit",
-      "full": "Full project access",
-      "fullWarning": "Anyone holding this link gets full rights inside this project for 30 days — edit tasks, comments, docs and files — and cannot be reliably identified. Share carefully; revoke any time."
+      "full": "Full"
     },
     "create": "Create link",
     "creating": "Creating…",

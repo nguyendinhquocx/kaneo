@@ -2193,7 +2193,8 @@
       "prStatusOpen": "Terbuka",
       "dueWithDate": "Tenggat {{date}}",
       "created": "Dibuat",
-      "dueDateLabel": "Tenggat"
+      "dueDateLabel": "Tenggat",
+      "noDescription": "Belum ada deskripsi."
     },
     "theme": {
       "switchToLight": "Beralih ke mode terang",
@@ -2308,8 +2309,7 @@
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Akses penuh ke proyek",
-      "fullWarning": "Siapa pun yang memegang tautan ini akan memiliki hak penuh atas proyek ini selama 30 hari dan dapat mengedit tugas, komentar, dokumen, serta file. Identitasnya tidak dapat dipastikan dengan andal. Bagikan dengan hati-hati; tautan dapat dicabut kapan saja."
+      "full": "Full"
     },
     "rateLimited": {
       "description": "Tunggu sebentar lalu coba lagi.",

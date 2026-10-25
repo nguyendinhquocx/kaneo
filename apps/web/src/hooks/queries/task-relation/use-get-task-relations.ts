@@ -29,7 +29,9 @@ function useGetTaskRelations(taskId: string) {
       return getTaskRelations(taskId);
     },
     enabled: Boolean(taskId),
-    refetchInterval: capability ? 10_000 : false,
+    refetchInterval: capability
+      ? (query) => (query.state.error ? false : 10_000)
+      : false,
   });
 }
 

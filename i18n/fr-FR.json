@@ -2193,7 +2193,8 @@
       "prStatusOpen": "Ouvert",
       "dueWithDate": "Échéance {{date}}",
       "created": "Créé",
-      "dueDateLabel": "Date d'échéance"
+      "dueDateLabel": "Date d'échéance",
+      "noDescription": "Pas encore de description."
     },
     "theme": {
       "switchToLight": "Passer en mode clair",
@@ -2308,8 +2309,7 @@
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "Accès complet au projet",
-      "fullWarning": "Toute personne qui détient ce lien dispose de tous les droits sur ce projet pendant 30 jours et peut modifier les tâches, commentaires, documents et fichiers. Son identité ne peut pas être vérifiée de manière fiable. Partage ce lien avec prudence ; tu peux le révoquer à tout moment."
+      "full": "Full"
     },
     "rateLimited": {
       "description": "Attends un instant et réessaie.",

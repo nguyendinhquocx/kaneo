@@ -2193,7 +2193,8 @@
       "prStatusOpen": "열림",
       "dueWithDate": "{{date}} 마감",
       "created": "생성됨",
-      "dueDateLabel": "마감일"
+      "dueDateLabel": "마감일",
+      "noDescription": "아직 설명이 없습니다."
     },
     "theme": {
       "switchToLight": "라이트 모드로 전환",
@@ -2308,8 +2309,7 @@
     "permission": {
       "edit": "Edit",
       "view": "View",
-      "full": "프로젝트 전체 권한",
-      "fullWarning": "이 링크를 가진 사람은 누구나 30일 동안 이 프로젝트의 모든 권한을 가지며 작업, 댓글, 문서와 파일을 수정할 수 있습니다. 신원을 확실하게 확인할 수 없습니다. 신중하게 공유하고 필요하면 언제든 링크를 취소하세요."
+      "full": "Full"
     },
     "rateLimited": {
       "description": "잠시 기다린 뒤 다시 시도하세요.",

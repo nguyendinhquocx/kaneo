@@ -71,7 +71,10 @@ export function useGetTasks(
     },
     initialData: capability ? initialShareProject : undefined,
     staleTime: capability ? 10_000 : 0,
-    refetchInterval: capability ? 10_000 : 30_000,
+    refetchInterval: capability
+      ? (query) => (query.state.error ? false : 10_000)
+      : 30_000,
     enabled: !!projectId || Boolean(capability),
+    retry: capability ? false : undefined,
   });
 }

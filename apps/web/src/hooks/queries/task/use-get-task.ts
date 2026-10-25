@@ -42,9 +42,12 @@ function useGetTask(taskId: string) {
     enabled: Boolean(taskId),
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
-    refetchInterval: capability ? 10_000 : false,
+    refetchInterval: capability
+      ? (query) => (query.state.error ? false : 10_000)
+      : false,
     refetchIntervalInBackground: false,
     staleTime: 0,
+    retry: capability ? false : undefined,
   });
 }
 

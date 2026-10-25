@@ -198,14 +198,6 @@ export default function ShareDialog({
                   {createLink.isPending ? t("creating") : t("create")}
                 </Button>
               </div>
-              {resourceType === "project" && permission === "full" ? (
-                <p
-                  role="note"
-                  className="w-full break-words rounded-md border border-border/80 bg-muted/40 p-2 text-[11px] text-muted-foreground"
-                >
-                  {t("permission.fullWarning")}
-                </p>
-              ) : null}
             </div>
 
             {newLink ? (

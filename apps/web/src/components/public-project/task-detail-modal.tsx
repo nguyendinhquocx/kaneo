@@ -49,10 +49,10 @@ export function PublicTaskDetailModal({
               ) : null}
             </div>
             <DialogClose
-              className="shrink-0 p-1.5 hover:bg-muted rounded transition-colors"
-              render={<button type="button" />}
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              render={<button type="button" aria-label="Close" />}
             >
-              <X className="w-4 h-4 text-muted-foreground" />
+              <X className="size-4" />
             </DialogClose>
           </div>
 
@@ -94,10 +94,14 @@ export function PublicTaskDetailModal({
               </div>
             </div>
 
-            {task.description && (
+            {task.description ? (
               <div className="pt-1">
                 <MarkdownRenderer content={task.description} />
               </div>
+            ) : (
+              <p className="pt-1 text-sm text-muted-foreground">
+                {t("publicProject:taskDetail.noDescription")}
+              </p>
             )}
 
             {labels.length > 0 && (

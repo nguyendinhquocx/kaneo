@@ -106,19 +106,25 @@ function RouteComponent() {
                     variant="ghost"
                     size="sm"
                     onClick={() => setViewMode("kanban")}
+                    aria-label={t("tasks:view.board")}
                     className={`h-8 gap-2 ${viewMode === "kanban" ? "bg-accent" : ""}`}
                   >
                     <Layout className="h-3 w-3" />
-                    <span className="text-xs">{t("tasks:view.board")}</span>
+                    <span className="hidden whitespace-nowrap text-xs sm:inline">
+                      {t("tasks:view.board")}
+                    </span>
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setViewMode("list")}
+                    aria-label={t("tasks:view.list")}
                     className={`h-8 gap-2 ${viewMode === "list" ? "bg-accent" : ""}`}
                   >
                     <List className="h-3 w-3" />
-                    <span className="text-xs">{t("tasks:view.list")}</span>
+                    <span className="hidden whitespace-nowrap text-xs sm:inline">
+                      {t("tasks:view.list")}
+                    </span>
                   </Button>
                 </div>
               </div>
