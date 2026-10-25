@@ -1,7 +1,8 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import db from "../../../database";
 import { columnTable, projectTable, taskTable } from "../../../database/schema";
 import { publishEvent } from "../../../events";
+import { lockProjectTaskLanes } from "../../../task/lock-project-task-lanes";
 import { claimTaskNumber } from "../../../task/controllers/claim-task-numbers";
 import {
   createExternalLink,
@@ -88,38 +89,54 @@ export async function handleGiteaIssueOpened(
       continue;
     }
 
-    const nextTaskNumber = await claimTaskNumber(projectId);
-
     const resolvedStatus = await resolveTargetStatus(
       projectId,
       "issue_opened",
       status || "to-do",
     );
 
-    const targetColumn = await db.query.columnTable.findFirst({
-      where: and(
-        eq(columnTable.projectId, projectId),
-        eq(columnTable.slug, resolvedStatus),
-      ),
+    const createdTask = await db.transaction(async (tx) => {
+      await lockProjectTaskLanes(tx, [projectId]);
+      const nextTaskNumber = await claimTaskNumber(projectId, tx);
+      const [targetColumn] = await tx
+        .select({ id: columnTable.id })
+        .from(columnTable)
+        .where(
+          and(
+            eq(columnTable.projectId, projectId),
+            eq(columnTable.slug, resolvedStatus),
+          ),
+        )
+        .limit(1);
+      const [maxPositionResult] = await tx
+        .select({ maxPosition: max(taskTable.position) })
+        .from(taskTable)
+        .where(
+          and(
+            eq(taskTable.projectId, projectId),
+            targetColumn?.id
+              ? eq(taskTable.columnId, targetColumn.id)
+              : eq(taskTable.status, resolvedStatus),
+          ),
+        );
+      const taskValues: typeof taskTable.$inferInsert = {
+        projectId,
+        userId: null,
+        title: issue.title,
+        description: formatTaskDescriptionFromIssue(issue.body),
+        status: resolvedStatus,
+        columnId: targetColumn?.id ?? null,
+        position: (maxPositionResult?.maxPosition ?? 0) + 1,
+        priority: null,
+        number: nextTaskNumber,
+      };
+      if (priority) taskValues.priority = priority;
+      const [task] = await tx
+        .insert(taskTable)
+        .values(taskValues)
+        .returning();
+      return task;
     });
-
-    const taskValues: typeof taskTable.$inferInsert = {
-      projectId,
-      userId: null,
-      title: issue.title,
-      description: formatTaskDescriptionFromIssue(issue.body),
-      status: resolvedStatus,
-      columnId: targetColumn?.id ?? null,
-      priority: null,
-      number: nextTaskNumber,
-    };
-
-    if (priority) taskValues.priority = priority;
-
-    const [createdTask] = await db
-      .insert(taskTable)
-      .values(taskValues)
-      .returning();
 
     if (!createdTask) {
       console.error("Failed to create task from Gitea issue");

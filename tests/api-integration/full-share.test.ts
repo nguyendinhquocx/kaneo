@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { executionControlRequestTable } from "../../apps/api/src/database/schema";
@@ -71,6 +71,13 @@ const documentRace = vi.hoisted(() => ({
   enabled: false,
   onBlocked: null as null | (() => void),
   waitForRelease: null as null | (() => Promise<void>),
+}));
+const projectLaneLockRace = vi.hoisted(() => ({
+  enabled: false,
+  calls: 0,
+  onFirstLocked: null as null | (() => void),
+  onSecondAttempt: null as null | (() => void),
+  waitForFirstRelease: null as null | (() => Promise<void>),
 }));
 const agentGuardRace = vi.hoisted(() => ({
   enabled: false,
@@ -167,6 +174,37 @@ vi.mock("../../apps/api/src/share/full-access", async (importOriginal) => {
     },
   };
 });
+
+vi.mock(
+  "../../apps/api/src/task/lock-project-task-lanes",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("../../apps/api/src/task/lock-project-task-lanes")
+      >();
+    return {
+      ...actual,
+      lockProjectTaskLanes: async (
+        ...args: Parameters<typeof actual.lockProjectTaskLanes>
+      ) => {
+        if (!projectLaneLockRace.enabled) {
+          return actual.lockProjectTaskLanes(...args);
+        }
+        projectLaneLockRace.calls += 1;
+        if (projectLaneLockRace.calls === 1) {
+          await actual.lockProjectTaskLanes(...args);
+          projectLaneLockRace.onFirstLocked?.();
+          await projectLaneLockRace.waitForFirstRelease?.();
+          return;
+        }
+        if (projectLaneLockRace.calls === 2) {
+          projectLaneLockRace.onSecondAttempt?.();
+        }
+        return actual.lockProjectTaskLanes(...args);
+      },
+    };
+  },
+);
 
 vi.mock(
   "../../apps/api/src/share/resolve-share-link",
@@ -280,6 +318,38 @@ function createDocumentArchiveBarrier() {
       documentRace.enabled = false;
       documentRace.onBlocked = null;
       documentRace.waitForRelease = null;
+    },
+  };
+}
+
+function createProjectLaneLockBarrier() {
+  let markFirstLocked = () => {};
+  let markSecondAttempt = () => {};
+  let releaseFirst = () => {};
+  const firstLocked = new Promise<void>((resolve) => {
+    markFirstLocked = resolve;
+  });
+  const secondAttempted = new Promise<void>((resolve) => {
+    markSecondAttempt = resolve;
+  });
+  const firstReleased = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  projectLaneLockRace.enabled = true;
+  projectLaneLockRace.calls = 0;
+  projectLaneLockRace.onFirstLocked = markFirstLocked;
+  projectLaneLockRace.onSecondAttempt = markSecondAttempt;
+  projectLaneLockRace.waitForFirstRelease = () => firstReleased;
+  return {
+    firstLocked,
+    secondAttempted,
+    release: releaseFirst,
+    reset: () => {
+      projectLaneLockRace.enabled = false;
+      projectLaneLockRace.calls = 0;
+      projectLaneLockRace.onFirstLocked = null;
+      projectLaneLockRace.onSecondAttempt = null;
+      projectLaneLockRace.waitForFirstRelease = null;
     },
   };
 }
@@ -663,18 +733,335 @@ describe("API integration: full project share capability", () => {
       id: string;
       status: string;
     };
+    // The drag layer never PUTs lane order: it calls the move endpoint.
+    const targetStatus = payload.columns[1]?.id ?? firstColumn.id;
     const moved = await app.request(
-      `/api/share/project/${link.token}/task/${createdTask.id}`,
+      `/api/share/project/${link.token}/task/${createdTask.id}/move`,
       {
-        method: "PUT",
+        method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          status: payload.columns[1]?.id ?? firstColumn.id,
-          position: 1,
-        }),
+        body: JSON.stringify({ status: targetStatus, position: 0 }),
       },
     );
     expect(moved.status).toBe(200);
+  });
+
+  it("moves guest kanban cards in one write and reindexes integer lane positions", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const first = await seedTask(project.id, { title: "first" });
+    const moving = await seedTask(project.id, { title: "moving" });
+    const last = await seedTask(project.id, { title: "last" });
+    const destination = await seedTask(project.id, {
+      title: "destination",
+      status: "in-progress",
+    });
+    const destinationNullPosition = await seedTask(project.id, {
+      title: "null-position destination",
+      status: "in-progress",
+    });
+    const controlled = await seedTask(project.id, {
+      title: "hidden controlled task",
+    });
+    await seedTaskRun(project.id, controlled.id);
+
+    await Promise.all(
+      [first, moving, last, destination, destinationNullPosition, controlled].map((task, index) =>
+        db
+          .update(schema.taskTable)
+          .set({ position: index })
+          .where(eq(schema.taskTable.id, task.id)),
+      ),
+    );
+    await db
+      .update(schema.taskTable)
+      .set({ position: null })
+      .where(eq(schema.taskTable.id, destinationNullPosition.id));
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    const [targetColumn] = await db
+      .select({ id: schema.columnTable.id })
+      .from(schema.columnTable)
+      .where(
+        and(
+          eq(schema.columnTable.projectId, project.id),
+          eq(schema.columnTable.slug, "in-progress"),
+        ),
+      );
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const move = (taskId: string, status: string, position: number) =>
+      app.request(`/api/share/project/${link.token}/task/${taskId}/move`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status, position }),
+      });
+
+    const malformedJson = await app.request(
+      `/api/share/project/${link.token}/task/${moving.id}/move`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{",
+      },
+    );
+    expect(malformedJson.status).toBe(400);
+
+    const fractionalPosition = await move(moving.id, "in-progress", 0.5);
+    expect(fractionalPosition.status).toBe(400);
+
+    const movedAcross = await move(moving.id, "in-progress", 2);
+    expect(movedAcross.status).toBe(200);
+    const sourceRows = await db
+      .select({ id: schema.taskTable.id, position: schema.taskTable.position })
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.projectId, project.id),
+          eq(schema.taskTable.status, "to-do"),
+        ),
+      )
+      .orderBy(asc(schema.taskTable.position));
+    expect(sourceRows.map((row) => row.id)).toEqual([
+      first.id,
+      last.id,
+      controlled.id,
+    ]);
+    expect(sourceRows.map((row) => row.position)).toEqual([0, 1, 5]);
+
+    const destinationRows = await db
+      .select({
+        id: schema.taskTable.id,
+        position: schema.taskTable.position,
+        columnId: schema.taskTable.columnId,
+      })
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.projectId, project.id),
+          eq(schema.taskTable.status, "in-progress"),
+        ),
+      )
+      .orderBy(asc(schema.taskTable.position));
+    expect(destinationRows.map((row) => row.id)).toEqual([
+      destination.id,
+      destinationNullPosition.id,
+      moving.id,
+    ]);
+    expect(destinationRows.map((row) => row.position)).toEqual([0, 1, 2]);
+    expect(destinationRows.map((row) => row.columnId)).toEqual([
+      targetColumn?.id,
+      targetColumn?.id,
+      targetColumn?.id,
+    ]);
+
+    const movedWithinLane = await move(moving.id, "in-progress", 1);
+    expect(movedWithinLane.status).toBe(200);
+    const finalRows = await db
+      .select({ id: schema.taskTable.id, position: schema.taskTable.position })
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.projectId, project.id),
+          eq(schema.taskTable.status, "in-progress"),
+        ),
+      )
+      .orderBy(asc(schema.taskTable.position));
+    expect(finalRows.map((row) => row.id)).toEqual([
+      destination.id,
+      moving.id,
+      destinationNullPosition.id,
+    ]);
+    expect(finalRows.map((row) => row.position)).toEqual([0, 1, 2]);
+
+    // Dropping onto an empty lane passes that lane's ID and the current
+    // empty-list length (zero); the API must keep the task at index zero.
+    const movedToEmptyLane = await move(moving.id, "done", 0);
+    expect(movedToEmptyLane.status).toBe(200);
+    const [emptyLaneTask] = await db
+      .select({
+        status: schema.taskTable.status,
+        position: schema.taskTable.position,
+        columnId: schema.taskTable.columnId,
+      })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, moving.id));
+    expect(emptyLaneTask?.status).toBe("done");
+    expect(emptyLaneTask?.position).toBe(0);
+    expect(emptyLaneTask?.columnId).toBeTruthy();
+
+    const [controlledRow] = await db
+      .select({ position: schema.taskTable.position })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, controlled.id));
+    expect(controlledRow?.position).toBe(5);
+
+    const auditRows = await db
+      .select({ action: schema.shareActionAuditTable.action })
+      .from(schema.shareActionAuditTable)
+      .where(eq(schema.shareActionAuditTable.shareLinkId, link.id));
+    expect(auditRows.map((row) => row.action)).toEqual([
+      "task.move",
+      "task.move",
+      "task.move",
+    ]);
+  });
+
+  it("serializes a guest reindex against an owner lane-status update", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const guestTask = await seedTask(project.id, { title: "guest move" });
+    const ownerTask = await seedTask(project.id, { title: "owner status change" });
+    const destination = await seedTask(project.id, {
+      title: "existing destination",
+      status: "in-progress",
+    });
+    await Promise.all(
+      [guestTask, ownerTask, destination].map((task, position) =>
+        db
+          .update(schema.taskTable)
+          .set({ position })
+          .where(eq(schema.taskTable.id, task.id)),
+      ),
+    );
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const guestApp = app;
+
+    const barrier = createProjectLaneLockBarrier();
+    try {
+      const guestMove = guestApp.request(
+        `/api/share/project/${link.token}/task/${guestTask.id}/move`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: "in-progress", position: 0 }),
+        },
+      );
+      await barrier.firstLocked;
+
+      mockAuthenticatedSession(admin.user);
+      ({ app } = createApp());
+      const ownerMove = app.request(`/api/task/status/${ownerTask.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "in-progress" }),
+      });
+      await barrier.secondAttempted;
+      barrier.release();
+
+      const [guestResponse, ownerResponse] = await Promise.all([
+        guestMove,
+        ownerMove,
+      ]);
+      expect(guestResponse.status).toBe(200);
+      expect(ownerResponse.status).toBe(200);
+    } finally {
+      barrier.release();
+      barrier.reset();
+    }
+
+    const rows = await db
+      .select({ id: schema.taskTable.id, position: schema.taskTable.position })
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.projectId, project.id),
+          eq(schema.taskTable.status, "in-progress"),
+        ),
+      )
+      .orderBy(asc(schema.taskTable.position));
+    expect(rows.map((row) => row.id)).toEqual([
+      guestTask.id,
+      destination.id,
+      ownerTask.id,
+    ]);
+    expect(rows.map((row) => row.position)).toEqual([0, 1, 2]);
+  });
+
+  it("locks every project lane touched by cross-project subtask reordering", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project: parentProject } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+      name: "Subtask parent project",
+    });
+    const { project: childProject } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+      name: "Subtask child project",
+    });
+    const parent = await seedTask(parentProject.id, { title: "Parent" });
+    const child = await seedTask(childProject.id, { title: "Child" });
+    await db.insert(schema.taskRelationTable).values({
+      sourceTaskId: parent.id,
+      targetTaskId: child.id,
+      relationType: "subtask",
+      position: 0,
+    });
+
+    mockAuthenticatedSession(admin.user);
+    const { app: ownerApp } = createApp();
+    const link = await createLink(ownerApp, "project", childProject.id, "full");
+
+    const barrier = createProjectLaneLockBarrier();
+    try {
+      const reorder = ownerApp.request(
+        `/api/task-relation/subtasks/${parent.id}/order`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ orderedTargetTaskIds: [child.id] }),
+        },
+      );
+      await barrier.firstLocked;
+
+      mockAnonymousSession();
+      const { app: guestApp } = createApp();
+      const move = guestApp.request(
+        `/api/share/project/${link.token}/task/${child.id}/move`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: "in-progress", position: 0 }),
+        },
+      );
+      await barrier.secondAttempted;
+      barrier.release();
+
+      const [reorderResponse, moveResponse] = await Promise.all([reorder, move]);
+      expect(reorderResponse.status).toBe(200);
+      expect(moveResponse.status).toBe(200);
+    } finally {
+      barrier.release();
+      barrier.reset();
+    }
+
+    const [movedChild] = await db
+      .select({ status: schema.taskTable.status, position: schema.taskTable.position })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, child.id));
+    expect(movedChild?.status).toBe("in-progress");
+    expect(movedChild?.position).toBe(0);
+    const [relation] = await db
+      .select({ position: schema.taskRelationTable.position })
+      .from(schema.taskRelationTable)
+      .where(
+        and(
+          eq(schema.taskRelationTable.sourceTaskId, parent.id),
+          eq(schema.taskRelationTable.targetTaskId, child.id),
+        ),
+      );
+    expect(relation?.position).toBe(0);
   });
 
   it("creates, updates, and deletes tasks with the extended full surface", async () => {
@@ -727,6 +1114,17 @@ describe("API integration: full project share capability", () => {
     const updatedPayload = (await updated.json()) as Record<string, unknown>;
     expect(updatedPayload).not.toHaveProperty("executionState");
     expect(updatedPayload).not.toHaveProperty("taskRevision");
+
+    // Lane order is owned by the POST move endpoint; PUT must not accept it.
+    const positionWrite = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ position: 7 }),
+      },
+    );
+    expect(positionWrite.status).toBe(400);
 
     const deleted = await app.request(
       `/api/share/project/${link.token}/task/${task.id}`,

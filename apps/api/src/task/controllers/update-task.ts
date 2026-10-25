@@ -8,6 +8,7 @@ import {
   assertFullRunFieldsImmutable,
 } from "../../execution/finalization-gate";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
+import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import { assertValidTaskStatus } from "../validate-task-fields";
 
@@ -25,7 +26,30 @@ async function updateTask(
   userId?: string,
   currentUserId?: string,
 ) {
+  const [snapshot] = await db
+    .select({
+      projectId: taskTable.projectId,
+      status: taskTable.status,
+      position: taskTable.position,
+    })
+    .from(taskTable)
+    .where(eq(taskTable.id, id))
+    .limit(1);
+  if (!snapshot) {
+    throw new HTTPException(404, { message: "Task not found" });
+  }
+  if (projectId !== snapshot.projectId) {
+    throw new HTTPException(400, {
+      message: "Use the task move endpoint to move tasks between projects",
+    });
+  }
+  const changesLaneOrder =
+    snapshot.status !== status || snapshot.position !== position;
+
   const { existingTask, updatedTask } = await db.transaction(async (tx) => {
+    if (changesLaneOrder) {
+      await lockProjectTaskLanes(tx, [projectId]);
+    }
     const [lockedTask] = await tx
       .select()
       .from(taskTable)
@@ -40,6 +64,14 @@ async function updateTask(
     if (projectId !== lockedTask.projectId) {
       throw new HTTPException(400, {
         message: "Use the task move endpoint to move tasks between projects",
+      });
+    }
+    if (
+      lockedTask.status !== snapshot.status ||
+      lockedTask.position !== snapshot.position
+    ) {
+      throw new HTTPException(409, {
+        message: "Task lane changed; refresh and retry the update",
       });
     }
 

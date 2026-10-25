@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { assertFinalTaskStatusGate } from "../../execution/finalization-gate";
+import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { assertValidTaskStatus } from "../validate-task-fields";
 
 async function updateTaskStatus({
@@ -15,7 +16,17 @@ async function updateTaskStatus({
   status: string;
   currentUserId: string;
 }) {
+  const [snapshot] = await db
+    .select({ projectId: taskTable.projectId })
+    .from(taskTable)
+    .where(eq(taskTable.id, id))
+    .limit(1);
+  if (!snapshot) {
+    throw new HTTPException(404, { message: "Task not found" });
+  }
+
   const { existingTask, updatedTask } = await db.transaction(async (tx) => {
+    await lockProjectTaskLanes(tx, [snapshot.projectId]);
     const [existingTask] = await tx
       .select()
       .from(taskTable)
@@ -23,7 +34,7 @@ async function updateTaskStatus({
       .limit(1)
       .for("update");
 
-    if (!existingTask) {
+    if (!existingTask || existingTask.projectId !== snapshot.projectId) {
       throw new HTTPException(404, {
         message: "Task not found",
       });
@@ -50,9 +61,28 @@ async function updateTaskStatus({
       isFinalColumn: column?.isFinal === true,
     });
 
+    const [maxPositionResult] =
+      existingTask.status !== status
+        ? await tx
+            .select({ maxPosition: max(taskTable.position) })
+            .from(taskTable)
+            .where(
+              and(
+                eq(taskTable.projectId, existingTask.projectId),
+                column?.id
+                  ? eq(taskTable.columnId, column.id)
+                  : eq(taskTable.status, status),
+              ),
+            )
+        : [{ maxPosition: existingTask.position }];
+    const nextPosition =
+      existingTask.status === status
+        ? existingTask.position
+        : (maxPositionResult?.maxPosition ?? 0) + 1;
+
     const [updatedTask] = await tx
       .update(taskTable)
-      .set({ status, columnId: column?.id ?? null })
+      .set({ status, columnId: column?.id ?? null, position: nextPosition })
       .where(eq(taskTable.id, id))
       .returning();
 

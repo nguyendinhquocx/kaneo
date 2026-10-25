@@ -1922,7 +1922,8 @@
       "operators": {
         "isAnyOf": "là bất kỳ trong",
         "includeAnyOf": "bao gồm bất kỳ trong"
-      }
+      },
+      "clearFilter": "Xóa bộ lọc {{subject}}"
     },
     "gantt": {
       "pageTitle": "{{name}} — Gantt",
@@ -2378,7 +2379,9 @@
         "board": "Công việc",
         "gantt": "Gantt",
         "docs": "Tài liệu"
-      }
+      },
+      "dragDisabled": "Tắt sắp xếp và bộ lọc để kéo task đến vị trí khác.",
+      "moveFailed": "Không thể di chuyển task. Bảng đã được khôi phục; thử lại nhé."
     }
   },
   "goals": {

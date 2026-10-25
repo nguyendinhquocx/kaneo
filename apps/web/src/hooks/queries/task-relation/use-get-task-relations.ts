@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import getTaskRelations from "@/fetchers/task-relation/get-task-relations";
-import { getShareFullTaskDetail } from "@/fetchers/share/share-full-api";
 import { getShareCapability } from "@/components/share/share-capability";
+import { getShareFullTaskDetail } from "@/fetchers/share/share-full-api";
+import getTaskRelations from "@/fetchers/task-relation/get-task-relations";
 
 function useGetTaskRelations(taskId: string) {
   const capability = getShareCapability();
@@ -32,6 +32,7 @@ function useGetTaskRelations(taskId: string) {
     refetchInterval: capability
       ? (query) => (query.state.error ? false : 10_000)
       : false,
+    retry: capability ? false : undefined,
   });
 }
 

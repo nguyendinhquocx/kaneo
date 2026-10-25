@@ -1911,7 +1911,8 @@
       "operators": {
         "isAnyOf": "es alguno de",
         "includeAnyOf": "incluye alguno de"
-      }
+      },
+      "clearFilter": "Quitar filtro de {{subject}}"
     },
     "gantt": {
       "pageTitle": "{{name}} — Gantt",
@@ -2374,7 +2375,9 @@
         "board": "Tareas",
         "gantt": "Gantt",
         "docs": "Documentos"
-      }
+      },
+      "dragDisabled": "Desactiva el orden y los filtros para reordenar las tareas.",
+      "moveFailed": "No se pudo mover la tarea. Se restauró el orden anterior; vuelve a intentarlo."
     }
   },
   "goals": {

@@ -10,6 +10,7 @@ import {
 } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { assertBulkTaskIdsGuard } from "../../execution/phase-progress";
+import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { deleteS3Keys } from "../../storage/cleanup-assets";
 import getTask from "./get-task";
 
@@ -28,6 +29,7 @@ async function deleteTask(
   const task = await getTask(taskId);
 
   const deletion = await db.transaction(async (tx) => {
+    await lockProjectTaskLanes(tx, [task.projectId]);
     const [lockedRoot] = await tx
       .select({ id: taskTable.id, projectId: taskTable.projectId })
       .from(taskTable)
@@ -35,7 +37,7 @@ async function deleteTask(
       .for("update")
       .limit(1);
 
-    if (!lockedRoot) {
+    if (!lockedRoot || lockedRoot.projectId !== task.projectId) {
       throw new HTTPException(404, { message: "Task not found" });
     }
 

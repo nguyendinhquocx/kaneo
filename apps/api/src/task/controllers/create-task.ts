@@ -5,6 +5,7 @@ import { columnTable, taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import { assertValidTaskStatus } from "../validate-task-fields";
+import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 async function createTask({
@@ -40,30 +41,32 @@ async function createTask({
     .from(userTable)
     .where(eq(userTable.id, userId ?? ""));
 
-  const column = await db.query.columnTable.findFirst({
-    where: and(
-      eq(columnTable.projectId, projectId),
-      eq(columnTable.slug, resolvedStatus),
-    ),
-  });
-
-  const [maxPositionResult] = await db
-    .select({ maxPosition: max(taskTable.position) })
-    .from(taskTable)
-    .where(
-      and(
-        eq(taskTable.projectId, projectId),
-        column?.id
-          ? eq(taskTable.columnId, column.id)
-          : eq(taskTable.status, resolvedStatus),
-      ),
-    );
-
-  const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
-
   const createdTask = await db.transaction(async (tx) => {
+    await lockProjectTaskLanes(tx, [projectId]);
     await assertTaskAssigneeInWorkspace(tx, userId, workspaceId);
     const taskNumber = await claimTaskNumber(projectId, tx);
+    const [column] = await tx
+      .select({ id: columnTable.id })
+      .from(columnTable)
+      .where(
+        and(
+          eq(columnTable.projectId, projectId),
+          eq(columnTable.slug, resolvedStatus),
+        ),
+      )
+      .limit(1);
+    const [maxPositionResult] = await tx
+      .select({ maxPosition: max(taskTable.position) })
+      .from(taskTable)
+      .where(
+        and(
+          eq(taskTable.projectId, projectId),
+          column?.id
+            ? eq(taskTable.columnId, column.id)
+            : eq(taskTable.status, resolvedStatus),
+        ),
+      );
+    const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
 
     const [task] = await tx
       .insert(taskTable)

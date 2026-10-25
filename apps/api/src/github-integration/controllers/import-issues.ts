@@ -1,8 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
   activityTable,
+  columnTable,
   integrationTable,
   labelTable,
   projectTable,
@@ -21,6 +22,7 @@ import {
 } from "../../plugins/github/utils/extract-priority";
 import { formatTaskDescriptionFromIssue } from "../../plugins/github/utils/format";
 import { getInstallationOctokit } from "../../plugins/github/utils/github-app";
+import { lockProjectTaskLanes } from "../../task/lock-project-task-lanes";
 import { claimTaskNumber } from "../../task/controllers/claim-task-numbers";
 
 type ImportResult = {
@@ -219,10 +221,68 @@ async function importSingleIssue(
     if (priority) updateData.priority = priority;
     if (status) updateData.status = status;
 
-    await db
-      .update(taskTable)
-      .set(updateData)
-      .where(eq(taskTable.id, existingLink.taskId));
+    if (status) {
+      await db.transaction(async (tx) => {
+        await lockProjectTaskLanes(tx, [projectId]);
+        const [existingTask] = await tx
+          .select({ status: taskTable.status })
+          .from(taskTable)
+          .where(
+            and(
+              eq(taskTable.id, existingLink.taskId),
+              eq(taskTable.projectId, projectId),
+            ),
+          )
+          .for("update")
+          .limit(1);
+        if (!existingTask) return;
+
+        const [column] = await tx
+          .select({ id: columnTable.id })
+          .from(columnTable)
+          .where(
+            and(
+              eq(columnTable.projectId, projectId),
+              eq(columnTable.slug, status),
+            ),
+          )
+          .limit(1);
+        const synchronizedData = {
+          ...updateData,
+          columnId: column?.id ?? null,
+        };
+        if (existingTask.status !== status) {
+          const [maxPositionResult] = await tx
+            .select({ maxPosition: max(taskTable.position) })
+            .from(taskTable)
+            .where(
+              and(
+                eq(taskTable.projectId, projectId),
+                column?.id
+                  ? eq(taskTable.columnId, column.id)
+                  : eq(taskTable.status, status),
+              ),
+            );
+          Object.assign(synchronizedData, {
+            position: (maxPositionResult?.maxPosition ?? 0) + 1,
+          });
+        }
+        await tx
+          .update(taskTable)
+          .set(synchronizedData)
+          .where(
+            and(
+              eq(taskTable.id, existingLink.taskId),
+              eq(taskTable.projectId, projectId),
+            ),
+          );
+      });
+    } else {
+      await db
+        .update(taskTable)
+        .set(updateData)
+        .where(eq(taskTable.id, existingLink.taskId));
+    }
 
     await importLabelsForTask(issue.labels, existingLink.taskId, workspaceId);
 
@@ -236,26 +296,51 @@ async function importSingleIssue(
     return "updated";
   }
 
-  const nextTaskNumber = await claimTaskNumber(projectId);
+  const createdTask = await db.transaction(async (tx) => {
+    await lockProjectTaskLanes(tx, [projectId]);
+    const nextTaskNumber = await claimTaskNumber(projectId, tx);
 
-  const taskValues: typeof taskTable.$inferInsert = {
-    projectId,
-    userId: null,
-    title: issue.title,
-    description: formatTaskDescriptionFromIssue(issue.body),
-    status: status || "to-do",
-    priority: priority || null,
-    number: nextTaskNumber,
-  };
+    const targetStatus = status || "to-do";
+    const [targetColumn] = await tx
+      .select({ id: columnTable.id })
+      .from(columnTable)
+      .where(
+        and(
+          eq(columnTable.projectId, projectId),
+          eq(columnTable.slug, targetStatus),
+        ),
+      )
+      .limit(1);
+    const [maxPositionResult] = await tx
+      .select({ maxPosition: max(taskTable.position) })
+      .from(taskTable)
+      .where(
+        and(
+          eq(taskTable.projectId, projectId),
+          targetColumn?.id
+            ? eq(taskTable.columnId, targetColumn.id)
+            : eq(taskTable.status, targetStatus),
+        ),
+      );
 
-  const [createdTask] = await db
-    .insert(taskTable)
-    .values(taskValues)
-    .returning();
+    const taskValues: typeof taskTable.$inferInsert = {
+      projectId,
+      userId: null,
+      title: issue.title,
+      description: formatTaskDescriptionFromIssue(issue.body),
+      status: targetStatus,
+      columnId: targetColumn?.id ?? null,
+      position: (maxPositionResult?.maxPosition ?? 0) + 1,
+      priority: priority || null,
+      number: nextTaskNumber,
+    };
 
-  if (!createdTask) {
-    throw new Error("Failed to create task");
-  }
+    const [task] = await tx.insert(taskTable).values(taskValues).returning();
+    if (!task) {
+      throw new Error("Failed to create task");
+    }
+    return task;
+  });
 
   await createExternalLink({
     taskId: createdTask.id,

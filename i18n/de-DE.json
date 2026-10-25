@@ -1922,7 +1922,8 @@
       "operators": {
         "isAnyOf": "ist einer von",
         "includeAnyOf": "enthält einen von"
-      }
+      },
+      "clearFilter": "Filter „{{subject}}“ löschen"
     },
     "gantt": {
       "pageTitle": "{{name}} — Gantt",
@@ -2374,7 +2375,9 @@
         "board": "Aufgaben",
         "gantt": "Gantt",
         "docs": "Dokumente"
-      }
+      },
+      "dragDisabled": "Deaktiviere Sortierung und Filter, um Aufgaben neu anzuordnen.",
+      "moveFailed": "Aufgabe konnte nicht verschoben werden. Die vorherige Reihenfolge wurde wiederhergestellt; versuche es erneut."
     }
   },
   "goals": {

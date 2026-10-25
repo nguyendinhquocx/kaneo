@@ -1922,7 +1922,8 @@
       "operators": {
         "isAnyOf": "adalah salah satu dari",
         "includeAnyOf": "menyertakan salah satu dari"
-      }
+      },
+      "clearFilter": "Hapus filter {{subject}}"
     },
     "gantt": {
       "pageTitle": "{{name}} — Gantt",
@@ -2374,7 +2375,9 @@
         "board": "Tugas",
         "gantt": "Gantt",
         "docs": "Dokumen"
-      }
+      },
+      "dragDisabled": "Matikan pengurutan dan filter untuk menyusun ulang tugas.",
+      "moveFailed": "Tugas tidak dapat dipindahkan. Urutan sebelumnya telah dipulihkan; coba lagi."
     }
   },
   "goals": {

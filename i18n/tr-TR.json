@@ -1922,7 +1922,8 @@
       "operators": {
         "isAnyOf": "herhangi biri",
         "includeAnyOf": "herhangi birini içer"
-      }
+      },
+      "clearFilter": "{{subject}} filtresini temizle"
     },
     "gantt": {
       "pageTitle": "{{name}} — Gantt",
@@ -2374,7 +2375,9 @@
         "board": "Görevler",
         "gantt": "Gantt",
         "docs": "Belgeler"
-      }
+      },
+      "dragDisabled": "Görevlerin sırasını değiştirmek için sıralama ve filtreleri kapat.",
+      "moveFailed": "Görev taşınamadı. Önceki sıralama geri yüklendi; yeniden dene."
     }
   },
   "goals": {

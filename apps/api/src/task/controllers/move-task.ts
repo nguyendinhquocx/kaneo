@@ -12,6 +12,7 @@ import {
   assertFinalTaskStatusGate,
   assertTaskMoveExecutionGate,
 } from "../../execution/finalization-gate";
+import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -101,8 +102,21 @@ async function moveTask({
   destinationStatus?: string;
   currentUserId: string;
 }) {
+  const [sourceSnapshot] = await db
+    .select({ projectId: taskTable.projectId })
+    .from(taskTable)
+    .where(eq(taskTable.id, taskId))
+    .limit(1);
+  if (!sourceSnapshot) {
+    throw new HTTPException(404, { message: "Task not found" });
+  }
+
   const { movedTask, existingTask, sourceProject, destinationProject } =
     await db.transaction(async (tx) => {
+      await lockProjectTaskLanes(tx, [
+        sourceSnapshot.projectId,
+        destinationProjectId,
+      ]);
       const [lockedTask] = await tx
         .select()
         .from(taskTable)
@@ -110,8 +124,10 @@ async function moveTask({
         .limit(1)
         .for("update");
 
-      if (!lockedTask) {
-        throw new HTTPException(404, { message: "Task not found" });
+      if (!lockedTask || lockedTask.projectId !== sourceSnapshot.projectId) {
+        throw new HTTPException(409, {
+          message: "Task project changed; refresh and retry the move",
+        });
       }
 
       if (isSameProjectMove(lockedTask.projectId, destinationProjectId)) {

@@ -1911,7 +1911,8 @@
       "operators": {
         "isAnyOf": "is een van",
         "includeAnyOf": "bevat een van"
-      }
+      },
+      "clearFilter": "Filter {{subject}} wissen"
     },
     "gantt": {
       "pageTitle": "{{name}} — Gantt",
@@ -2374,7 +2375,9 @@
         "board": "Taken",
         "gantt": "Gantt",
         "docs": "Documenten"
-      }
+      },
+      "dragDisabled": "Schakel sorteren en filters uit om taken te verplaatsen.",
+      "moveFailed": "Taak verplaatsen is mislukt. De vorige volgorde is hersteld; probeer het opnieuw."
     }
   },
   "goals": {

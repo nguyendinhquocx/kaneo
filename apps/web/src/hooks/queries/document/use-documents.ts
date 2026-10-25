@@ -30,31 +30,37 @@ export function useGetDocuments(projectId: string, includeArchived = false) {
   const capability = getShareCapability();
   return useQuery({
     queryKey: capability
-      ? ["share-full", capability.token, "documents", includeArchived]
+      ? ["share-full", capability.token, "documents"]
       : ["documents", projectId, includeArchived],
     queryFn: () => {
       if (capability) {
         return listShareFullDocuments(capability.token).then((rows): DocumentSummary[] =>
-          rows
-            .filter((row) => includeArchived || row.archivedAt === null)
-            .map((row) => ({
-              ...row,
-              projectId: capability.projectId,
-              createdByUserId: null,
-            })),
+          rows.map((row) => ({
+            ...row,
+            projectId: capability.projectId,
+            createdByUserId: null,
+          })),
         );
       }
       return listDocuments(projectId, includeArchived);
     },
+    select: capability
+      ? (rows) =>
+          includeArchived
+            ? rows
+            : rows.filter((row) => row.archivedAt === null)
+      : undefined,
     enabled: Boolean(capability || projectId),
     // A 429/invalid error must not keep a 10s poll hammering the share
     // limiter; the error state shows recovery UI and polling resumes on the
-    // next successful fetch.
-    refetchInterval: capability
-      ? (query) => (query.state.error ? false : 10_000)
-      : false,
+    // next successful fetch. The active observer owns refresh; the archived
+    // observer shares its cache and must not schedule a second timer.
+    refetchInterval:
+      capability && !includeArchived
+        ? (query) => (query.state.error ? false : 10_000)
+        : false,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: !capability || !includeArchived,
     retry: capability ? false : undefined,
   });
 }

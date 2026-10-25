@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../../database";
+import { lockProjectTaskLanes } from "../../task/lock-project-task-lanes";
 import getTaskRelations from "./get-task-relations";
 
 type ReorderSubtasksInput = {
@@ -18,7 +19,51 @@ export async function reorderSubtasks({
     throw new HTTPException(400, { message: "Duplicate subtask IDs" });
   }
 
+  const [parentSnapshot] = await db
+    .select({ projectId: schema.taskTable.projectId })
+    .from(schema.taskTable)
+    .innerJoin(
+      schema.projectTable,
+      eq(schema.taskTable.projectId, schema.projectTable.id),
+    )
+    .where(
+      and(
+        eq(schema.taskTable.id, parentTaskId),
+        eq(schema.projectTable.workspaceId, workspaceId),
+      ),
+    )
+    .limit(1);
+  if (!parentSnapshot) {
+    throw new HTTPException(404, { message: "Task not found" });
+  }
+  const childSnapshots =
+    orderedTargetTaskIds.length > 0
+      ? await db
+          .select({ id: schema.taskTable.id, projectId: schema.taskTable.projectId })
+          .from(schema.taskTable)
+          .innerJoin(
+            schema.projectTable,
+            eq(schema.taskTable.projectId, schema.projectTable.id),
+          )
+          .where(
+            and(
+              inArray(schema.taskTable.id, orderedTargetTaskIds),
+              eq(schema.projectTable.workspaceId, workspaceId),
+            ),
+          )
+      : [];
+  if (childSnapshots.length !== orderedTargetTaskIds.length) {
+    throw new HTTPException(409, {
+      message: "Subtask list changed; reload before reordering",
+    });
+  }
+  const projectIds = [
+    parentSnapshot.projectId,
+    ...childSnapshots.map((child) => child.projectId),
+  ];
+
   await db.transaction(async (tx) => {
+    await lockProjectTaskLanes(tx, projectIds);
     const [parent] = await tx
       .select({
         id: schema.taskTable.id,
@@ -38,7 +83,7 @@ export async function reorderSubtasks({
       .for("update")
       .limit(1);
 
-    if (!parent) {
+    if (!parent || parent.projectId !== parentSnapshot.projectId) {
       throw new HTTPException(404, { message: "Task not found" });
     }
 
@@ -93,9 +138,18 @@ export async function reorderSubtasks({
           inArray(schema.taskTable.id, orderedTargetTaskIds),
           eq(schema.projectTable.workspaceId, workspaceId),
         ),
-      );
+      )
+      .orderBy(asc(schema.taskTable.id))
+      .for("update");
 
-    if (children.length !== orderedTargetTaskIds.length) {
+    if (
+      children.length !== orderedTargetTaskIds.length ||
+      children.some(
+        (child) =>
+          child.projectId !==
+          childSnapshots.find((snapshot) => snapshot.id === child.id)?.projectId,
+      )
+    ) {
       throw new HTTPException(409, {
         message: "Subtask list changed; reload before reordering",
       });

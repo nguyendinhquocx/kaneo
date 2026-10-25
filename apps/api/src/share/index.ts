@@ -37,6 +37,7 @@ import {
   fullGetTaskDetail,
   fullListDocuments,
   fullListMembers,
+  fullMoveTask,
   fullReorderSubtasks,
   fullSetDocumentArchived,
   fullUpdateComment,
@@ -799,6 +800,33 @@ app.post("/project/:token/task", async (c) => {
   return c.json(task);
 });
 
+app.post("/project/:token/task/:taskId/move", async (c) => {
+  const token = c.req.param("token");
+  const taskId = c.req.param("taskId");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+
+  const link = await resolveShareLink(token, "project", "full");
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    throw new HTTPException(400, { message: "Invalid JSON body" });
+  }
+  const parsed = v.safeParse(
+    v.object({
+      status: v.string(),
+      // Destination index, not a database position. The server reindexes
+      // the affected ordinary tasks atomically using integer positions.
+      position: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    }),
+    rawBody,
+  );
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: "Invalid task move" });
+  }
+  return c.json(await fullMoveTask(link, taskId, parsed.output));
+});
+
 app.put("/project/:token/task/:taskId", async (c) => {
   const token = c.req.param("token");
   const taskId = c.req.param("taskId");
@@ -809,8 +837,11 @@ app.put("/project/:token/task/:taskId", async (c) => {
   // Same contract split: a full link gets the extended surface, an edit link
   // keeps its basic-field authorization, anything else fails closed.
   if (link.permission === "full") {
-    const body = await v.parse(fullTaskUpdateSchema, raw);
-    return c.json(await fullUpdateTask(link, taskId, body));
+    const parsed = v.safeParse(fullTaskUpdateSchema, raw);
+    if (!parsed.success) {
+      throw new HTTPException(400, { message: "Invalid task update" });
+    }
+    return c.json(await fullUpdateTask(link, taskId, parsed.output));
   }
   if (link.permission !== "edit") {
     throw new HTTPException(404, { message: "Not found" });
@@ -834,7 +865,7 @@ const fullTaskCreateSchema = v.object({
   ),
 });
 
-const fullTaskUpdateSchema = v.object({
+const fullTaskUpdateSchema = v.strictObject({
   title: v.optional(v.string()),
   description: v.optional(v.nullable(v.string())),
   status: v.optional(v.string()),
@@ -842,7 +873,8 @@ const fullTaskUpdateSchema = v.object({
   startDate: v.optional(v.nullable(v.string())),
   dueDate: v.optional(v.nullable(v.string())),
   assigneeId: v.optional(v.nullable(v.string())),
-  position: v.optional(v.number()),
+  // Lane order is owned exclusively by the POST move endpoint (integer index);
+  // arbitrary position writes here would bypass lane reindexing.
 });
 
 const documentUpdateSchema = v.object({

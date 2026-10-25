@@ -14,14 +14,17 @@ import {
   validateFullLinkUploadInput,
 } from "../storage/s3";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
+import { lockProjectTaskLanes } from "../task/lock-project-task-lanes";
 import {
   assertValidPriority,
   assertValidTaskStatus,
+  VIRTUAL_STATUSES,
 } from "../task/validate-task-fields";
 import { verifyShareAssetTicket } from "./asset-ticket";
 import {
   assertGuestAssigneeAllowed,
   countResourceAssets,
+  getDeniedTaskIds,
   getFullLinkProject,
   getFullLinkUploadUsage,
   isProjectAgentControlledStrict,
@@ -170,26 +173,6 @@ export async function fullCreateTask(
     await assertGuestAssigneeAllowed(body.assigneeId, project.workspaceId);
   }
 
-  const column = await db.query.columnTable.findFirst({
-    where: and(
-      eq(schema.columnTable.projectId, project.id),
-      eq(schema.columnTable.slug, status),
-    ),
-  });
-
-  const [maxPositionResult] = await db
-    .select({ maxPosition: max(schema.taskTable.position) })
-    .from(schema.taskTable)
-    .where(
-      and(
-        eq(schema.taskTable.projectId, project.id),
-        column?.id
-          ? eq(schema.taskTable.columnId, column.id)
-          : eq(schema.taskTable.status, status),
-      ),
-    );
-  const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
-
   const created = await db.transaction(async (tx) => {
     if (body.description !== undefined) {
       await lockProjectForDescription(tx, project.id);
@@ -199,7 +182,32 @@ export async function fullCreateTask(
       // between the precheck and this commit must not receive the task.
       await assertGuestAssigneeAllowed(body.assigneeId, project.workspaceId, tx);
     }
+    // claimTaskNumber holds the shared project lane lock; compute position
+    // only after acquiring it so a concurrent move cannot make this snapshot
+    // stale before the insert commits.
     const taskNumber = await claimTaskNumber(project.id, tx);
+    const [column] = await tx
+      .select({ id: schema.columnTable.id })
+      .from(schema.columnTable)
+      .where(
+        and(
+          eq(schema.columnTable.projectId, project.id),
+          eq(schema.columnTable.slug, status),
+        ),
+      )
+      .limit(1);
+    const [maxPositionResult] = await tx
+      .select({ maxPosition: max(schema.taskTable.position) })
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.projectId, project.id),
+          column?.id
+            ? eq(schema.taskTable.columnId, column.id)
+            : eq(schema.taskTable.status, status),
+        ),
+      );
+    const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
     const [task] = await tx
       .insert(schema.taskTable)
       .values({
@@ -253,6 +261,138 @@ export async function fullCreateTask(
   return toFullTaskMutationDto(created.task, created.labels);
 }
 
+export async function fullMoveTask(
+  link: ResolvedShareLink,
+  taskId: string,
+  body: { status: string; position: number },
+) {
+  const project = await getFullLinkProject(link.resourceId);
+  const task = await loadProjectTask(taskId, project.id);
+  if (await isTaskAgentControlled(task.id)) {
+    throw guestDenied();
+  }
+  await assertValidTaskStatus(body.status, project.id);
+
+  const moved = await db.transaction(async (tx) => {
+    // Serialize lane moves even when a lane is empty (no task rows to lock).
+    // Guest moves then lock every row in the source/destination lanes in ID
+    // order, the same order used by relation mutations, to avoid deadlocks.
+    await lockProjectTaskLanes(tx, [project.id]);
+
+    const [targetColumn] = await tx
+      .select({ id: schema.columnTable.id })
+      .from(schema.columnTable)
+      .where(
+        and(
+          eq(schema.columnTable.projectId, project.id),
+          eq(schema.columnTable.slug, body.status),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    if (!targetColumn) {
+      throw new HTTPException(400, { message: "Invalid task move destination" });
+    }
+
+    const statuses = [...new Set([task.status, body.status])];
+    const laneTasks = await tx
+      .select({
+        id: schema.taskTable.id,
+        status: schema.taskTable.status,
+        position: schema.taskTable.position,
+      })
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.projectId, project.id),
+          inArray(schema.taskTable.status, statuses),
+        ),
+      )
+      .orderBy(asc(schema.taskTable.id))
+      .for("update");
+
+    const deniedTaskIds = await getDeniedTaskIds(
+      laneTasks.map((row) => row.id),
+      tx,
+    );
+    const ordinaryTasks = laneTasks
+      .filter((row) => !deniedTaskIds.has(row.id))
+      .sort((left, right) => {
+        // Match the guest payload's PostgreSQL ASC semantics (NULLS LAST)
+        // and its ID tie-breaker, so reindex uses the order the guest saw.
+        if (left.position === null && right.position !== null) return 1;
+        if (right.position === null && left.position !== null) return -1;
+        return (
+          (left.position ?? 0) - (right.position ?? 0) ||
+          left.id.localeCompare(right.id)
+        );
+      });
+    const movingTask = ordinaryTasks.find((row) => row.id === task.id);
+    if (!movingTask) throw guestDenied();
+
+    const sourceTasks = ordinaryTasks.filter(
+      (row) => row.status === task.status && row.id !== task.id,
+    );
+    const destinationTasks =
+      task.status === body.status
+        ? sourceTasks
+        : ordinaryTasks.filter(
+            (row) => row.status === body.status && row.id !== task.id,
+          );
+    const destinationIndex = Math.max(
+      0,
+      Math.min(Math.trunc(body.position), destinationTasks.length),
+    );
+    destinationTasks.splice(destinationIndex, 0, movingTask);
+
+    if (task.status !== body.status) {
+      for (const [position, row] of sourceTasks.entries()) {
+        await tx
+          .update(schema.taskTable)
+          .set({ position })
+          .where(
+            and(
+              eq(schema.taskTable.id, row.id),
+              eq(schema.taskTable.projectId, project.id),
+            ),
+          );
+      }
+    }
+
+    for (const [position, row] of destinationTasks.entries()) {
+      await tx
+        .update(schema.taskTable)
+        .set({
+          status: body.status,
+          columnId: targetColumn.id,
+          position,
+        })
+        .where(
+          and(
+            eq(schema.taskTable.id, row.id),
+            eq(schema.taskTable.projectId, project.id),
+          ),
+        );
+    }
+
+    await audit(tx, link, "task.move");
+    const [updatedTask] = await tx
+      .select({ id: schema.taskTable.id, projectId: schema.taskTable.projectId })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id))
+      .limit(1);
+    if (!updatedTask) throw notFound();
+    return updatedTask;
+  });
+
+  await publishEvent("task.updated", {
+    taskId: moved.id,
+    projectId: moved.projectId,
+    status: body.status,
+  });
+  return { success: true };
+}
+
 export async function fullUpdateTask(
   link: ResolvedShareLink,
   taskId: string,
@@ -304,13 +444,15 @@ export async function fullUpdateTask(
   if (body.assigneeId !== undefined) {
     updates.userId = body.assigneeId || null;
   }
-  if (body.position !== undefined) {
-    updates.position = body.position;
+  if (Object.keys(updates).length === 0) {
+    throw new HTTPException(400, { message: "No valid task fields to update" });
   }
 
   const updated = await db.transaction(async (tx) => {
     if (body.description !== undefined) {
       await lockProjectForDescription(tx, project.id);
+    } else if (updates.status !== undefined) {
+      await lockProjectTaskLanes(tx, [project.id]);
     }
     if (body.assigneeId) {
       // Re-validate membership under the transaction: a member removed
@@ -318,6 +460,58 @@ export async function fullUpdateTask(
       await assertGuestAssigneeAllowed(body.assigneeId, project.workspaceId, tx);
     }
     await lockOrdinaryProjectTasks(tx, project.id, [task.id]);
+    if (updates.status !== undefined) {
+      const [currentLaneState] = await tx
+        .select({
+          status: schema.taskTable.status,
+          position: schema.taskTable.position,
+        })
+        .from(schema.taskTable)
+        .where(eq(schema.taskTable.id, task.id))
+        .limit(1);
+      if (
+        currentLaneState?.status !== task.status ||
+        currentLaneState.position !== task.position
+      ) {
+        throw new HTTPException(409, {
+          message: "Task lane changed; refresh and retry the update",
+        });
+      }
+    }
+    if (updates.status !== undefined) {
+      const [targetColumn] = await tx
+        .select({ id: schema.columnTable.id })
+        .from(schema.columnTable)
+        .where(
+          and(
+            eq(schema.columnTable.projectId, project.id),
+            eq(schema.columnTable.slug, updates.status),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (
+        !targetColumn &&
+        !VIRTUAL_STATUSES.includes(updates.status as never)
+      ) {
+        throw new HTTPException(400, { message: "Invalid task move destination" });
+      }
+      updates.columnId = targetColumn?.id ?? null;
+      if (updates.position === undefined) {
+        const [maxPositionResult] = await tx
+          .select({ maxPosition: max(schema.taskTable.position) })
+          .from(schema.taskTable)
+          .where(
+            and(
+              eq(schema.taskTable.projectId, project.id),
+              targetColumn?.id
+                ? eq(schema.taskTable.columnId, targetColumn.id)
+                : eq(schema.taskTable.status, updates.status),
+            ),
+          );
+        updates.position = (maxPositionResult?.maxPosition ?? 0) + 1;
+      }
+    }
     const [row] = await tx
       .update(schema.taskTable)
       .set(updates)
@@ -377,6 +571,9 @@ export async function fullDeleteTask(link: ResolvedShareLink, taskId: string) {
   }
 
   const deletion = await db.transaction(async (tx) => {
+    // Use the same project-before-task lock order as guest lane moves so a
+    // concurrent recursive delete cannot deadlock with a reorder.
+    await lockProjectTaskLanes(tx, [project.id]);
     const [lockedRoot] = await tx
       .select({
         id: schema.taskTable.id,

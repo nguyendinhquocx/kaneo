@@ -1922,7 +1922,8 @@
       "operators": {
         "isAnyOf": "다음 중 하나",
         "includeAnyOf": "다음 중 하나 포함"
-      }
+      },
+      "clearFilter": "{{subject}} 필터 지우기"
     },
     "gantt": {
       "pageTitle": "{{name}} — 간트",
@@ -2374,7 +2375,9 @@
         "board": "작업",
         "gantt": "간트",
         "docs": "문서"
-      }
+      },
+      "dragDisabled": "정렬과 필터를 끄면 작업 순서를 바꿀 수 있습니다.",
+      "moveFailed": "작업을 이동하지 못했습니다. 이전 순서를 복원했습니다. 다시 시도하세요."
     }
   },
   "goals": {

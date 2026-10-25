@@ -20,7 +20,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="sm"
       onClick={toggleTheme}
-      className="h-8 w-8 p-0"
+      className="h-11 w-11 p-0 sm:h-8 sm:w-8"
       aria-label={
         theme === "dark"
           ? t("publicProject:theme.switchToLight")

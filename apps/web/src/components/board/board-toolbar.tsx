@@ -88,8 +88,10 @@ function ActiveFilterChip({
   value,
   onClear,
 }: ActiveFilterChipProps) {
+  const { t } = useTranslation();
+
   return (
-    <div className="inline-flex h-7 items-center rounded-md border border-border bg-background text-xs shadow-xs">
+    <div className="inline-flex h-auto min-h-11 items-center rounded-md border border-border bg-background text-xs shadow-xs sm:h-7 sm:min-h-0">
       <span className="px-2 font-medium text-foreground">{subject}</span>
       <span className="h-full w-px bg-border" />
       <span className="px-2 text-foreground/80">{operator}</span>
@@ -97,7 +99,8 @@ function ActiveFilterChip({
       <span className="flex px-2 text-foreground">{value}</span>
       <span className="h-full w-px bg-border" />
       <button
-        className="inline-flex h-full w-7 items-center justify-center rounded-r-md text-foreground/70 hover:bg-accent/70 hover:text-foreground"
+        aria-label={t("tasks:boardFilters.clearFilter", { subject })}
+        className="inline-flex h-11 w-11 items-center justify-center rounded-r-md text-foreground/70 hover:bg-accent/70 hover:text-foreground sm:h-full sm:w-7"
         onClick={onClear}
         type="button"
       >
@@ -261,7 +264,7 @@ export default function BoardToolbar({
                 render={
                   <button
                     type="button"
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-foreground text-xs font-medium outline-none ring-0 hover:bg-accent/60"
+                    className="inline-flex h-11 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 sm:h-7 text-foreground text-xs font-medium outline-none ring-0 hover:bg-accent/60"
                   />
                 }
               >
@@ -277,13 +280,13 @@ export default function BoardToolbar({
                 <DropdownMenuSeparator />
 
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="h-8 rounded-md text-sm">
+                  <DropdownMenuSubTrigger className="h-11 rounded-md text-sm sm:h-8">
                     {t("tasks:boardFilters.subjects.status")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
                     <div className="grid grid-cols-1 gap-1 p-1">
                       <button
-                        className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
+                        className={`inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-left text-xs sm:h-7 ${
                           selectedStatusIds.length === 0
                             ? "bg-accent text-accent-foreground"
                             : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
@@ -297,7 +300,7 @@ export default function BoardToolbar({
                       {project?.columns?.map((column) => (
                         <button
                           key={column.id}
-                          className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
+                          className={`inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-left text-xs sm:h-7 ${
                             selectedStatusIds.includes(column.id)
                               ? "bg-accent text-accent-foreground"
                               : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
@@ -319,13 +322,13 @@ export default function BoardToolbar({
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="h-8 rounded-md text-sm">
+                  <DropdownMenuSubTrigger className="h-11 rounded-md text-sm sm:h-8">
                     {t("tasks:boardFilters.subjects.priority")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
                     <div className="grid grid-cols-1 gap-1 p-1">
                       <button
-                        className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
+                        className={`inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-left text-xs sm:h-7 ${
                           selectedPriorityIds.length === 0
                             ? "bg-accent text-accent-foreground"
                             : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
@@ -339,7 +342,7 @@ export default function BoardToolbar({
                       {["urgent", "high", "medium", "low"].map((priority) => (
                         <button
                           key={priority}
-                          className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
+                          className={`inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-left text-xs sm:h-7 ${
                             selectedPriorityIds.includes(priority)
                               ? "bg-accent text-accent-foreground"
                               : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
@@ -363,13 +366,13 @@ export default function BoardToolbar({
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="h-8 rounded-md text-sm">
+                  <DropdownMenuSubTrigger className="h-11 rounded-md text-sm sm:h-8">
                     {t("tasks:boardFilters.subjects.assignee")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-64">
                     <div className="grid grid-cols-1 gap-1 p-1">
                       <button
-                        className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
+                        className={`inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-left text-xs sm:h-7 ${
                           selectedAssigneeIds.length === 0
                             ? "bg-accent text-accent-foreground"
                             : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
@@ -383,7 +386,7 @@ export default function BoardToolbar({
                       {users?.members?.map((member) => (
                         <button
                           key={member.userId}
-                          className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
+                          className={`inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-left text-xs sm:h-7 ${
                             selectedAssigneeIds.includes(member.userId)
                               ? "bg-accent text-accent-foreground"
                               : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
@@ -415,13 +418,13 @@ export default function BoardToolbar({
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="h-8 rounded-md text-sm">
+                  <DropdownMenuSubTrigger className="h-11 rounded-md text-sm sm:h-8">
                     {t("tasks:boardFilters.subjects.dueDate")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-56">
                     <div className="grid grid-cols-1 gap-1 p-1">
                       <button
-                        className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
+                        className={`inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-left text-xs sm:h-7 ${
                           selectedDueDateFilters.length === 0
                             ? "bg-accent text-accent-foreground"
                             : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
@@ -441,7 +444,7 @@ export default function BoardToolbar({
                       ].map((dueDate) => (
                         <button
                           key={dueDate}
-                          className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
+                          className={`inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-left text-xs sm:h-7 ${
                             selectedDueDateFilters.includes(dueDate)
                               ? "bg-accent text-accent-foreground"
                               : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
@@ -468,13 +471,13 @@ export default function BoardToolbar({
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="h-8 rounded-md text-sm">
+                  <DropdownMenuSubTrigger className="h-11 rounded-md text-sm sm:h-8">
                     {t("tasks:properties.labels")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-64">
                     <DropdownMenuItem
                       onClick={clearLabelFilters}
-                      className="h-8 rounded-md text-sm"
+                      className="h-11 rounded-md text-sm sm:h-8"
                     >
                       <CheckSlot
                         checked={!filters.labels || filters.labels.length === 0}
@@ -487,7 +490,7 @@ export default function BoardToolbar({
                         <DropdownMenuItem
                           key={label.id}
                           onClick={() => toggleLabelGroup(label)}
-                          className="h-8 rounded-md text-sm"
+                          className="h-11 rounded-md text-sm sm:h-8"
                         >
                           <CheckSlot checked={isLabelGroupSelected(label)} />
                           <span
@@ -519,7 +522,7 @@ export default function BoardToolbar({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={clearFilters}
-                      className="h-8 rounded-md text-sm text-muted-foreground"
+                      className="h-11 rounded-md text-sm text-muted-foreground sm:h-8"
                     >
                       {t("common:actions.clearAllFilters")}
                     </DropdownMenuItem>
@@ -646,7 +649,8 @@ export default function BoardToolbar({
           <div className="inline-flex items-center gap-1">
             <button
               type="button"
-              className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors ${
+              aria-label={t("tasks:view.board")}
+              className={`inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-md p-0 text-xs font-medium transition-colors sm:h-6 sm:min-w-0 sm:justify-start sm:px-2 ${
                 viewMode === "board"
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
@@ -654,11 +658,12 @@ export default function BoardToolbar({
               onClick={() => setViewMode("board")}
             >
               <PanelsTopLeft className="h-3 w-3" />
-              {t("tasks:view.board")}
+              <span className="hidden sm:inline">{t("tasks:view.board")}</span>
             </button>
             <button
               type="button"
-              className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors ${
+              aria-label={t("tasks:view.list")}
+              className={`inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-md p-0 text-xs font-medium transition-colors sm:h-6 sm:min-w-0 sm:justify-start sm:px-2 ${
                 viewMode === "list"
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
@@ -666,7 +671,7 @@ export default function BoardToolbar({
               onClick={() => setViewMode("list")}
             >
               <Rows3 className="h-3 w-3" />
-              {t("tasks:view.list")}
+              <span className="hidden sm:inline">{t("tasks:view.list")}</span>
             </button>
           </div>
         </div>

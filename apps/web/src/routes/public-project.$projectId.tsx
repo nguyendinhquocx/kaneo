@@ -69,8 +69,8 @@ function RouteComponent() {
       <PageTitle title={t("publicProject:pageTitle")} />
       <div className="scrollbar-none h-svh w-full flex-col overflow-y-auto bg-background flex">
         <header className="border-b border-border sticky top-0 z-10 bg-background">
-          <div className="px-6 py-2.5">
-            <div className="flex items-center justify-between gap-4">
+          <div className="px-4 py-2.5 sm:px-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
                   {createElement(
@@ -97,7 +97,7 @@ function RouteComponent() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end sm:shrink-0">
                 <CopyUrlButton />
                 <ThemeToggle />
                 <div className="h-4 w-px bg-border" />
@@ -107,7 +107,7 @@ function RouteComponent() {
                     size="sm"
                     onClick={() => setViewMode("kanban")}
                     aria-label={t("tasks:view.board")}
-                    className={`h-8 gap-2 ${viewMode === "kanban" ? "bg-accent" : ""}`}
+                    className={`h-11 min-w-11 gap-2 p-0 sm:h-8 sm:min-w-0 sm:p-2 ${viewMode === "kanban" ? "bg-accent" : ""}`}
                   >
                     <Layout className="h-3 w-3" />
                     <span className="hidden whitespace-nowrap text-xs sm:inline">
@@ -119,7 +119,7 @@ function RouteComponent() {
                     size="sm"
                     onClick={() => setViewMode("list")}
                     aria-label={t("tasks:view.list")}
-                    className={`h-8 gap-2 ${viewMode === "list" ? "bg-accent" : ""}`}
+                    className={`h-11 min-w-11 gap-2 p-0 sm:h-8 sm:min-w-0 sm:p-2 ${viewMode === "list" ? "bg-accent" : ""}`}
                   >
                     <List className="h-3 w-3" />
                     <span className="hidden whitespace-nowrap text-xs sm:inline">

@@ -181,12 +181,22 @@ export function updateShareFullTask(
     startDate?: string | null;
     dueDate?: string | null;
     assigneeId?: string | null;
-    position?: number;
   },
 ) {
   return request<ShareFullTask>(token, `/task/${taskId}`, {
     method: "PUT",
     json: task,
+  });
+}
+
+export function moveShareFullTask(
+  token: string,
+  taskId: string,
+  body: { status: string; position: number },
+) {
+  return request<{ success: boolean }>(token, `/task/${taskId}/move`, {
+    method: "POST",
+    json: body,
   });
 }
 

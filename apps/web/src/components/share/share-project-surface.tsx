@@ -59,6 +59,11 @@ export default function ShareProjectSurface({
     updateLabelFilter,
   } = useTaskFiltersWithLabelsSupport(project ?? null, projectId);
   const [view, setView] = useState<ShareSurfaceView>(initialView);
+  // Drag indices only map to persistent positions while the board shows its
+  // full natural order. Sorting or filtering hides/reorders lane rows, so
+  // disable drag rather than saving a misleading index.
+  const guestDragDisabled =
+    hasActiveFilters || sort.field !== "position" || sort.direction !== "asc";
 
   // Surface the real project id to capability consumers and shared owner
   // components once loaded.
@@ -88,17 +93,17 @@ export default function ShareProjectSurface({
     <div className="flex h-svh w-full flex-col overflow-hidden bg-background">
       <meta name="robots" content="noindex, nofollow" />
       <meta name="referrer" content="no-referrer" />
-      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-border/80 border-b px-3">
+      <header className="flex h-auto min-h-11 shrink-0 flex-col gap-1 border-border/80 border-b px-3 py-1 sm:h-11 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-0">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-semibold text-foreground">
             {project?.name ?? ""}
           </span>
-          <span className="shrink-0 whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+          <span className="hidden shrink-0 whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground sm:inline-flex">
             {t("share:full.holderBadge")}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <nav className="flex h-8 max-w-[60vw] items-center gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-background p-0.5 sm:max-w-none">
+        <div className="flex items-center justify-between gap-2 sm:justify-end">
+          <nav className="flex h-11 max-w-[60vw] items-center gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-background p-0.5 sm:h-8 sm:max-w-none">
             {(
               [
                 ["backlog", SquircleDashed],
@@ -113,7 +118,7 @@ export default function ShareProjectSurface({
                 aria-pressed={view === key}
                 aria-label={t(`share:full.view.${key}`)}
                 onClick={() => setView(key)}
-                className={`flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs ${
+                className={`flex h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs sm:h-6 sm:min-w-0 sm:justify-start ${
                   view === key
                     ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -148,6 +153,11 @@ export default function ShareProjectSurface({
               sort={sort}
               onSortChange={setSort}
             />
+            {view === "board" && viewMode === "board" && guestDragDisabled ? (
+              <p role="status" className="text-xs text-muted-foreground">
+                {t("share:full.dragDisabled")}
+              </p>
+            ) : null}
             <div className="min-h-0 flex-1">
               {view === "gantt" && sortedProject ? (
                 <ShareGanttView
@@ -163,7 +173,10 @@ export default function ShareProjectSurface({
                 <BacklogListView project={sortedProject} />
               ) : view === "board" && sortedProject ? (
                 viewMode === "board" ? (
-                  <KanbanBoard project={sortedProject} />
+                  <KanbanBoard
+                    project={sortedProject}
+                    disableDragDrop={guestDragDisabled}
+                  />
                 ) : (
                   <ListView project={sortedProject} />
                 )

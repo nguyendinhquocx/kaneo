@@ -4,6 +4,7 @@ import db, { schema } from "../database";
 import { isProjectAgentControlled } from "../project/controllers/public-project-dto";
 import { deleteOrphanedAssets } from "../storage/cleanup-assets";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
+import { lockProjectTaskLanes } from "../task/lock-project-task-lanes";
 import {
   assertValidPriority,
   assertValidTaskStatus,
@@ -57,28 +58,34 @@ export async function publicCreateTask(
     });
   }
 
-  const column = await db.query.columnTable.findFirst({
-    where: and(
-      eq(schema.columnTable.projectId, link.resourceId),
-      eq(schema.columnTable.slug, status),
-    ),
-  });
-
-  const [maxPositionResult] = await db
-    .select({ maxPosition: max(schema.taskTable.position) })
-    .from(schema.taskTable)
-    .where(
-      and(
-        eq(schema.taskTable.projectId, link.resourceId),
-        column?.id
-          ? eq(schema.taskTable.columnId, column.id)
-          : eq(schema.taskTable.status, status),
-      ),
-    );
-  const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
-
   const created = await db.transaction(async (tx) => {
+    await lockProjectTaskLanes(tx, [link.resourceId]);
     const taskNumber = await claimTaskNumber(link.resourceId, tx);
+    const [column] = await tx
+      .select({ id: schema.columnTable.id })
+      .from(schema.columnTable)
+      .where(
+        and(
+          eq(schema.columnTable.projectId, link.resourceId),
+          eq(schema.columnTable.slug, status),
+        ),
+      )
+      .limit(1);
+    if (!column) {
+      throw new HTTPException(400, { message: "Invalid task status" });
+    }
+    const [maxPositionResult] = await tx
+      .select({ maxPosition: max(schema.taskTable.position) })
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.projectId, link.resourceId),
+          column?.id
+            ? eq(schema.taskTable.columnId, column.id)
+            : eq(schema.taskTable.status, status),
+        ),
+      );
+    const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
 
     const [task] = await tx
       .insert(schema.taskTable)
@@ -184,6 +191,35 @@ export async function publicUpdateTask(
   }
 
   const [updated] = await db.transaction(async (tx) => {
+    if (updates.status !== undefined) {
+      await lockProjectTaskLanes(tx, [link.resourceId]);
+      const [targetColumn] = await tx
+        .select({ id: schema.columnTable.id })
+        .from(schema.columnTable)
+        .where(
+          and(
+            eq(schema.columnTable.projectId, link.resourceId),
+            eq(schema.columnTable.slug, updates.status),
+          ),
+        )
+        .limit(1);
+      if (!targetColumn) {
+        throw new HTTPException(400, { message: "Invalid task status" });
+      }
+      const [maxPositionResult] = await tx
+        .select({ maxPosition: max(schema.taskTable.position) })
+        .from(schema.taskTable)
+        .where(
+          and(
+            eq(schema.taskTable.projectId, link.resourceId),
+            targetColumn?.id
+              ? eq(schema.taskTable.columnId, targetColumn.id)
+              : eq(schema.taskTable.status, updates.status),
+          ),
+        );
+      updates.columnId = targetColumn?.id ?? null;
+      updates.position = (maxPositionResult?.maxPosition ?? 0) + 1;
+    }
     const [row] = await tx
       .update(schema.taskTable)
       .set(updates)

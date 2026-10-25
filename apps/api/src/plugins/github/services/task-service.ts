@@ -1,5 +1,5 @@
 import type { InferSelectModel } from "drizzle-orm";
-import { and, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import db from "../../../database";
 import {
   columnTable,
@@ -7,6 +7,7 @@ import {
   taskTable,
 } from "../../../database/schema";
 import { assertFinalTaskStatusGate } from "../../../execution/finalization-gate";
+import { lockProjectTaskLanes } from "../../../task/lock-project-task-lanes";
 
 export type TaskRow = InferSelectModel<typeof taskTable>;
 
@@ -35,7 +36,15 @@ export async function updateTaskStatus(
   taskId: string,
   newStatus: string,
 ): Promise<UpdateTaskStatusResult> {
+  const [snapshot] = await db
+    .select({ projectId: taskTable.projectId })
+    .from(taskTable)
+    .where(eq(taskTable.id, taskId))
+    .limit(1);
+  if (!snapshot) return { applied: false };
+
   return db.transaction(async (tx) => {
+    await lockProjectTaskLanes(tx, [snapshot.projectId]);
     const [task] = await tx
       .select()
       .from(taskTable)
@@ -43,7 +52,7 @@ export async function updateTaskStatus(
       .limit(1)
       .for("update");
 
-    if (!task) {
+    if (!task || task.projectId !== snapshot.projectId) {
       return { applied: false };
     }
 
@@ -87,9 +96,25 @@ export async function updateTaskStatus(
       return { applied: false };
     }
 
+    let position = task.position;
+    if (task.status !== newStatus) {
+      const [maxPositionResult] = await tx
+        .select({ maxPosition: max(taskTable.position) })
+        .from(taskTable)
+        .where(
+          and(
+            eq(taskTable.projectId, task.projectId),
+            column?.id
+              ? eq(taskTable.columnId, column.id)
+              : eq(taskTable.status, newStatus),
+          ),
+        );
+      position = (maxPositionResult?.maxPosition ?? 0) + 1;
+    }
+
     const [after] = await tx
       .update(taskTable)
-      .set({ status: newStatus, columnId })
+      .set({ status: newStatus, columnId, position })
       .where(eq(taskTable.id, taskId))
       .returning();
 

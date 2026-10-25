@@ -264,8 +264,9 @@ Polling fallback: refetch on window focus + bounded interval poll ≤10s while `
 - T2 DONE (commit 12714b08): full capability server-side; integration 191→194 PASS incl. 19 full-share tests.
 - T3 DONE (commit 3433a418): capability transport + owner component parity; web typecheck 0 errors, build PASS, tests 62/62.
 - T4 DONE at worker handoff (commit 81978644): initial security matrix tests; worker reports full suite green.
-- Parent post-handoff review 2026-10-24: initial security/UI reviewers returned NEEDS REVISION. Repairs in progress for full-link admin disclosure, cross-project delete cascades, image signatures, concurrent quota, legacy route dispatch, manifest-project comments, revoked-link states, and localization. Follow-up reviewers additionally found task-move TOCTOU in relation writes/task deletion and a task-sheet cache after revoke; repaired with transactional endpoint locks plus a parent capability gate. No deployment authorized; owner UAT remains pending.
-- Not done by design: production deployment (requires separate guarded release plan + owner UAT per spec); doc comments for guests (schema `document_comment.user_id` NOT NULL — excluded, matrix §C row 5); capability WS ticket (polling fallback per §G).
+- Production release 2026-10-24: commit `09a9fe89` deployed as fullshare image digest `3108cd3f…`; guarded wave receipt `.wave-fullshare/APPLY-RECEIPT.md`, migration/schema and encrypted backup/R2 mirror PASS.
+- Owner UAT 2026-10-25 on production `708d1712` returned NEEDS REVISION: share dialog warning/label, intermittent 400/429, guest drag, mobile headers, and public task modal. Root cause verified: full-share payload used column nanoid where Kanban sends `column.id` as status slug; drag also fanned out per-card writes. First UAT repairs shipped in `708d1712` (column IDs, rate budget/poll recovery, copy/label/mobile fixes); current follow-up adds a single atomic integer-index move endpoint, optimistic rollback/error feedback, null/tie ordering, sort/filter drag guard, 44px controls and docs poll deduplication. This follow-up is not deployed yet.
+- Not done by design: final owner UAT after uatfix4 (required before `/verify`/archive); doc comments for guests (schema `document_comment.user_id` NOT NULL — excluded, matrix §C row 5); capability WS ticket (polling fallback per §G).
 
 ## Checkpoints
 

@@ -1,6 +1,10 @@
-import { Calendar, CalendarClock, CalendarX, X } from "lucide-react";
+import { Calendar, CalendarClock, CalendarX } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogClose, DialogPopup } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { dueDateStatusColors, getDueDateStatus } from "@/lib/due-date-status";
 import { formatDateMedium, formatDateShort } from "@/lib/format";
 import { getPriorityIcon } from "@/lib/priority";
@@ -35,32 +39,26 @@ export function PublicTaskDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="w-full max-w-4xl max-h-[85vh] p-0">
+      <DialogPopup className="w-full max-w-2xl max-h-[85vh] p-0">
         <div className="bg-background border border-border rounded-xl flex flex-col max-h-[85vh] shadow-lg">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border/70 shrink-0">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <span className="text-sm font-medium text-muted-foreground shrink-0">
+          <div className="flex min-w-0 items-center justify-between border-border/70 border-b px-4 py-3 pe-14 shrink-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 truncate text-sm font-medium text-muted-foreground">
                 {projectSlug.toUpperCase()}-{task.number}
               </span>
               {statusLabel ? (
-                <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded-md shrink-0">
+                <span className="max-w-[35%] shrink-0 truncate rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                   {statusLabel}
                 </span>
               ) : null}
             </div>
-            <DialogClose
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              render={<button type="button" aria-label="Close" />}
-            >
-              <X className="size-4" />
-            </DialogClose>
           </div>
 
           <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
             <div className="space-y-3">
-              <h2 className="pr-8 text-2xl font-heading font-semibold leading-tight text-foreground">
+              <DialogTitle className="pr-8 text-2xl leading-tight text-foreground">
                 {task.title}
-              </h2>
+              </DialogTitle>
 
               <div className="flex flex-wrap gap-2">
                 {task.priority && priorityLabel && (
@@ -113,7 +111,7 @@ export function PublicTaskDetailModal({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border/50">
+            <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 border-t border-border/50">
               <div>
                 <div className="text-xs text-muted-foreground mb-1">
                   {t("publicProject:taskDetail.created")}

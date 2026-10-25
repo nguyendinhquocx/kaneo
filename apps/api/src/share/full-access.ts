@@ -113,31 +113,32 @@ export async function loadProjectDocument(
 // as whole objects; their title/status and relations are execution data too.
 export async function getDeniedTaskIds(
   taskIds: string[],
+  executor: ShareQueryExecutor = db,
 ): Promise<Set<string>> {
   const denied = new Set<string>();
   if (taskIds.length === 0) return denied;
-  const [runs, schedules, phaseCards] = await Promise.all([
-    db
-      .select({ taskId: schema.taskRunTable.taskId })
-      .from(schema.taskRunTable)
-      .where(inArray(schema.taskRunTable.taskId, taskIds)),
-    db
-      .select({ taskId: schema.executionScheduleTable.taskId })
-      .from(schema.executionScheduleTable)
-      .where(inArray(schema.executionScheduleTable.taskId, taskIds)),
-    db
-      .select({
-        fullTaskId: schema.executionPhaseCardTable.fullTaskId,
-        childTaskId: schema.executionPhaseCardTable.childTaskId,
-      })
-      .from(schema.executionPhaseCardTable)
-      .where(
-        or(
-          inArray(schema.executionPhaseCardTable.fullTaskId, taskIds),
-          inArray(schema.executionPhaseCardTable.childTaskId, taskIds),
-        ),
+  // A transaction executor owns one PostgreSQL client; run its checks
+  // sequentially rather than issuing concurrent client.query calls.
+  const runs = await executor
+    .select({ taskId: schema.taskRunTable.taskId })
+    .from(schema.taskRunTable)
+    .where(inArray(schema.taskRunTable.taskId, taskIds));
+  const schedules = await executor
+    .select({ taskId: schema.executionScheduleTable.taskId })
+    .from(schema.executionScheduleTable)
+    .where(inArray(schema.executionScheduleTable.taskId, taskIds));
+  const phaseCards = await executor
+    .select({
+      fullTaskId: schema.executionPhaseCardTable.fullTaskId,
+      childTaskId: schema.executionPhaseCardTable.childTaskId,
+    })
+    .from(schema.executionPhaseCardTable)
+    .where(
+      or(
+        inArray(schema.executionPhaseCardTable.fullTaskId, taskIds),
+        inArray(schema.executionPhaseCardTable.childTaskId, taskIds),
       ),
-  ]);
+    );
   for (const row of runs) denied.add(row.taskId);
   for (const row of schedules) denied.add(row.taskId);
   for (const row of phaseCards) {
@@ -272,7 +273,10 @@ export async function buildFullProjectPayload(resourceId: string) {
     })
     .from(schema.taskTable)
     .where(eq(schema.taskTable.projectId, resourceId))
-    .orderBy(asc(schema.taskTable.position));
+    // Position can be null or tie during legacy/imported data. Stable ID
+    // ordering keeps the guest board deterministic until the next move
+    // normalizes the lane's ordinary tasks.
+    .orderBy(asc(schema.taskTable.position), asc(schema.taskTable.id));
 
   const [deniedIds, redactedDescriptions] = await Promise.all([
     getDeniedTaskIds(allTasks.map((task) => task.id)),

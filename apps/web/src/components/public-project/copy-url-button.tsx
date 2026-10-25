@@ -12,7 +12,6 @@ export function CopyUrlButton() {
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
-      toast.success(t("publicProject:copyUrl.successToast"));
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error("Failed to copy URL:", error);
@@ -30,7 +29,7 @@ export function CopyUrlButton() {
           ? t("publicProject:copyUrl.copied")
           : t("publicProject:copyUrl.share")
       }
-      className="h-8 shrink-0 gap-2"
+      className="h-11 w-11 shrink-0 gap-2 p-0 sm:h-8 sm:w-auto sm:p-2"
     >
       {copied ? (
         <Check className="h-3 w-3" />
@@ -41,6 +40,9 @@ export function CopyUrlButton() {
         {copied
           ? t("publicProject:copyUrl.copied")
           : t("publicProject:copyUrl.share")}
+      </span>
+      <span className="sr-only" role="status" aria-live="polite">
+        {copied ? t("publicProject:copyUrl.copied") : ""}
       </span>
     </Button>
   );

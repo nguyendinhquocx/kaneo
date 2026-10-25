@@ -1,15 +1,16 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, projectTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import {
   coercePriority,
   coerceStatus,
   getValidTaskStatuses,
 } from "../validate-task-fields";
-import claimTaskNumbers from "./claim-task-numbers";
+import { claimTaskNumber } from "./claim-task-numbers";
 
 export type ImportTask = {
   title: string;
@@ -36,10 +37,6 @@ async function importTasks(
     });
   }
 
-  let taskNumber =
-    tasksToImport.length > 0
-      ? (await claimTaskNumbers(projectId, tasksToImport.length)) - 1
-      : 0;
   const validStatuses = await getValidTaskStatuses(projectId);
   const requestedAssigneeIds = [
     ...new Set(
@@ -65,28 +62,55 @@ async function importTasks(
       );
       const warnings = [statusWarning, priorityWarning].filter(Boolean);
 
-      const column = await db.query.columnTable.findFirst({
-        where: and(
-          eq(columnTable.projectId, projectId),
-          eq(columnTable.slug, status),
-        ),
+      const createdTask = await db.transaction(async (tx) => {
+        await lockProjectTaskLanes(tx, [projectId]);
+        if (taskData.userId) {
+          await assertTaskAssigneeInWorkspace(
+            tx,
+            taskData.userId,
+            project.workspaceId,
+          );
+        }
+        const taskNumber = await claimTaskNumber(projectId, tx);
+        const [column] = await tx
+          .select({ id: columnTable.id })
+          .from(columnTable)
+          .where(
+            and(
+              eq(columnTable.projectId, projectId),
+              eq(columnTable.slug, status),
+            ),
+          )
+          .limit(1);
+        const [maxPositionResult] = await tx
+          .select({ maxPosition: max(taskTable.position) })
+          .from(taskTable)
+          .where(
+            and(
+              eq(taskTable.projectId, projectId),
+              column?.id
+                ? eq(taskTable.columnId, column.id)
+                : eq(taskTable.status, status),
+            ),
+          );
+        const [task] = await tx
+          .insert(taskTable)
+          .values({
+            projectId,
+            userId: taskData.userId || null,
+            title: taskData.title,
+            status,
+            columnId: column?.id ?? null,
+            startDate: taskData.startDate ? new Date(taskData.startDate) : null,
+            dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+            description: taskData.description || "",
+            priority,
+            number: taskNumber,
+            position: (maxPositionResult?.maxPosition ?? 0) + 1,
+          })
+          .returning();
+        return task;
       });
-
-      const [createdTask] = await db
-        .insert(taskTable)
-        .values({
-          projectId,
-          userId: taskData.userId || null,
-          title: taskData.title,
-          status,
-          columnId: column?.id ?? null,
-          startDate: taskData.startDate ? new Date(taskData.startDate) : null,
-          dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
-          description: taskData.description || "",
-          priority,
-          number: ++taskNumber,
-        })
-        .returning();
 
       if (createdTask) {
         await publishEvent("task.created", {

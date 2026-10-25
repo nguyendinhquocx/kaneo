@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
@@ -15,6 +15,7 @@ import {
   lockTasksForStatusMutation,
 } from "../../execution/finalization-gate";
 import { assertUserWorkspacePermission } from "../../utils/require-workspace-permission";
+import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import { assertValidPriority, VIRTUAL_STATUSES } from "../validate-task-fields";
 
@@ -108,6 +109,8 @@ async function bulkUpdateTasks({
       }
 
       const lockedTasks = await db.transaction(async (tx) => {
+        const projectIds = [...new Set(tasks.map((task) => task.projectId))];
+        await lockProjectTaskLanes(tx, projectIds);
         const rows = await lockTasksForStatusMutation(
           tx,
           tasks.map((task) => task.id),
@@ -116,7 +119,11 @@ async function bulkUpdateTasks({
           throw new HTTPException(404, { message: "No tasks found" });
         }
 
-        const projectIds = [...new Set(rows.map((task) => task.projectId))];
+        if (rows.some((task) => !projectIds.includes(task.projectId))) {
+          throw new HTTPException(409, {
+            message: "A task moved projects; refresh and retry the update",
+          });
+        }
         const columns = await tx
           .select({
             id: columnTable.id,
@@ -128,6 +135,7 @@ async function bulkUpdateTasks({
           .where(inArray(columnTable.projectId, projectIds));
 
         const updatedRows: typeof rows = [];
+        const nextPositions = new Map<string, number>();
         for (const task of rows) {
           const column = columns.find(
             (candidate) =>
@@ -146,9 +154,31 @@ async function bulkUpdateTasks({
             isFinalColumn: column?.isFinal === true,
           });
 
+          let position = task.position;
+          if (task.status !== value) {
+            const laneKey = `${task.projectId}:${value}`;
+            let nextPosition = nextPositions.get(laneKey);
+            if (nextPosition === undefined) {
+              const [maxPositionResult] = await tx
+                .select({ maxPosition: max(taskTable.position) })
+                .from(taskTable)
+                .where(
+                  and(
+                    eq(taskTable.projectId, task.projectId),
+                    column?.id
+                      ? eq(taskTable.columnId, column.id)
+                      : eq(taskTable.status, value),
+                  ),
+                );
+              nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
+            }
+            position = nextPosition;
+            nextPositions.set(laneKey, nextPosition + 1);
+          }
+
           const [updated] = await tx
             .update(taskTable)
-            .set({ status: value, columnId: column?.id ?? null })
+            .set({ status: value, columnId: column?.id ?? null, position })
             .where(eq(taskTable.id, task.id))
             .returning();
           if (!updated) {
@@ -160,6 +190,7 @@ async function bulkUpdateTasks({
             id: updated.id,
             projectId: updated.projectId,
             status: updated.status,
+            position: updated.position,
           });
         }
         return updatedRows;

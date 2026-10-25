@@ -1940,7 +1940,8 @@
         "isAnyOf": "любой из",
         "includeAnyOf": "включает любой из"
       },
-      "selectedCount": "{{count}} selected"
+      "selectedCount": "{{count}} selected",
+      "clearFilter": "Сбросить фильтр «{{subject}}»"
     },
     "gantt": {
       "pageTitle": "{{name}} — Гант",
@@ -2436,7 +2437,9 @@
         "board": "Задачи",
         "gantt": "Гант",
         "docs": "Документы"
-      }
+      },
+      "dragDisabled": "Отключите сортировку и фильтры, чтобы менять порядок задач.",
+      "moveFailed": "Не удалось переместить задачу. Прежний порядок восстановлен; попробуйте ещё раз."
     }
   },
   "goals": {

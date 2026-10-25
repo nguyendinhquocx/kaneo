@@ -4,11 +4,13 @@ import db from "../../database";
 import {
   activityTable,
   integrationTable,
+  columnTable,
   labelTable,
   projectTable,
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { lockProjectTaskLanes } from "../../task/lock-project-task-lanes";
 import type { GiteaConfig } from "../../plugins/gitea/config";
 import { extractTaskNumberGitea } from "../../plugins/gitea/utils/branch-matcher";
 import {
@@ -217,10 +219,69 @@ async function importSingleIssue(
     if (priority) updateData.priority = priority;
     if (status) updateData.status = status;
 
-    await db
-      .update(taskTable)
-      .set(updateData)
-      .where(eq(taskTable.id, existingLink.taskId));
+    if (status) {
+      await db.transaction(async (tx) => {
+        await lockProjectTaskLanes(tx, [projectId]);
+        const [existingTask] = await tx
+          .select({ status: taskTable.status })
+          .from(taskTable)
+          .where(
+            and(
+              eq(taskTable.id, existingLink.taskId),
+              eq(taskTable.projectId, projectId),
+            ),
+          )
+          .for("update")
+          .limit(1);
+        if (!existingTask) return;
+
+        const [column] = await tx
+          .select({ id: columnTable.id })
+          .from(columnTable)
+          .where(
+            and(
+              eq(columnTable.projectId, projectId),
+              eq(columnTable.slug, status),
+            ),
+          )
+          .limit(1);
+        const synchronizedData = {
+          ...updateData,
+          columnId: column?.id ?? null,
+        };
+        if (existingTask.status !== status) {
+          const [maxPositionResult] = await tx
+            .select({ maxPosition: max(taskTable.position) })
+            .from(taskTable)
+            .where(
+              and(
+                eq(taskTable.projectId, projectId),
+                column?.id
+                  ? eq(taskTable.columnId, column.id)
+                  : eq(taskTable.status, status),
+              ),
+            );
+          Object.assign(
+            synchronizedData,
+            { position: (maxPositionResult?.maxPosition ?? 0) + 1 },
+          );
+        }
+        await tx
+          .update(taskTable)
+          .set(synchronizedData)
+          .where(
+            and(
+              eq(taskTable.id, existingLink.taskId),
+              eq(taskTable.projectId, projectId),
+            ),
+          );
+      });
+    } else {
+      await db
+        .update(taskTable)
+        .set(updateData)
+        .where(eq(taskTable.id, existingLink.taskId));
+    }
 
     await importLabelsForTask(labels, existingLink.taskId, workspaceId);
 
@@ -235,15 +296,7 @@ async function importSingleIssue(
   }
 
   const createdTask = await db.transaction(async (tx) => {
-    const [lockedProject] = await tx
-      .select()
-      .from(projectTable)
-      .where(eq(projectTable.id, projectId))
-      .for("update");
-
-    if (!lockedProject) {
-      throw new Error("Project not found");
-    }
+    await lockProjectTaskLanes(tx, [projectId]);
 
     const [result] = await tx
       .select({ maxNumber: max(taskTable.number) })
@@ -252,12 +305,37 @@ async function importSingleIssue(
 
     const nextNumber = (result?.maxNumber ?? 0) + 1;
 
+    const targetStatus = status || "to-do";
+    const [targetColumn] = await tx
+      .select({ id: columnTable.id })
+      .from(columnTable)
+      .where(
+        and(
+          eq(columnTable.projectId, projectId),
+          eq(columnTable.slug, targetStatus),
+        ),
+      )
+      .limit(1);
+    const [maxPositionResult] = await tx
+      .select({ maxPosition: max(taskTable.position) })
+      .from(taskTable)
+      .where(
+        and(
+          eq(taskTable.projectId, projectId),
+          targetColumn?.id
+            ? eq(taskTable.columnId, targetColumn.id)
+            : eq(taskTable.status, targetStatus),
+        ),
+      );
+
     const taskValues: typeof taskTable.$inferInsert = {
       projectId,
       userId: null,
       title: issue.title,
       description: formatTaskDescriptionFromIssue(issue.body),
-      status: status || "to-do",
+      status: targetStatus,
+      columnId: targetColumn?.id ?? null,
+      position: (maxPositionResult?.maxPosition ?? 0) + 1,
       priority: priority || null,
       number: nextNumber,
     };

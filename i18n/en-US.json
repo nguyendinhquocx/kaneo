@@ -1933,7 +1933,8 @@
       "operators": {
         "isAnyOf": "is any of",
         "includeAnyOf": "include any of"
-      }
+      },
+      "clearFilter": "Clear {{subject}} filter"
     },
     "gantt": {
       "pageTitle": "{{name}} — Gantt",
@@ -2378,7 +2379,9 @@
         "board": "Tasks",
         "gantt": "Gantt",
         "docs": "Docs"
-      }
+      },
+      "dragDisabled": "Turn off sorting and filters to rearrange tasks.",
+      "moveFailed": "Could not move this task. The board was restored; try again."
     }
   },
   "goals": {
