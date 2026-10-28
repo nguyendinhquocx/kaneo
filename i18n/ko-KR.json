@@ -1796,10 +1796,10 @@
       "drag": "{{title}} 순서 드래그",
       "editTitle": "{{title}} 제목 수정",
       "saveTitle": "제목 저장",
-      "dragStart": "Picked up {title}. Position {position} of {total}.",
-      "dragMove": "{title}. Moved to position {position} of {total}.",
-      "dragEnd": "Dropped {title} at position {position} of {total}.",
-      "dragCancel": "Cancelled dragging {title}. Position kept."
+      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
+      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
+      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
+      "dragCancel": "Cancelled dragging {{title}}. Position kept."
     },
     "properties": {
       "title": "속성",
@@ -2052,14 +2052,14 @@
       "boxedRedCross": "Boxed red cross",
       "redCircle": "Red circle",
       "greenCheck": "Green check",
-      "increase": "Increase {name} marker for {title}",
-      "decrease": "Decrease {name} marker for {title}",
-      "countAria": "{name}: {count}",
+      "increase": "Increase {{name}} marker for {{title}}",
+      "decrease": "Decrease {{name}} marker for {{title}}",
+      "countAria": "{{name}}: {{count}}",
       "saveError": "Failed to save work markers"
     },
     "subtaskPreview": {
-      "next": "Next: {title}",
-      "aria": "Next up: {title}"
+      "next": "Next: {{title}}",
+      "aria": "Next up: {{title}}"
     }
   },
   "invitations": {

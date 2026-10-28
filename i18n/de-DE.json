@@ -1796,10 +1796,10 @@
       "drag": "{{title}} zum Neuanordnen ziehen",
       "editTitle": "Titel von {{title}} bearbeiten",
       "saveTitle": "Titel speichern",
-      "dragStart": "{title} aufgenommen. Position {position} von {total}.",
-      "dragMove": "{title}. Zu Position {position} von {total} verschoben.",
-      "dragEnd": "{title} an Position {position} von {total} abgelegt.",
-      "dragCancel": "Ziehen von {title} abgebrochen. Position beibehalten."
+      "dragStart": "{{title}} aufgenommen. Position {{position}} von {{total}}.",
+      "dragMove": "{{title}}. Zu Position {{position}} von {{total}} verschoben.",
+      "dragEnd": "{{title}} an Position {{position}} von {{total}} abgelegt.",
+      "dragCancel": "Ziehen von {{title}} abgebrochen. Position beibehalten."
     },
     "properties": {
       "title": "Eigenschaften",
@@ -2052,14 +2052,14 @@
       "boxedRedCross": "Rotes Kreuz im Kasten",
       "redCircle": "Roter Kreis",
       "greenCheck": "Grüner Haken",
-      "increase": "Marker {name} für {title} erhöhen",
-      "decrease": "Marker {name} für {title} verringern",
-      "countAria": "{name}: {count}",
+      "increase": "Marker {{name}} für {{title}} erhöhen",
+      "decrease": "Marker {{name}} für {{title}} verringern",
+      "countAria": "{{name}}: {{count}}",
       "saveError": "Work-Marker konnten nicht gespeichert werden"
     },
     "subtaskPreview": {
-      "next": "Als Nächstes: {title}",
-      "aria": "Als Nächstes: {title}"
+      "next": "Als Nächstes: {{title}}",
+      "aria": "Als Nächstes: {{title}}"
     }
   },
   "invitations": {

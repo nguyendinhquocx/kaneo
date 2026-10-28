@@ -1796,10 +1796,10 @@
       "drag": "Kéo để sắp xếp lại {{title}}",
       "editTitle": "Sửa tên công việc {{title}}",
       "saveTitle": "Lưu tên",
-      "dragStart": "Đã nhấc {title}. Vị trí {position} trên {total}.",
-      "dragMove": "{title}. Đã chuyển đến vị trí {position} trên {total}.",
-      "dragEnd": "Đã thả {title} ở vị trí {position} trên {total}.",
-      "dragCancel": "Đã hủy kéo {title}. Giữ nguyên vị trí."
+      "dragStart": "Đã nhấc {{title}}. Vị trí {{position}} trên {{total}}.",
+      "dragMove": "{{title}}. Đã chuyển đến vị trí {{position}} trên {{total}}.",
+      "dragEnd": "Đã thả {{title}} ở vị trí {{position}} trên {{total}}.",
+      "dragCancel": "Đã hủy kéo {{title}}. Giữ nguyên vị trí."
     },
     "properties": {
       "title": "Thuộc tính",
@@ -2052,14 +2052,14 @@
       "boxedRedCross": "Dấu X đỏ trong ô",
       "redCircle": "Vòng tròn đỏ",
       "greenCheck": "Dấu check xanh",
-      "increase": "Tăng marker {name} cho {title}",
-      "decrease": "Giảm marker {name} cho {title}",
-      "countAria": "{name}: {count}",
+      "increase": "Tăng marker {{name}} cho {{title}}",
+      "decrease": "Giảm marker {{name}} cho {{title}}",
+      "countAria": "{{name}}: {{count}}",
       "saveError": "Không lưu được work marker"
     },
     "subtaskPreview": {
-      "next": "Tiếp theo: {title}",
-      "aria": "Việc tiếp theo: {title}"
+      "next": "Tiếp theo: {{title}}",
+      "aria": "Việc tiếp theo: {{title}}"
     }
   },
   "invitations": {

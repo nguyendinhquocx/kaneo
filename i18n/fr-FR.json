@@ -1796,10 +1796,10 @@
       "drag": "Glisser pour réorganiser {{title}}",
       "editTitle": "Modifier le titre de {{title}}",
       "saveTitle": "Enregistrer le titre",
-      "dragStart": "Picked up {title}. Position {position} of {total}.",
-      "dragMove": "{title}. Moved to position {position} of {total}.",
-      "dragEnd": "Dropped {title} at position {position} of {total}.",
-      "dragCancel": "Cancelled dragging {title}. Position kept."
+      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
+      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
+      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
+      "dragCancel": "Cancelled dragging {{title}}. Position kept."
     },
     "properties": {
       "title": "Propriétés",
@@ -2052,14 +2052,14 @@
       "boxedRedCross": "Boxed red cross",
       "redCircle": "Red circle",
       "greenCheck": "Green check",
-      "increase": "Increase {name} marker for {title}",
-      "decrease": "Decrease {name} marker for {title}",
-      "countAria": "{name}: {count}",
+      "increase": "Increase {{name}} marker for {{title}}",
+      "decrease": "Decrease {{name}} marker for {{title}}",
+      "countAria": "{{name}}: {{count}}",
       "saveError": "Failed to save work markers"
     },
     "subtaskPreview": {
-      "next": "Next: {title}",
-      "aria": "Next up: {title}"
+      "next": "Next: {{title}}",
+      "aria": "Next up: {{title}}"
     }
   },
   "invitations": {
