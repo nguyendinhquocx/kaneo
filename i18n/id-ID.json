@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Tampilan",
       "showSubtaskCards": "Tampilkan kartu subtugas",
-      "showNextSubtaskPreview": "Tampilkan subtugas berikutnya"
+      "showNextSubtaskPreview": "Tampilkan subtugas berikutnya",
+      "showAssignees": "Tampilkan penanggung jawab",
+      "showPriority": "Tampilkan prioritas"
     },
     "workMarkers": {
-      "title": "Penanda pekerjaan",
+      "title": "Penanda",
       "redCross": "Silang merah",
       "boxedRedCross": "Silang merah dalam kotak",
       "redCircle": "Lingkaran merah",
@@ -2056,7 +2058,8 @@
       "decrease": "Kurangi penanda {{name}} untuk {{title}}",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Penanda pekerjaan gagal disimpan",
-      "saving": "Menyimpan penanda pekerjaan…"
+      "saving": "Menyimpan penanda pekerjaan…",
+      "openForTask": "Pilih penanda untuk {{title}}"
     },
     "subtaskPreview": {
       "next": "Berikutnya: {{title}}"

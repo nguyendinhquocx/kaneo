@@ -17,6 +17,7 @@ import type Task from "@/types/task";
 import SubtaskAssigneePopover from "./subtask-assignee-popover";
 import SubtaskStatusPopover from "./subtask-status-popover";
 import WorkMarkerCountList from "./work-marker-counts";
+import WorkMarkerPicker from "./work-marker-picker";
 
 type SubtaskRowProps = {
   task: Task;
@@ -156,8 +157,8 @@ export default function SubtaskRow({
               </button>
             </SubtaskStatusPopover>
 
-            <div className="flex w-full min-w-0 basis-full flex-col gap-0.5 sm:basis-0 sm:flex-1 sm:flex-row sm:items-center sm:gap-1">
-              <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto sm:flex-1">
+            <div className="flex w-full min-w-0 basis-full items-center gap-1 sm:basis-0 sm:flex-1">
+              <div className="flex w-full min-w-0 items-center gap-1 sm:flex-1">
                 {isEditingTitle ? (
                   <>
                     <Input
@@ -212,25 +213,34 @@ export default function SubtaskRow({
                       onClick={onNavigate}
                     >
                       <span
-                        className={`block truncate text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground/90"}`}
+                        className={`block min-w-0 truncate text-sm ${isCompleted ? "line-through text-muted-foreground" : "text-foreground/90"}`}
                       >
                         {displayTitle}
                       </span>
                     </button>
+                    <WorkMarkerCountList counts={task.workMarkerCounts} />
                     {canEdit ? (
-                      <button
-                        type="button"
-                        className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent sm:size-7"
-                        aria-label={t("tasks:subtasks.editTitle", {
-                          title: displayTitle,
-                        })}
-                        onClick={() => {
-                          setTitleDraft(displayTitle);
-                          setIsEditingTitle(true);
-                        }}
-                      >
-                        <Pencil className="size-3.5" aria-hidden="true" />
-                      </button>
+                      <>
+                        <WorkMarkerPicker
+                          task={task}
+                          projectId={projectId}
+                          workspaceId={workspaceId}
+                          trigger="icon"
+                        />
+                        <button
+                          type="button"
+                          className="relative flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent sm:size-7 pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11"
+                          aria-label={t("tasks:subtasks.editTitle", {
+                            title: displayTitle,
+                          })}
+                          onClick={() => {
+                            setTitleDraft(displayTitle);
+                            setIsEditingTitle(true);
+                          }}
+                        >
+                          <Pencil className="size-3.5" aria-hidden="true" />
+                        </button>
+                      </>
                     ) : null}
                   </>
                 )}
@@ -262,7 +272,6 @@ export default function SubtaskRow({
                   </button>
                 </SubtaskAssigneePopover>
               </div>
-              <WorkMarkerCountList counts={task.workMarkerCounts} />
             </div>
           </div>
         </ContextMenuTrigger>

@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Görünüm",
       "showSubtaskCards": "Alt görev kartlarını göster",
-      "showNextSubtaskPreview": "Sıradaki alt görevi göster"
+      "showNextSubtaskPreview": "Sıradaki alt görevi göster",
+      "showAssignees": "Atananları göster",
+      "showPriority": "Önceliği göster"
     },
     "workMarkers": {
-      "title": "İşaretçiler",
+      "title": "İşaret",
       "redCross": "Kırmızı çarpı",
       "boxedRedCross": "Kutulu kırmızı çarpı",
       "redCircle": "Kırmızı daire",
@@ -2056,7 +2058,8 @@
       "decrease": "{{title}} için {{name}} işaretçisini azalt",
       "countAria": "{{name}}: {{count}}",
       "saveError": "İşaretçiler kaydedilemedi",
-      "saving": "İşaretçiler kaydediliyor…"
+      "saving": "İşaretçiler kaydediliyor…",
+      "openForTask": "{{title}} için işaret seç"
     },
     "subtaskPreview": {
       "next": "Sıradaki: {{title}}"

@@ -15,16 +15,16 @@ import {
 } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { produce } from "immer";
 import { useEffect, useState } from "react";
 import { getShareCapability } from "@/components/share/share-capability";
+import { useMoveShareTask } from "@/hooks/mutations/task/use-update-task";
+import { useReorderProjectTasks } from "@/hooks/mutations/task/use-reorder-project-tasks";
 import {
-  useMoveShareTask,
-  useUpdateTask,
-} from "@/hooks/mutations/task/use-update-task";
+  reorderProjectTasks,
+  resolveTaskReorderIntent,
+} from "@/lib/task-reorder";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import useBulkSelectionStore from "@/store/bulk-selection";
-import useProjectStore from "@/store/project";
 import type { ProjectWithTasks } from "@/types/project";
 import BulkToolbar from "../bulk-selection/bulk-toolbar";
 import Column from "./column";
@@ -37,7 +37,6 @@ type KanbanBoardProps = {
 
 function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
   const queryClient = useQueryClient();
-  const { setProject } = useProjectStore();
   const {
     setAvailableTasks,
     focusNext,
@@ -46,13 +45,12 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
     clearFocus,
   } = useBulkSelectionStore();
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
-  const { mutate: updateTask } = useUpdateTask();
-  const {
-    mutate: moveShareTask,
-    isPending: isShareMovePending,
-  } = useMoveShareTask();
+  const { mutate: moveShareTask, isPending: isShareMovePending } =
+    useMoveShareTask();
+  const { mutate: reorderTasks, isPending: isReorderPending } =
+    useReorderProjectTasks();
   const isDragDisabled =
-    disableDragDrop || (Boolean(getShareCapability()) && isShareMovePending);
+    disableDragDrop || isReorderPending || (Boolean(getShareCapability()) && isShareMovePending);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -141,107 +139,44 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
+    if (!over) return;
 
-    if (!over || !project?.columns) return;
-
-    const activeId = active.id.toString();
+    const taskId = active.id.toString();
     const overId = over.id.toString();
-    if (activeId === overId) return;
+    const capability = getShareCapability();
+    const queryProject = capability
+      ? project
+      : (queryClient.getQueryData<ProjectWithTasks>(["tasks", project.id]) ??
+        project);
+    const intent = resolveTaskReorderIntent(queryProject, taskId, overId);
+    if (!intent) return;
 
-    let guestMove: { taskId: string; status: string; position: number } | null =
-      null;
-    const updatedProject = produce(project, (draft) => {
-      const sourceColumn = draft?.columns?.find((col) =>
-        col.tasks.some((task) => task.id === activeId),
-      );
-      const destinationColumn = draft?.columns?.find(
-        (col) =>
-          col.id === overId || col.tasks.some((task) => task.id === overId),
-      );
+    const { project: optimisticProject, changedTasks } = reorderProjectTasks(
+      queryProject,
+      intent,
+    );
+    if (changedTasks.length === 0) return;
 
-      if (!sourceColumn || !destinationColumn) return;
-
-      const sourceTaskIndex = sourceColumn.tasks.findIndex(
-        (task) => task.id === activeId,
-      );
-      const task = sourceColumn.tasks[sourceTaskIndex];
-
-      sourceColumn.tasks = sourceColumn.tasks.filter((t) => t.id !== activeId);
-
-      if (sourceColumn.id === destinationColumn.id) {
-        const overIndex = destinationColumn.tasks.findIndex(
-          (t) => t.id === overId,
-        );
-        let destinationIndex =
-          overId === destinationColumn.id || overIndex < 0
-            ? destinationColumn.tasks.length
-            : overIndex;
-        if (overIndex >= 0 && sourceTaskIndex <= overIndex) {
-          destinationIndex += 1;
-        }
-        destinationIndex = Math.max(
-          0,
-          Math.min(destinationIndex, destinationColumn.tasks.length),
-        );
-        if (getShareCapability()) {
-          // One request represents the whole guest move. The server locks
-          // and reindexes both affected lanes with integer positions.
-          task.position = destinationIndex;
-          task.status = destinationColumn.slug;
-          destinationColumn.tasks.splice(destinationIndex, 0, task);
-          guestMove = {
-            taskId: task.id,
-            status: destinationColumn.slug,
-            position: destinationIndex,
-          };
-        } else {
-          destinationColumn.tasks.splice(destinationIndex, 0, task);
-          destinationColumn.tasks.forEach((t, index) => {
-            updateTask({ ...t, position: index });
-          });
-          queryClient.invalidateQueries({
-            queryKey: ["projects", project.workspaceId],
-          });
-        }
-      } else {
-        const overIndex = destinationColumn.tasks.findIndex(
-          (task) => task.id === overId,
-        );
-        const destinationIndex =
-          overId === destinationColumn.id || overIndex < 0
-            ? destinationColumn.tasks.length
-            : overIndex + 1;
-
-        if (getShareCapability()) {
-          // The server reindexes both lanes in one transaction; do not fan
-          // this drag out into one request per card.
-          task.status = destinationColumn.slug;
-          task.position = destinationIndex;
-          destinationColumn.tasks.splice(destinationIndex, 0, task);
-          guestMove = {
-            taskId: task.id,
-            status: destinationColumn.slug,
-            position: destinationIndex,
-          };
-        } else {
-          task.status = destinationColumn.id;
-          destinationColumn.tasks.splice(destinationIndex, 0, task);
-          destinationColumn.tasks.forEach((t, index) => {
-            updateTask({ ...t, status: destinationColumn.id, position: index });
-          });
-          sourceColumn.tasks.forEach((t, index) => {
-            updateTask({ ...t, position: index });
-          });
-        }
+    if (capability) {
+      const movedTask = optimisticProject.columns
+        .flatMap((column) => column.tasks)
+        .find((task) => task.id === taskId);
+      if (movedTask) {
+        moveShareTask({
+          taskId,
+          status: intent.destinationStatus,
+          position: movedTask.position ?? 0,
+        });
       }
-    });
-
-    if (guestMove) {
-      moveShareTask(guestMove);
-    } else {
-      setProject(updatedProject);
+      return;
     }
-    setActiveId(null);
+
+    reorderTasks({
+      projectId: project.id,
+      taskId,
+      optimisticProject,
+      changedTasks,
+    });
   };
 
   if (!project?.columns) {
@@ -313,7 +248,11 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
                 key={column.id}
                 className="h-full max-w-96 min-w-80 shrink-0 flex-1"
               >
-                <Column column={column} disableDragDrop={isDragDisabled} />
+                <Column
+                  column={column}
+                  projectDisplayDefaults={project}
+                  disableDragDrop={isDragDisabled}
+                />
               </div>
             ))}
           </div>
@@ -323,7 +262,10 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
         {activeTask ? (
           <div className="transform rotate-1 scale-[1.03] shadow-lg">
             <div className="ring-2 ring-ring/35 rounded-lg">
-              <TaskCard task={activeTask} />
+              <TaskCard
+                task={activeTask}
+                projectDisplayDefaults={project}
+              />
             </div>
           </div>
         ) : null}

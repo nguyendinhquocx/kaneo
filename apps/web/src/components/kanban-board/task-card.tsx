@@ -13,6 +13,7 @@ import {
 import { type CSSProperties, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
+import { getShareCapability } from "@/components/share/share-capability";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -40,6 +41,7 @@ import queryClient from "@/query-client";
 import {
   resolveProjectDisplayPreferences,
   useProjectDisplayPreferences,
+  type ProjectDisplayDefaults,
 } from "@/store/project-display-preferences";
 import useBulkSelectionStore from "@/store/bulk-selection";
 import useProjectStore from "@/store/project";
@@ -53,6 +55,7 @@ import WorkMarkerCountList from "@/components/task/work-marker-counts";
 
 type TaskCardProps = {
   task: ProjectBoardTask;
+  projectDisplayDefaults?: ProjectDisplayDefaults;
   disableDragDrop?: boolean;
   /** Guest surfaces never render the per-user preview projection. */
   showNextSubtaskPreviewRow?: boolean;
@@ -60,6 +63,7 @@ type TaskCardProps = {
 
 function TaskCard({
   task,
+  projectDisplayDefaults,
   disableDragDrop = false,
   showNextSubtaskPreviewRow = true,
 }: TaskCardProps) {
@@ -82,18 +86,32 @@ function TaskCard({
     userId,
     task.projectId,
   );
-  const { showNextSubtaskPreview: previewEnabled } =
-    resolveProjectDisplayPreferences(
-      displayPreferences,
-      project?.showSubtaskCardsByDefault,
-  );
   const {
-    showAssignees,
-    showPriority,
+    showNextSubtaskPreview: previewEnabled,
+    showAssignees: projectShowAssignees,
+    showPriority: projectShowPriority,
+  } = resolveProjectDisplayPreferences(displayPreferences, {
+    showSubtaskCardsByDefault:
+      projectDisplayDefaults?.showSubtaskCardsByDefault ??
+      project?.showSubtaskCardsByDefault,
+    showAssigneesByDefault:
+      projectDisplayDefaults?.showAssigneesByDefault ??
+      project?.showAssigneesByDefault,
+    showPriorityByDefault:
+      projectDisplayDefaults?.showPriorityByDefault ?? project?.showPriorityByDefault,
+  });
+  const {
+    showAssignees: globalShowAssignees,
+    showPriority: globalShowPriority,
     showDueDates,
     showLabels,
     showTaskNumbers,
   } = useUserPreferencesStore();
+  const isShareSurface = Boolean(getShareCapability());
+  const showAssignees = isShareSurface
+    ? globalShowAssignees
+    : projectShowAssignees;
+  const showPriority = isShareSurface ? globalShowPriority : projectShowPriority;
   const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
   const { data: externalLinks } = useExternalLinks(task.id);
   const { toggleSelection, isSelected, isFocused } = useBulkSelectionStore();
@@ -258,23 +276,11 @@ function TaskCard({
               </div>
             )}
 
-            <div className="mb-2.5 pr-6">
-              <div
-                className="overflow-hidden break-words text-sm leading-5 font-medium text-foreground/95"
-                style={{
-                  display: "-webkit-box",
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: "vertical",
-                  wordBreak: "break-word",
-                  hyphens: "auto",
-                }}
-              >
+            <div className="mb-2.5 flex min-w-0 items-center gap-1 pr-6">
+              <span className="min-w-0 flex-1 truncate text-sm leading-5 font-medium text-foreground/95">
                 {task.title}
-              </div>
-              <WorkMarkerCountList
-                counts={task.workMarkerCounts}
-                className="mt-1"
-              />
+              </span>
+              <WorkMarkerCountList counts={task.workMarkerCounts} />
             </div>
 
             {showNextSubtaskPreviewRow &&

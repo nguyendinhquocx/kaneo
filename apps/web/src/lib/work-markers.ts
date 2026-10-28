@@ -28,6 +28,21 @@ export const ZERO_WORK_MARKER_COUNTS: TaskMarkerCounts = {
   greenCheck: 0,
 };
 
+/** New UI writes one fixed triple; clicking that exact preset again clears it. */
+export function toggleWorkMarkerPreset(
+  value: unknown,
+  selectedKey: WorkMarkerKey,
+): TaskMarkerCounts {
+  const current = normalizeWorkMarkerCounts(value);
+  const isExactPreset = WORK_MARKER_KEYS.every((key) =>
+    key === selectedKey ? current[key] === 3 : current[key] === 0,
+  );
+
+  return isExactPreset
+    ? { ...ZERO_WORK_MARKER_COUNTS }
+    : { ...ZERO_WORK_MARKER_COUNTS, [selectedKey]: 3 };
+}
+
 export function normalizeWorkMarkerCounts(value: unknown): TaskMarkerCounts {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ...ZERO_WORK_MARKER_COUNTS };

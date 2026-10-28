@@ -18,7 +18,9 @@ async function updateWorkMarkers(taskId: string, workMarkerCounts: TaskMarkerCou
 
   const data = await response.json();
 
-  return data;
+  // The API returns the updated task; the mutation only consumes the marker
+  // map, so unwrap it here to keep optimistic cache updates typed as counts.
+  return data.workMarkerCounts;
 }
 
 export default updateWorkMarkers;

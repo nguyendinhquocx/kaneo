@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Hiển thị",
       "showSubtaskCards": "Hiện card công việc con",
-      "showNextSubtaskPreview": "Hiện công việc con tiếp theo"
+      "showNextSubtaskPreview": "Hiện công việc con tiếp theo",
+      "showAssignees": "Hiện người được giao",
+      "showPriority": "Hiện mức độ ưu tiên"
     },
     "workMarkers": {
-      "title": "Work marker",
+      "title": "Marker",
       "redCross": "Dấu X đỏ",
       "boxedRedCross": "Dấu X đỏ trong ô",
       "redCircle": "Vòng tròn đỏ",
@@ -2056,7 +2058,8 @@
       "decrease": "Giảm marker {{name}} cho {{title}}",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Không lưu được work marker",
-      "saving": "Đang lưu work marker…"
+      "saving": "Đang lưu work marker…",
+      "openForTask": "Chọn marker cho {{title}}"
     },
     "subtaskPreview": {
       "next": "Tiếp theo: {{title}}"

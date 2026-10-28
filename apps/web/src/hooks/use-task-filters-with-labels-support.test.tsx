@@ -103,6 +103,8 @@ describe("useTaskFiltersWithLabelsSupport", () => {
         },
       ],
       showSubtaskCardsByDefault: true,
+      showAssigneesByDefault: true,
+      showPriorityByDefault: true,
       plannedTasks: [],
       archivedTasks: [],
     };

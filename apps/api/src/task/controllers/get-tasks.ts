@@ -396,6 +396,8 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
       isPublic: project.isPublic,
       workspaceId: project.workspaceId,
       showSubtaskCardsByDefault: project.showSubtaskCardsByDefault,
+      showAssigneesByDefault: project.showAssigneesByDefault,
+      showPriorityByDefault: project.showPriorityByDefault,
       columns,
       archivedTasks,
       plannedTasks,

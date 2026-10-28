@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Display",
       "showSubtaskCards": "Show subtask cards",
-      "showNextSubtaskPreview": "Show next subtask"
+      "showNextSubtaskPreview": "Show next subtask",
+      "showAssignees": "Show assignees",
+      "showPriority": "Show priority"
     },
     "workMarkers": {
-      "title": "Work markers",
+      "title": "Marker",
       "redCross": "Red cross",
       "boxedRedCross": "Boxed red cross",
       "redCircle": "Red circle",
@@ -2056,7 +2058,8 @@
       "decrease": "Decrease {{name}} marker for {{title}}",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Failed to save work markers",
-      "saving": "Saving work markers…"
+      "saving": "Saving work markers…",
+      "openForTask": "Choose marker for {{title}}"
     },
     "subtaskPreview": {
       "next": "Next: {{title}}"

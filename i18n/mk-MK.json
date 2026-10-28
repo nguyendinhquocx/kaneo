@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Приказ",
       "showSubtaskCards": "Прикажи картички за потзадачи",
-      "showNextSubtaskPreview": "Прикажи ја следната потзадача"
+      "showNextSubtaskPreview": "Прикажи ја следната потзадача",
+      "showAssignees": "Прикажи доделени лица",
+      "showPriority": "Прикажи приоритет"
     },
     "workMarkers": {
-      "title": "Работни маркери",
+      "title": "Маркер",
       "redCross": "Црвен крст",
       "boxedRedCross": "Црвен крст во квадрат",
       "redCircle": "Црвен круг",
@@ -2056,7 +2058,8 @@
       "decrease": "Намали го маркерот {{name}} за {{title}}",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Неуспешно зачувување на работните маркери",
-      "saving": "Се зачувуваат работните маркери…"
+      "saving": "Се зачувуваат работните маркери…",
+      "openForTask": "Избери маркер за {{title}}"
     },
     "subtaskPreview": {
       "next": "Следно: {{title}}"

@@ -38,7 +38,7 @@ import { generateLink } from "@/lib/generate-link";
 import { getTaskLinkPath } from "@/lib/task-link";
 import { toast } from "@/lib/toast";
 import { getShareCapability } from "@/components/share/share-capability";
-import WorkMarkerEditor from "./work-marker-editor";
+import WorkMarkerPicker from "./work-marker-picker";
 import TaskAssigneePopover from "./task-assignee-popover";
 import TaskDueDatePopover from "./task-due-date-popover";
 import TaskLabelsPopover from "./task-labels-popover";
@@ -334,6 +334,13 @@ export default function TaskPropertiesSidebar({
                   </Button>
                 </TaskDueDatePopover>
               )}
+              {!shareCapability && task && (
+                <WorkMarkerPicker
+                  task={task}
+                  projectId={projectId}
+                  workspaceId={workspaceId}
+                />
+              )}
             </div>
           </div>
         )}
@@ -525,6 +532,13 @@ export default function TaskPropertiesSidebar({
                       )}
                     </Button>
                   </TaskDueDatePopover>
+                )}
+                {!shareCapability && task && (
+                  <WorkMarkerPicker
+                    task={task}
+                    projectId={projectId}
+                    workspaceId={workspaceId}
+                  />
                 )}
               </div>
             </div>
@@ -720,6 +734,13 @@ export default function TaskPropertiesSidebar({
                     </Button>
                   </TaskDueDatePopover>
                 )}
+                {!shareCapability && task && (
+                  <WorkMarkerPicker
+                    task={task}
+                    projectId={projectId}
+                    workspaceId={workspaceId}
+                  />
+                )}
               </div>
             </div>
           </>
@@ -775,27 +796,7 @@ export default function TaskPropertiesSidebar({
             </div>
           </div>
 
-          {/* SPEC-2026-10-27-kaneo-subtask-board-focus-markers: marker
-              counters are authenticated-only — guests never see them. */}
-          {!shareCapability && task && (
-            <WorkMarkerEditor
-              task={task}
-              projectId={projectId}
-              workspaceId={workspaceId}
-            />
-          )}
         </div>
-
-        {/* Mobile marker editor — same data, stacked under the icon rows. */}
-        {!shareCapability && task && (
-          <div className="lg:hidden px-2 pb-2">
-            <WorkMarkerEditor
-              task={task}
-              projectId={projectId}
-              workspaceId={workspaceId}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

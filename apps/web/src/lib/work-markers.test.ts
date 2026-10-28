@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatWorkMarkerCount,
   normalizeWorkMarkerCounts,
+  toggleWorkMarkerPreset,
   WORK_MARKER_GLYPHS,
   WORK_MARKER_KEYS,
 } from "./work-markers";
@@ -49,6 +50,38 @@ describe("work marker count formatting", () => {
     expect(new Set(Object.values(WORK_MARKER_GLYPHS)).size).toBe(
       WORK_MARKER_KEYS.length,
     );
+  });
+});
+
+describe("toggleWorkMarkerPreset", () => {
+  it("writes exactly one triple and clears when that preset is clicked again", () => {
+    const triple = toggleWorkMarkerPreset(null, "redCross");
+    expect(triple).toEqual({
+      redCross: 3,
+      boxedRedCross: 0,
+      redCircle: 0,
+      greenCheck: 0,
+    });
+    expect(toggleWorkMarkerPreset(triple, "redCross")).toEqual({
+      redCross: 0,
+      boxedRedCross: 0,
+      redCircle: 0,
+      greenCheck: 0,
+    });
+  });
+
+  it("normalizes a legacy count or multi-marker map when a preset is chosen", () => {
+    expect(
+      toggleWorkMarkerPreset(
+        { redCross: 1, boxedRedCross: 0, redCircle: 3, greenCheck: 0 },
+        "redCross",
+      ),
+    ).toEqual({
+      redCross: 3,
+      boxedRedCross: 0,
+      redCircle: 0,
+      greenCheck: 0,
+    });
   });
 });
 

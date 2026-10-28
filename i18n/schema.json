@@ -8358,12 +8358,20 @@
 						},
 						"showNextSubtaskPreview": {
 							"type": "string"
+						},
+						"showAssignees": {
+							"type": "string"
+						},
+						"showPriority": {
+							"type": "string"
 						}
 					},
 					"required": [
 						"menu",
 						"showSubtaskCards",
-						"showNextSubtaskPreview"
+						"showNextSubtaskPreview",
+						"showAssignees",
+						"showPriority"
 					]
 				},
 				"workMarkers": {
@@ -8399,6 +8407,9 @@
 						},
 						"saving": {
 							"type": "string"
+						},
+						"openForTask": {
+							"type": "string"
 						}
 					},
 					"required": [
@@ -8411,7 +8422,8 @@
 						"decrease",
 						"countAria",
 						"saveError",
-						"saving"
+						"saving",
+						"openForTask"
 					]
 				},
 				"subtaskPreview": {

@@ -132,7 +132,7 @@ export function useMoveShareTask() {
   });
 }
 
-export function useUpdateTask() {
+export function useUpdateTask({ deferInvalidation = false }: { deferInvalidation?: boolean } = {}) {
   const queryClient = useQueryClient();
 
   return useMutation<Task, Error, Task>({
@@ -152,6 +152,7 @@ export function useUpdateTask() {
       return updateTask(task.id, task) as unknown as Promise<Task>;
     },
     onSuccess: (_, variables) => {
+      if (deferInvalidation) return;
       invalidateShareQueries(queryClient);
       queryClient.invalidateQueries({
         queryKey: ["task", variables.id],

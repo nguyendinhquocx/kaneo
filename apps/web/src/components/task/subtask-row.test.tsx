@@ -61,6 +61,14 @@ vi.mock("./subtask-assignee-popover", () => ({
 vi.mock("./subtask-status-popover", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+vi.mock("./work-marker-picker", () => ({
+  default: ({ task, trigger }: { task: Task; trigger?: string }) =>
+    trigger === "icon" ? (
+      <button type="button" aria-label={`Choose marker for ${task.title}`}>
+        marker
+      </button>
+    ) : null,
+}));
 
 const task: Task = {
   id: "child-1",
@@ -178,7 +186,7 @@ describe("SubtaskRow reorder affordances and markers", () => {
     expect(cluster.textContent).toContain("×4");
   });
 
-  it("renders all four repeated markers in a mobile-wrappable row", () => {
+  it("keeps all marker glyphs inline with the title on narrow rows", () => {
     const allRepeated: Task = {
       ...task,
       workMarkerCounts: {
@@ -198,8 +206,42 @@ describe("SubtaskRow reorder affordances and markers", () => {
     expect(cluster.textContent).toContain("❎❎❎");
     expect(cluster.textContent).toContain("⭕⭕⭕");
     expect(cluster.textContent).toContain("✅✅✅");
-    // The row gives its marker band the full mobile line instead of squeezing
-    // twelve glyphs into the narrow title/action strip.
-    expect(container.querySelector(".basis-full.flex-col")).toBeInTheDocument();
+    const titleButton = screen.getByRole("button", { name: "Old title" });
+    expect(titleButton.parentElement).toBe(cluster.parentElement);
+    expect(titleButton.querySelector("span.truncate")).toBeInTheDocument();
+    expect(container.querySelector(".basis-full.items-center")).toBeInTheDocument();
+  });
+
+  it("places a quick marker action directly before the title edit button", () => {
+    const onNavigate = vi.fn();
+    render(
+      <SubtaskRow
+        task={task}
+        tasks={[task]}
+        projectId="project-1"
+        workspaceId="workspace-1"
+        isSelected={false}
+        isFocused={false}
+        isCompleted={false}
+        canEdit
+        selectionRadius="rounded-md"
+        assignee={null}
+        onToggleComplete={vi.fn()}
+        onNavigate={onNavigate}
+        onDeleteClick={vi.fn()}
+      />,
+    );
+
+    const markerButton = screen.getByRole("button", {
+      name: "Choose marker for Old title",
+    }) as HTMLButtonElement;
+    const editButton = screen.getByRole("button", {
+      name: /tasks:subtasks\.editTitle/,
+    }) as HTMLButtonElement;
+    const buttons = Array.from(document.querySelectorAll("button"));
+    expect(buttons.indexOf(markerButton) + 1).toBe(buttons.indexOf(editButton));
+
+    fireEvent.click(markerButton);
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 });

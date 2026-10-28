@@ -52,6 +52,15 @@ describe("project display preferences storage", () => {
     });
     expect(userA.result.current.preferences.showNextSubtaskPreview).toBeNull();
     expect(userB.result.current.preferences.showNextSubtaskPreview).toBe(false);
+
+    act(() => {
+      userA.result.current.setShowAssignees(false);
+      userA.result.current.setShowPriority(true);
+    });
+    expect(userA.result.current.preferences.showAssignees).toBe(false);
+    expect(userA.result.current.preferences.showPriority).toBe(true);
+    expect(userB.result.current.preferences.showAssignees).toBeNull();
+    expect(userB.result.current.preferences.showPriority).toBeNull();
   });
 
   it("swaps to the new account's stored state synchronously on account change", () => {
@@ -76,18 +85,55 @@ describe("project display preferences storage", () => {
   });
 
   it("applies project defaults only when the local override is null", () => {
-    const prefs = { showSubtaskCards: null, showNextSubtaskPreview: null };
+    const prefs = {
+      showSubtaskCards: null,
+      showNextSubtaskPreview: null,
+      showAssignees: null,
+      showPriority: null,
+    };
     expect(
-      resolveProjectDisplayPreferences(prefs, false),
-    ).toEqual({ showSubtaskCards: false, showNextSubtaskPreview: true });
+      resolveProjectDisplayPreferences(prefs, {
+        showSubtaskCardsByDefault: false,
+        showAssigneesByDefault: false,
+        showPriorityByDefault: false,
+      }),
+    ).toEqual({
+      showSubtaskCards: false,
+      showNextSubtaskPreview: true,
+      showAssignees: false,
+      showPriority: false,
+    });
     expect(
-      resolveProjectDisplayPreferences(prefs, true),
-    ).toEqual({ showSubtaskCards: true, showNextSubtaskPreview: true });
+      resolveProjectDisplayPreferences(prefs, {
+        showSubtaskCardsByDefault: true,
+        showAssigneesByDefault: true,
+        showPriorityByDefault: true,
+      }),
+    ).toEqual({
+      showSubtaskCards: true,
+      showNextSubtaskPreview: true,
+      showAssignees: true,
+      showPriority: true,
+    });
     expect(
       resolveProjectDisplayPreferences(
-        { showSubtaskCards: true, showNextSubtaskPreview: false },
-        false,
+        {
+          showSubtaskCards: true,
+          showNextSubtaskPreview: false,
+          showAssignees: false,
+          showPriority: true,
+        },
+        {
+          showSubtaskCardsByDefault: false,
+          showAssigneesByDefault: true,
+          showPriorityByDefault: false,
+        },
       ),
-    ).toEqual({ showSubtaskCards: true, showNextSubtaskPreview: false });
+    ).toEqual({
+      showSubtaskCards: true,
+      showNextSubtaskPreview: false,
+      showAssignees: false,
+      showPriority: true,
+    });
   });
 });

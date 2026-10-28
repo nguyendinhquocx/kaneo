@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Weergave",
       "showSubtaskCards": "Subtaakkaarten tonen",
-      "showNextSubtaskPreview": "Volgende subtaak tonen"
+      "showNextSubtaskPreview": "Volgende subtaak tonen",
+      "showAssignees": "Toegewezen personen tonen",
+      "showPriority": "Prioriteit tonen"
     },
     "workMarkers": {
-      "title": "Werkmarkeringen",
+      "title": "Markering",
       "redCross": "Rood kruis",
       "boxedRedCross": "Rood kruis in vak",
       "redCircle": "Rode cirkel",
@@ -2056,7 +2058,8 @@
       "decrease": "Markering {{name}} voor {{title}} verlagen",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Werkmarkeringen opslaan mislukt",
-      "saving": "Werkmarkeringen worden opgeslagen…"
+      "saving": "Werkmarkeringen worden opgeslagen…",
+      "openForTask": "Markering kiezen voor {{title}}"
     },
     "subtaskPreview": {
       "next": "Volgende: {{title}}"

@@ -12,11 +12,23 @@ export type ProjectDisplayPreferences = {
   showSubtaskCards: boolean | null;
   /** null = preview enabled (the sensible default). */
   showNextSubtaskPreview: boolean | null;
+  /** null = follow the project's showAssigneesByDefault value. */
+  showAssignees: boolean | null;
+  /** null = follow the project's showPriorityByDefault value. */
+  showPriority: boolean | null;
+};
+
+export type ProjectDisplayDefaults = {
+  showSubtaskCardsByDefault?: boolean | null;
+  showAssigneesByDefault?: boolean | null;
+  showPriorityByDefault?: boolean | null;
 };
 
 const DEFAULT_PREFERENCES: ProjectDisplayPreferences = {
   showSubtaskCards: null,
   showNextSubtaskPreview: null,
+  showAssignees: null,
+  showPriority: null,
 };
 
 export const PROJECT_DISPLAY_STORAGE_PREFIX = "kaneo:project-display";
@@ -61,6 +73,14 @@ function readFromStorage(key: string): ProjectDisplayPreferences {
             typeof parsed.showNextSubtaskPreview === "boolean"
               ? parsed.showNextSubtaskPreview
               : null,
+          showAssignees:
+            typeof parsed.showAssignees === "boolean"
+              ? parsed.showAssignees
+              : null,
+          showPriority:
+            typeof parsed.showPriority === "boolean"
+              ? parsed.showPriority
+              : null,
         };
       }
     } catch {
@@ -71,7 +91,11 @@ function readFromStorage(key: string): ProjectDisplayPreferences {
   return preferences;
 }
 
-function writeToStorage(key: string, next: ProjectDisplayPreferences) {
+function writeToStorage(
+  key: string,
+  update: (current: ProjectDisplayPreferences) => ProjectDisplayPreferences,
+) {
+  const next = update(readFromStorage(key));
   cache.set(key, next);
   if (typeof window !== "undefined") {
     try {
@@ -97,21 +121,36 @@ export function useProjectDisplayPreferences(
   return {
     preferences,
     setShowSubtaskCards: (value: boolean | null) =>
-      writeToStorage(key, { ...preferences, showSubtaskCards: value }),
+      writeToStorage(key, (current) => ({ ...current, showSubtaskCards: value })),
     setShowNextSubtaskPreview: (value: boolean | null) =>
-      writeToStorage(key, { ...preferences, showNextSubtaskPreview: value }),
+      writeToStorage(key, (current) => ({
+        ...current,
+        showNextSubtaskPreview: value,
+      })),
+    setShowAssignees: (value: boolean | null) =>
+      writeToStorage(key, (current) => ({ ...current, showAssignees: value })),
+    setShowPriority: (value: boolean | null) =>
+      writeToStorage(key, (current) => ({ ...current, showPriority: value })),
   };
 }
 
-/** Resolve the effective values, applying project defaults for null. */
+/** Resolve local per-user overrides over the project's release-safe defaults. */
 export function resolveProjectDisplayPreferences(
   preferences: ProjectDisplayPreferences,
-  projectDefaultShowSubtaskCards: boolean | undefined,
+  projectDefaults: ProjectDisplayDefaults = {},
 ) {
   return {
     showSubtaskCards:
-      preferences.showSubtaskCards ?? projectDefaultShowSubtaskCards ?? true,
+      preferences.showSubtaskCards ??
+      projectDefaults.showSubtaskCardsByDefault ??
+      true,
     showNextSubtaskPreview: preferences.showNextSubtaskPreview ?? true,
+    showAssignees:
+      preferences.showAssignees ??
+      projectDefaults.showAssigneesByDefault ??
+      true,
+    showPriority:
+      preferences.showPriority ?? projectDefaults.showPriorityByDefault ?? true,
   };
 }
 

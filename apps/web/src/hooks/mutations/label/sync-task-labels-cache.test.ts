@@ -14,6 +14,8 @@ describe("updateTaskLabelsInProject", () => {
       updatedAt: "2026-04-16T00:00:00.000Z",
       workspaceId: "workspace-1",
       showSubtaskCardsByDefault: true,
+      showAssigneesByDefault: true,
+      showPriorityByDefault: true,
       columns: [
         {
           id: "todo",
@@ -120,6 +122,8 @@ describe("updateTaskLabelsInProject", () => {
       updatedAt: "2026-04-16T00:00:00.000Z",
       workspaceId: "workspace-1",
       showSubtaskCardsByDefault: true,
+      showAssigneesByDefault: true,
+      showPriorityByDefault: true,
       columns: [],
       plannedTasks: [
         {

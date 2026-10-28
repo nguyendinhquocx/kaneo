@@ -2104,10 +2104,12 @@
     "display": {
       "menu": "Отображение",
       "showSubtaskCards": "Показывать карточки подзадач",
-      "showNextSubtaskPreview": "Показывать следующую подзадачу"
+      "showNextSubtaskPreview": "Показывать следующую подзадачу",
+      "showAssignees": "Показывать исполнителей",
+      "showPriority": "Показывать приоритет"
     },
     "workMarkers": {
-      "title": "Рабочие маркеры",
+      "title": "Маркер",
       "redCross": "Красный крест",
       "boxedRedCross": "Красный крест в рамке",
       "redCircle": "Красный круг",
@@ -2116,7 +2118,8 @@
       "decrease": "Уменьшить маркер «{{name}}» для задачи «{{title}}»",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Не удалось сохранить рабочие маркеры",
-      "saving": "Сохранение рабочих маркеров…"
+      "saving": "Сохранение рабочих маркеров…",
+      "openForTask": "Выбрать маркер для {{title}}"
     },
     "subtaskPreview": {
       "next": "Далее: {{title}}"

@@ -18,6 +18,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { produce } from "immer";
@@ -25,11 +26,16 @@ import { Archive, ChevronRight, Flag, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { priorityColorsTaskCard } from "@/constants/priority-colors";
-import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
+import {
+  useMoveShareTask,
+  useUpdateTask,
+} from "@/hooks/mutations/task/use-update-task";
+import { useReorderProjectTasks } from "@/hooks/mutations/task/use-reorder-project-tasks";
 import { getShareCapability } from "@/components/share/share-capability";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { cn } from "@/lib/cn";
 import { getColumnIcon } from "@/lib/column";
+import { reorderProjectTasks, resolveTaskReorderIntent } from "@/lib/task-reorder";
 import { toast } from "@/lib/toast";
 import useBulkSelectionStore from "@/store/bulk-selection";
 import useProjectStore from "@/store/project";
@@ -46,6 +52,7 @@ type ListViewProps = {
 
 function ListView({ project, disableDragDrop = false }: ListViewProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const { setProject } = useProjectStore();
   const {
     setAvailableTasks,
@@ -55,6 +62,12 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
     clearFocus,
   } = useBulkSelectionStore();
   const { mutate: updateTask } = useUpdateTask();
+  const { mutate: moveShareTask, isPending: isShareMovePending } =
+    useMoveShareTask();
+  const { mutate: reorderTasks, isPending: isReorderPending } =
+    useReorderProjectTasks();
+  const isDragDisabled =
+    disableDragDrop || isReorderPending || (Boolean(getShareCapability()) && isShareMovePending);
   const navigate = useNavigate();
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
@@ -132,11 +145,11 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
-      activationConstraint: { distance: disableDragDrop ? 999999 : 8 },
+      activationConstraint: { distance: isDragDisabled ? 999999 : 8 },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: disableDragDrop ? 999999 : 200,
+        delay: isDragDisabled ? 999999 : 200,
         tolerance: 8,
       },
     }),
@@ -175,75 +188,44 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
     const { active, over } = event;
     setActiveId(null);
     setOverColumnId(null);
+    if (!over) return;
 
-    if (!over || !project?.columns) return;
-
-    const activeTaskId = active.id.toString();
+    const taskId = active.id.toString();
     const overId = over.id.toString();
+    const capability = getShareCapability();
+    const queryProject = capability
+      ? project
+      : (queryClient.getQueryData<ProjectWithTasks>(["tasks", project.id]) ??
+        project);
+    const intent = resolveTaskReorderIntent(queryProject, taskId, overId);
+    if (!intent) return;
 
-    const updatedProject = produce(project, (draft) => {
-      const sourceColumn = draft?.columns?.find((col) =>
-        col.tasks.some((task) => task.id === activeTaskId),
-      );
-      const destinationColumn = draft?.columns?.find(
-        (col) =>
-          col.id === overId || col.tasks.some((task) => task.id === overId),
-      );
+    const { project: optimisticProject, changedTasks } = reorderProjectTasks(
+      queryProject,
+      intent,
+    );
+    if (changedTasks.length === 0) return;
 
-      if (!sourceColumn || !destinationColumn) return;
-
-      const sourceTaskIndex = sourceColumn.tasks.findIndex(
-        (task) => task.id === activeTaskId,
-      );
-      const task = sourceColumn.tasks[sourceTaskIndex];
-
-      sourceColumn.tasks = sourceColumn.tasks.filter(
-        (t) => t.id !== activeTaskId,
-      );
-
-      if (sourceColumn.id === destinationColumn.id) {
-        let destinationIndex = destinationColumn.tasks.findIndex(
-          (t) => t.id === overId,
-        );
-        if (sourceTaskIndex <= destinationIndex) {
-          destinationIndex += 1;
-        }
-        destinationColumn.tasks.splice(destinationIndex, 0, task);
-
-        destinationColumn.tasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            status: destinationColumn.id,
-            position: index,
-          });
-        });
-      } else {
-        task.status = destinationColumn.id;
-        const destinationIndex =
-          overId === destinationColumn.id
-            ? destinationColumn.tasks.length
-            : destinationColumn.tasks.findIndex((t) => t.id === overId) + 1;
-
-        destinationColumn.tasks.splice(destinationIndex, 0, task);
-
-        destinationColumn.tasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            status: destinationColumn.id,
-            position: index,
-          });
-        });
-
-        sourceColumn.tasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            position: index,
-          });
+    if (capability) {
+      const movedTask = optimisticProject.columns
+        .flatMap((column) => column.tasks)
+        .find((task) => task.id === taskId);
+      if (movedTask) {
+        moveShareTask({
+          taskId,
+          status: intent.destinationStatus,
+          position: movedTask.position ?? 0,
         });
       }
-    });
+      return;
+    }
 
-    setProject(updatedProject);
+    reorderTasks({
+      projectId: project.id,
+      taskId,
+      optimisticProject,
+      changedTasks,
+    });
   };
 
   const toggleSection = (sectionId: string) => {
@@ -376,7 +358,12 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
                   >
-                    <TaskRow task={task} projectSlug={project?.slug ?? ""} />
+                    <TaskRow
+                      task={task}
+                      projectSlug={project?.slug ?? ""}
+                      projectDisplayDefaults={project}
+                      disableDragDrop={isDragDisabled}
+                    />
                   </motion.div>
                 ))}
               </AnimatePresence>

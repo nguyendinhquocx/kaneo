@@ -289,6 +289,41 @@ erDiagram
 4. Marker count 1–3 lặp glyph, count cao hơn gọn lại mà vẫn đọc được và không tràn?
 5. Bỏ mũi tên vẫn reorder được bằng pointer/touch/keyboard và có thông báo vị trí mới?
 
+## Post-UAT revision — 2026-10-28
+
+Owner request: after production UAT, correct the drag settling delay, put work markers inline with titles, replace counter controls with quick presets, add a subtask-row quick picker, and expose assignee/priority display toggles.
+
+### Evidence and diagnosis
+
+- Supplied UAT screenshots: `1e65d690-dec1-40b9-871b-9bf6787bc3eb.png`, `b651cfc5-b624-4f53-b7c8-a70c00b18da9.png`, `2d7c243d-a29d-4907-86d0-2b2c3725aab5.png`, `a72af8d8-7e53-441a-bb70-4eb88a81631a.png`.
+- Board/List drop handlers update the Zustand project store, but the rendered project remains derived from the TanStack Query result; each affected task is then PUT separately and each success invalidates/refetches the task list. The card therefore stays in the old query projection until refetch completes, then jumps. Replace this wait with an optimistic query projection and one final reconciliation; rollback on mutation failure.
+- Marker editor currently exposes four independent `− / +` counters; Board/List/SubtaskRow render marker groups below the title. Replace both interaction and presentation with one fast selection path.
+
+### Revised behavior
+
+- Drag/drop in Board and List updates the visible lane/order immediately on drop, without waiting for the network. Persist current lane positions, reconcile once after the grouped writes complete, and restore the previous projection with an error on failure. Do not change move permissions, agent-control guards, or share-link behavior.
+- Task properties show a compact `Marker` control in the metadata header beside the due-date control. It opens four choices; each choice writes exactly three repetitions of that marker and zero for the other marker types. Selecting the already-selected marker clears it. The old independent plus/minus controls are removed.
+- Subtask rows place a marker-picker icon immediately left of the title-pencil action; it opens the same four-choice picker without opening the child task. Marker glyphs sit on the same row as the title in Board cards, List rows, Subtask rows, and previews. Titles truncate with ellipsis before markers; marker clusters never wrap or push the surface wider.
+- Existing stored count maps are not rewritten on read. Legacy multi-type or non-triple values remain visible until the user selects a preset; a new picker write normalizes that task to one triple or zero.
+- Authenticated Board/List `Hiển thị` menu adds independent `Hiện người được giao` and `Hiện mức độ ưu tiên` toggles. They use the existing per-user/per-project local preference namespace; Backlog, Gantt, and share surfaces keep their current behavior.
+- Add project defaults `showAssigneesByDefault` and `showPriorityByDefault`: migration backfills existing projects to `true`, new project DB/API defaults are `false`, and a local per-user/project override wins. Thus existing boards do not lose information on upgrade, while new solo projects start uncluttered.
+
+### Acceptance and verification
+
+- Board and List drag: the moved task is rendered in the target position synchronously on drop before any response; no intermediate revert/jump; failed write restores the previous order and gives recovery feedback; successful grouped persistence performs one final list reconciliation.
+- Marker picker: four options, each writes `{selected: 3, others: 0}`; choosing the current type clears all counts; duplicate submits are locked while pending; save failure preserves the prior state. Existing legacy counts are unchanged until an explicit choice.
+- Marker placement: title and marker share one row at 320/375/414/768/1024/1280/1440px; long titles ellipsize; no horizontal overflow; SubtaskRow quick picker does not open/navigate the task and is keyboard/touch accessible.
+- Project display defaults: existing project rows return both display defaults `true`, newly created projects return both `false`; account/project local overrides do not bleed across users or projects. Guest/share payloads do not gain these authenticated-only controls or marker data.
+- API regression: real 0050→0051 upgrade check verifies legacy backfill; API integration verifies new-project defaults and task-list DTO values. Web tests verify optimistic drop/rollback, single-preset writes, local preference isolation, and inline marker rendering.
+- `pnpm --filter @kaneo/api build`, relevant API integration tests, relevant web tests, web typecheck/build, `pnpm i18n:check`, `git diff --check`, one Impeccable detector pass, and rendered visual evidence for the supplied surfaces plus mobile/desktop. Production deploy is not part of this worker pass; report it separately.
+
+### Verification results — 2026-10-28 (final re-run)
+
+- Web: typecheck PASS, vitest 37 files / 109 tests PASS, build PASS. Fix during re-run: `fetchers/task/update-work-markers.ts` now unwraps `workMarkerCounts` from the API task response so the optimistic mutation's `TaskMarkerCounts` type is honest (type-level only; runtime behavior was already correct).
+- API: build PASS; integration 22 files / 222 tests PASS. i18n check PASS (13 locales in sync). Migration `0051` real-disposable-DB upgrade check PASS (run earlier, files unchanged since).
+- Rendered UI (local dev, project Legacy Board / New Board / fresh `UAT Fresh Project`): drag of `legacy-board-5` to top of ToDo updated DOM order on drop and persisted after full reload (5→1→2); marker picker 4×3 in task properties; subtask quick picker writes counts that render on the subtask row and the board preview line; display menu shows legacy projects all-on (backfill) and a project created after 0051 all-off for assignee/priority/subtask-cards with next-subtask preview on; List view renders markers inline; 320/375px no horizontal overflow (eye icon collapse); browser console clean across all flows.
+- Rendered evidence: `.impeccable/review/uat-revision-2026-10-28/` (board legacy 1280/375/320, list 1280, display-hidden state, task-detail marker picker, subtask marker selected, board after drag).
+
 ## Completion Gates
 
 - [ ] T1 API tests pass: new-row defaults, detail/list DTO, marker validation, board-visible/virtual preview, public boundary.

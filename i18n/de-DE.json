@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Anzeige",
       "showSubtaskCards": "Unteraufgaben-Karten anzeigen",
-      "showNextSubtaskPreview": "Nächste Unteraufgabe anzeigen"
+      "showNextSubtaskPreview": "Nächste Unteraufgabe anzeigen",
+      "showAssignees": "Zugewiesene anzeigen",
+      "showPriority": "Priorität anzeigen"
     },
     "workMarkers": {
-      "title": "Work-Marker",
+      "title": "Marker",
       "redCross": "Rotes Kreuz",
       "boxedRedCross": "Rotes Kreuz im Kasten",
       "redCircle": "Roter Kreis",
@@ -2056,7 +2058,8 @@
       "decrease": "Marker {{name}} für {{title}} verringern",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Work-Marker konnten nicht gespeichert werden",
-      "saving": "Work-Marker werden gespeichert …"
+      "saving": "Work-Marker werden gespeichert …",
+      "openForTask": "Marker für {{title}} auswählen"
     },
     "subtaskPreview": {
       "next": "Als Nächstes: {{title}}"

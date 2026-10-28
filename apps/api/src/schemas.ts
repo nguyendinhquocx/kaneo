@@ -34,6 +34,8 @@ export const projectSchema = v.object({
   isPublic: v.nullable(v.boolean()),
   archivedAt: v.nullable(v.date()),
   showSubtaskCardsByDefault: v.boolean(),
+  showAssigneesByDefault: v.boolean(),
+  showPriorityByDefault: v.boolean(),
 });
 
 export const taskSchema = v.object({

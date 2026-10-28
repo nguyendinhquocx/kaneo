@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "표시",
       "showSubtaskCards": "하위 작업 카드 표시",
-      "showNextSubtaskPreview": "다음 하위 작업 표시"
+      "showNextSubtaskPreview": "다음 하위 작업 표시",
+      "showAssignees": "담당자 표시",
+      "showPriority": "우선순위 표시"
     },
     "workMarkers": {
-      "title": "작업 마커",
+      "title": "마커",
       "redCross": "빨간 십자",
       "boxedRedCross": "네모 안의 빨간 십자",
       "redCircle": "빨간 원",
@@ -2056,7 +2058,8 @@
       "decrease": "{{title}}의 {{name}} 마커 줄이기",
       "countAria": "{{name}}: {{count}}개",
       "saveError": "작업 마커를 저장하지 못했습니다",
-      "saving": "작업 마커 저장 중…"
+      "saving": "작업 마커 저장 중…",
+      "openForTask": "{{title}} 마커 선택"
     },
     "subtaskPreview": {
       "next": "다음 작업: {{title}}"

@@ -82,6 +82,13 @@ vi.mock("@/hooks/mutations/task/use-update-task-due-date", () => ({
   useUpdateTaskDueDate: () => ({ mutateAsync: vi.fn() }),
 }));
 
+vi.mock("./work-marker-picker", () => ({
+  default: ({ task }: { task: { id: string } }) => (
+    <button type="button" aria-label={`marker:${task.id}`}>
+      Marker
+    </button>
+  ),
+}));
 vi.mock("@/components/task/task-assignee-popover", () => ({
   default: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }));
@@ -150,5 +157,19 @@ describe("task properties in full share mode", () => {
         name: "tasks:properties.copyTaskLink",
       }).length,
     ).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "marker:task-1" })).toBeNull();
+  });
+
+  it("exposes the compact marker action on authenticated task properties", () => {
+    render(
+      <TaskPropertiesSidebar
+        taskId="task-1"
+        projectId="project-1"
+        workspaceId="workspace-1"
+        compact
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "marker:task-1" })).toBeVisible();
   });
 });

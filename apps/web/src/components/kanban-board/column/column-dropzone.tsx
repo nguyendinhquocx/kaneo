@@ -5,17 +5,20 @@ import {
 } from "@dnd-kit/sortable";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect } from "react";
+import type { ProjectDisplayDefaults } from "@/store/project-display-preferences";
 import type { ProjectWithTasks } from "@/types/project";
 import TaskCard from "../task-card";
 
 type ColumnDropzoneProps = {
   column: ProjectWithTasks["columns"][number];
+  projectDisplayDefaults: ProjectDisplayDefaults;
   disableDragDrop?: boolean;
   onIsOverChange?: (isOver: boolean) => void;
 };
 
 export function ColumnDropzone({
   column,
+  projectDisplayDefaults,
   disableDragDrop = false,
   onIsOverChange,
 }: ColumnDropzoneProps) {
@@ -55,7 +58,11 @@ export function ColumnDropzone({
                 }
                 transition={{ type: "spring", duration: 0.35, bounce: 0.15 }}
               >
-                <TaskCard task={task} disableDragDrop={disableDragDrop} />
+                <TaskCard
+                  task={task}
+                  projectDisplayDefaults={projectDisplayDefaults}
+                  disableDragDrop={disableDragDrop}
+                />
               </motion.div>
             ))}
           </AnimatePresence>

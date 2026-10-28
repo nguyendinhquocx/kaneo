@@ -50,6 +50,8 @@ export function mapShareFullProjectPayload(
     // Guests never receive the project display default; the share surface
     // keeps child cards visible exactly as before.
     showSubtaskCardsByDefault: true,
+    showAssigneesByDefault: true,
+    showPriorityByDefault: true,
     columns: payload.columns.map((column) => ({
       ...column,
       tasks: column.tasks.map((task) => ({

@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Visualización",
       "showSubtaskCards": "Mostrar tarjetas de subtareas",
-      "showNextSubtaskPreview": "Mostrar la siguiente subtarea"
+      "showNextSubtaskPreview": "Mostrar la siguiente subtarea",
+      "showAssignees": "Mostrar responsables",
+      "showPriority": "Mostrar prioridad"
     },
     "workMarkers": {
-      "title": "Marcadores de trabajo",
+      "title": "Marcador",
       "redCross": "Cruz roja",
       "boxedRedCross": "Cruz roja enmarcada",
       "redCircle": "Círculo rojo",
@@ -2056,7 +2058,8 @@
       "decrease": "Reducir el marcador {{name}} de {{title}}",
       "countAria": "{{name}}: {{count}}",
       "saveError": "No se pudieron guardar los marcadores de trabajo",
-      "saving": "Guardando los marcadores de trabajo…"
+      "saving": "Guardando los marcadores de trabajo…",
+      "openForTask": "Elegir marcador para {{title}}"
     },
     "subtaskPreview": {
       "next": "Siguiente: {{title}}"

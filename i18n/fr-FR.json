@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Affichage",
       "showSubtaskCards": "Afficher les cartes de sous-tâches",
-      "showNextSubtaskPreview": "Afficher la prochaine sous-tâche"
+      "showNextSubtaskPreview": "Afficher la prochaine sous-tâche",
+      "showAssignees": "Afficher les personnes assignées",
+      "showPriority": "Afficher la priorité"
     },
     "workMarkers": {
-      "title": "Marqueurs de travail",
+      "title": "Marqueur",
       "redCross": "Croix rouge",
       "boxedRedCross": "Croix rouge encadrée",
       "redCircle": "Cercle rouge",
@@ -2056,7 +2058,8 @@
       "decrease": "Diminuer le marqueur {{name}} pour {{title}}",
       "countAria": "{{name}} : {{count}}",
       "saveError": "Échec de l’enregistrement des marqueurs de travail",
-      "saving": "Enregistrement des marqueurs de travail…"
+      "saving": "Enregistrement des marqueurs de travail…",
+      "openForTask": "Choisir un marqueur pour {{title}}"
     },
     "subtaskPreview": {
       "next": "À suivre : {{title}}"

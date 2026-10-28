@@ -25,6 +25,9 @@ async function createProject(
         // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: new projects
         // start with subtask cards hidden (explicit, mirrors DB default).
         showSubtaskCardsByDefault: false,
+        // New projects also hide assignee and priority cues until needed.
+        showAssigneesByDefault: false,
+        showPriorityByDefault: false,
       })
       .returning();
 

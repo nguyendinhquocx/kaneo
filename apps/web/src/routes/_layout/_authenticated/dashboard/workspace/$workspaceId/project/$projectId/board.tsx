@@ -1,21 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Eye, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
 import BoardToolbar from "@/components/board/board-toolbar";
+import ProjectDisplayMenu from "@/components/board/project-display-menu";
 import ProjectLayout from "@/components/common/project-layout";
 import KanbanBoard from "@/components/kanban-board";
 import ListView from "@/components/list-view";
 import PageTitle from "@/components/page-title";
 import CreateTaskModal from "@/components/shared/modals/create-task-modal";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/menu";
 import { Input } from "@/components/ui/input";
 import { shortcuts } from "@/constants/shortcuts";
 import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
@@ -95,8 +90,13 @@ function RouteComponent() {
   const { data } = useGetTasks(projectId);
   const { project, setProject } = useProjectStore();
   const { viewMode, setViewMode } = useUserPreferencesStore();
-  const { preferences: displayPreferences, setShowSubtaskCards, setShowNextSubtaskPreview } =
-    useProjectDisplayPreferences(userId, projectId);
+  const {
+    preferences: displayPreferences,
+    setShowSubtaskCards,
+    setShowNextSubtaskPreview,
+    setShowAssignees,
+    setShowPriority,
+  } = useProjectDisplayPreferences(userId, projectId);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [boardSearchQuery, setBoardSearchQuery] = useState("");
   const [isBoardSearchMounted, setIsBoardSearchMounted] = useState(false);
@@ -146,11 +146,16 @@ function RouteComponent() {
   // database, task detail and relation APIs. Same-project children of a
   // board-visible parent are the only cards hidden from Board/List lanes;
   // planned/archived parents never hide their children.
-  const { showSubtaskCards, showNextSubtaskPreview } =
-    resolveProjectDisplayPreferences(
-      displayPreferences,
-      data?.showSubtaskCardsByDefault,
-    );
+  const {
+    showSubtaskCards,
+    showNextSubtaskPreview,
+    showAssignees,
+    showPriority,
+  } = resolveProjectDisplayPreferences(displayPreferences, {
+    showSubtaskCardsByDefault: data?.showSubtaskCardsByDefault,
+    showAssigneesByDefault: data?.showAssigneesByDefault,
+    showPriorityByDefault: data?.showPriorityByDefault,
+  });
   const displayProject = useMemo(() => {
     if (!data || showSubtaskCards) return data;
     return {
@@ -267,40 +272,16 @@ function RouteComponent() {
           sort={sort}
           onSortChange={setSort}
           displayMenu={
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={t("tasks:display.menu")}
-                    className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-foreground text-xs font-medium outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:h-7 sm:min-w-0"
-                  />
-                }
-              >
-                <Eye className="h-3 w-3" />
-                <span className="hidden sm:inline">
-                  {t("tasks:display.menu")}
-                </span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64" align="start">
-                <DropdownMenuCheckboxItem
-                  closeOnClick={false}
-                  checked={showSubtaskCards}
-                  onCheckedChange={setShowSubtaskCards}
-                  className="min-h-11 rounded-md text-sm sm:min-h-8"
-                >
-                  {t("tasks:display.showSubtaskCards")}
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  closeOnClick={false}
-                  checked={showNextSubtaskPreview}
-                  onCheckedChange={setShowNextSubtaskPreview}
-                  className="min-h-11 rounded-md text-sm sm:min-h-8"
-                >
-                  {t("tasks:display.showNextSubtaskPreview")}
-                </DropdownMenuCheckboxItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ProjectDisplayMenu
+              showSubtaskCards={showSubtaskCards}
+              showNextSubtaskPreview={showNextSubtaskPreview}
+              showAssignees={showAssignees}
+              showPriority={showPriority}
+              setShowSubtaskCards={setShowSubtaskCards}
+              setShowNextSubtaskPreview={setShowNextSubtaskPreview}
+              setShowAssignees={setShowAssignees}
+              setShowPriority={setShowPriority}
+            />
           }
         />
 

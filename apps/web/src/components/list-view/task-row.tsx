@@ -40,12 +40,14 @@ import queryClient from "@/query-client";
 import {
   resolveProjectDisplayPreferences,
   useProjectDisplayPreferences,
+  type ProjectDisplayDefaults,
 } from "@/store/project-display-preferences";
 import useBulkSelectionStore from "@/store/bulk-selection";
 import useProjectStore from "@/store/project";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 import type { ProjectBoardTask } from "@/types/project";
 import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
+import { getShareCapability } from "@/components/share/share-capability";
 import WorkMarkerCountList from "@/components/task/work-marker-counts";
 import { CornerDownRight } from "lucide-react";
 import TaskCardContextMenuContent from "../kanban-board/task-card-context-menu/task-card-context-menu-content";
@@ -55,9 +57,16 @@ import { ContextMenu, ContextMenuTrigger } from "../ui/context-menu";
 type TaskRowProps = {
   task: ProjectBoardTask;
   projectSlug: string;
+  projectDisplayDefaults: ProjectDisplayDefaults;
+  disableDragDrop?: boolean;
 };
 
-function TaskRow({ task, projectSlug }: TaskRowProps) {
+function TaskRow({
+  task,
+  projectSlug,
+  projectDisplayDefaults,
+  disableDragDrop = false,
+}: TaskRowProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -69,7 +78,7 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({ id: task.id, disabled: disableDragDrop });
 
   const { project } = useProjectStore();
   const { data: workspace } = useActiveWorkspace();
@@ -77,18 +86,33 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
     userId,
     task.projectId,
   );
-  const { showNextSubtaskPreview: previewEnabled } =
-    resolveProjectDisplayPreferences(
-      displayPreferences,
-      project?.showSubtaskCardsByDefault,
-  );
   const {
-    showAssignees,
-    showPriority,
+    showNextSubtaskPreview: previewEnabled,
+    showAssignees: projectShowAssignees,
+    showPriority: projectShowPriority,
+  } = resolveProjectDisplayPreferences(displayPreferences, {
+    showSubtaskCardsByDefault:
+      projectDisplayDefaults.showSubtaskCardsByDefault ??
+      project?.showSubtaskCardsByDefault,
+    showAssigneesByDefault:
+      projectDisplayDefaults.showAssigneesByDefault ??
+      project?.showAssigneesByDefault,
+    showPriorityByDefault:
+      projectDisplayDefaults.showPriorityByDefault ??
+      project?.showPriorityByDefault,
+  });
+  const {
+    showAssignees: globalShowAssignees,
+    showPriority: globalShowPriority,
     showDueDates,
     showLabels,
     showTaskNumbers,
   } = useUserPreferencesStore();
+  const isShareSurface = Boolean(getShareCapability());
+  const showAssignees = isShareSurface
+    ? globalShowAssignees
+    : projectShowAssignees;
+  const showPriority = isShareSurface ? globalShowPriority : projectShowPriority;
   const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
   const { mutateAsync: deleteTask } = useDeleteTask();
   const { data: externalLinks } = useExternalLinks(task.id);
@@ -228,8 +252,8 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
             )}
 
             <div className="basis-full min-w-0 flex-1 flex flex-col justify-center gap-0.5 sm:basis-0">
-              <div className="flex w-full min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-1.5">
-                <span className="w-full min-w-0 truncate text-sm text-foreground sm:w-auto sm:flex-1">
+              <div className="flex w-full min-w-0 items-center gap-1.5">
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                   {task.title}
                 </span>
                 <WorkMarkerCountList counts={task.workMarkerCounts} />

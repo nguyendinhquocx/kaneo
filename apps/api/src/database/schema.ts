@@ -309,6 +309,14 @@ export const projectTable = pgTable(
     showSubtaskCardsByDefault: boolean("show_subtask_cards_by_default")
       .notNull()
       .default(false),
+    // Board/List display defaults: existing projects keep their current cues;
+    // new projects start uncluttered and users may override locally per project.
+    showAssigneesByDefault: boolean("show_assignees_by_default")
+      .notNull()
+      .default(false),
+    showPriorityByDefault: boolean("show_priority_by_default")
+      .notNull()
+      .default(false),
     // SPEC-kaneo-phase-cards-full-run-server-v0-1: server-owned revision for
     // graph publish / ready CAS (WHERE project_revision = expected).
     projectRevision: integer("project_revision").notNull().default(1),

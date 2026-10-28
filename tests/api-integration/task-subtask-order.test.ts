@@ -169,13 +169,15 @@ describe("API integration: subtask order", () => {
 });
 
 describe("API integration: work markers, project default and subtask projection", () => {
-  it("defaults new project rows to hidden subtask cards and exposes the flag per task row", async () => {
+  it("defaults new project display flags to the expected values and exposes them per task row", async () => {
     await resetTestDatabase();
     const member = await createWorkspaceMember({ role: "admin" });
     const { project, columns } = await createProjectFixture({
       workspaceId: member.workspace.id,
     });
     expect(project.showSubtaskCardsByDefault).toBe(false);
+    expect(project.showAssigneesByDefault).toBe(false);
+    expect(project.showPriorityByDefault).toBe(false);
 
     const parent = await insertTask(project.id, columns.todo.id, "Parent", 0);
     const child = await insertTask(project.id, columns.todo.id, "Child", 1);
@@ -188,10 +190,14 @@ describe("API integration: work markers, project default and subtask projection"
     const payload = (await response.json()) as {
       data: {
         showSubtaskCardsByDefault: boolean;
+        showAssigneesByDefault: boolean;
+        showPriorityByDefault: boolean;
         columns: Array<{ slug: string; tasks: Array<Record<string, unknown>> }>;
       };
     };
     expect(payload.data.showSubtaskCardsByDefault).toBe(false);
+    expect(payload.data.showAssigneesByDefault).toBe(false);
+    expect(payload.data.showPriorityByDefault).toBe(false);
 
     const tasks = todoColumnTasks(payload);
     const parentTask = tasks.find((task) => task.id === parent.id);
@@ -229,7 +235,11 @@ describe("API integration: work markers, project default and subtask projection"
     // Simulates the migration backfill value for pre-upgrade projects.
     await db
       .update(schema.projectTable)
-      .set({ showSubtaskCardsByDefault: true })
+      .set({
+        showSubtaskCardsByDefault: true,
+        showAssigneesByDefault: true,
+        showPriorityByDefault: true,
+      })
       .where(eq(schema.projectTable.id, project.id));
 
     mockAuthenticatedSession(member.user);
@@ -237,9 +247,15 @@ describe("API integration: work markers, project default and subtask projection"
     const response = await app.request(`/api/task/tasks/${project.id}`);
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
-      data: { showSubtaskCardsByDefault: boolean };
+      data: {
+        showSubtaskCardsByDefault: boolean;
+        showAssigneesByDefault: boolean;
+        showPriorityByDefault: boolean;
+      };
     };
     expect(payload.data.showSubtaskCardsByDefault).toBe(true);
+    expect(payload.data.showAssigneesByDefault).toBe(true);
+    expect(payload.data.showPriorityByDefault).toBe(true);
   });
 
   it("round-trips the full work marker map through PUT /work-markers and GET /task/:id", async () => {

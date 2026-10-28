@@ -2044,10 +2044,12 @@
     "display": {
       "menu": "Προβολή",
       "showSubtaskCards": "Εμφάνιση καρτών υποεργασιών",
-      "showNextSubtaskPreview": "Εμφάνιση επόμενης υποεργασίας"
+      "showNextSubtaskPreview": "Εμφάνιση επόμενης υποεργασίας",
+      "showAssignees": "Εμφάνιση ανατεθειμένων",
+      "showPriority": "Εμφάνιση προτεραιότητας"
     },
     "workMarkers": {
-      "title": "Δείκτες εργασίας",
+      "title": "Σήμανση",
       "redCross": "Κόκκινο σταυρό",
       "boxedRedCross": "Κόκκινο σταυρό σε πλαίσιο",
       "redCircle": "Κόκκινος κύκλος",
@@ -2056,7 +2058,8 @@
       "decrease": "Μείωση δείκτη {{name}} για {{title}}",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Αποτυχία αποθήκευσης δεικτών εργασίας",
-      "saving": "Αποθήκευση δεικτών εργασίας…"
+      "saving": "Αποθήκευση δεικτών εργασίας…",
+      "openForTask": "Επιλογή σήμανσης για {{title}}"
     },
     "subtaskPreview": {
       "next": "Επόμενο: {{title}}"

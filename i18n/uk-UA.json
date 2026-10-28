@@ -2048,10 +2048,12 @@
     "display": {
       "menu": "Відображення",
       "showSubtaskCards": "Показувати картки підзавдань",
-      "showNextSubtaskPreview": "Показувати наступне підзавдання"
+      "showNextSubtaskPreview": "Показувати наступне підзавдання",
+      "showAssignees": "Показувати виконавців",
+      "showPriority": "Показувати пріоритет"
     },
     "workMarkers": {
-      "title": "Робочі маркери",
+      "title": "Маркер",
       "redCross": "Червоний хрестик",
       "boxedRedCross": "Червоний хрестик у рамці",
       "redCircle": "Червоне коло",
@@ -2060,7 +2062,8 @@
       "decrease": "Зменшити маркер {{name}} для {{title}}",
       "countAria": "{{name}}: {{count}}",
       "saveError": "Не вдалося зберегти робочі маркери",
-      "saving": "Збереження робочих маркерів…"
+      "saving": "Збереження робочих маркерів…",
+      "openForTask": "Вибрати маркер для {{title}}"
     },
     "subtaskPreview": {
       "next": "Далі: {{title}}"

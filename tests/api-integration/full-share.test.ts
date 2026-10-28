@@ -760,9 +760,13 @@ describe("API integration: full project share capability", () => {
     expect(boardAfterMarker.status).toBe(200);
     const markerPayload = (await boardAfterMarker.json()) as {
       showSubtaskCardsByDefault?: unknown;
+      showAssigneesByDefault?: unknown;
+      showPriorityByDefault?: unknown;
       columns: Array<{ tasks: Array<Record<string, unknown>> }>;
     };
     expect(markerPayload).not.toHaveProperty("showSubtaskCardsByDefault");
+    expect(markerPayload).not.toHaveProperty("showAssigneesByDefault");
+    expect(markerPayload).not.toHaveProperty("showPriorityByDefault");
     for (const column of markerPayload.columns) {
       for (const guestTask of column.tasks) {
         expect(guestTask).not.toHaveProperty("workMarkerCounts");
