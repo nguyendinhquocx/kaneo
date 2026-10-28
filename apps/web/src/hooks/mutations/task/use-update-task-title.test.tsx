@@ -20,6 +20,12 @@ const task: Task = {
   description: null,
   status: "to-do",
   priority: "no-priority",
+  workMarkerCounts: {
+    redCross: 0,
+    boxedRedCross: 0,
+    redCircle: 0,
+    greenCheck: 0,
+  },
   startDate: null,
   dueDate: null,
   position: 2,

@@ -9,6 +9,13 @@ export const labelSchema = v.object({
   workspaceId: v.nullable(v.string()),
 });
 
+export const taskMarkerCountsSchema = v.object({
+  redCross: v.number(),
+  boxedRedCross: v.number(),
+  redCircle: v.number(),
+  greenCheck: v.number(),
+});
+
 export const projectSchema = v.object({
   id: v.string(),
   workspaceId: v.string(),
@@ -19,6 +26,7 @@ export const projectSchema = v.object({
   createdAt: v.date(),
   isPublic: v.nullable(v.boolean()),
   archivedAt: v.nullable(v.date()),
+  showSubtaskCardsByDefault: v.boolean(),
 });
 
 export const taskSchema = v.object({
@@ -40,6 +48,7 @@ export const taskSchema = v.object({
   startDate: v.optional(v.date()),
   dueDate: v.optional(v.date()),
   createdAt: v.date(),
+  workMarkerCounts: taskMarkerCountsSchema,
 });
 
 export const activitySchema = v.object({

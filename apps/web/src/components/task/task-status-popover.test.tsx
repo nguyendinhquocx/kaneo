@@ -40,6 +40,12 @@ const task: Task = {
   priority: null,
   startDate: null,
   dueDate: null,
+  workMarkerCounts: {
+    redCross: 0,
+    boxedRedCross: 0,
+    redCircle: 0,
+    greenCheck: 0,
+  },
   position: 1,
   createdAt: "2026-07-17T00:00:00.000Z",
   userId: null,

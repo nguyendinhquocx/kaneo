@@ -13,6 +13,7 @@ describe("updateTaskLabelsInProject", () => {
       createdAt: "2026-04-16T00:00:00.000Z",
       updatedAt: "2026-04-16T00:00:00.000Z",
       workspaceId: "workspace-1",
+      showSubtaskCardsByDefault: true,
       columns: [
         {
           id: "todo",
@@ -40,6 +41,14 @@ describe("updateTaskLabelsInProject", () => {
               projectId: "project-1",
               labels: [],
               externalLinks: [],
+              workMarkerCounts: {
+                redCross: 0,
+                boxedRedCross: 0,
+                redCircle: 0,
+                greenCheck: 0,
+              },
+              isSubtask: false,
+              nextSubtaskPreview: null,
             },
             {
               id: "task-2",
@@ -60,6 +69,14 @@ describe("updateTaskLabelsInProject", () => {
               projectId: "project-1",
               labels: [],
               externalLinks: [],
+              workMarkerCounts: {
+                redCross: 0,
+                boxedRedCross: 0,
+                redCircle: 0,
+                greenCheck: 0,
+              },
+              isSubtask: false,
+              nextSubtaskPreview: null,
             },
           ],
         },
@@ -102,6 +119,7 @@ describe("updateTaskLabelsInProject", () => {
       createdAt: "2026-04-16T00:00:00.000Z",
       updatedAt: "2026-04-16T00:00:00.000Z",
       workspaceId: "workspace-1",
+      showSubtaskCardsByDefault: true,
       columns: [],
       plannedTasks: [
         {
@@ -129,6 +147,14 @@ describe("updateTaskLabelsInProject", () => {
             },
           ],
           externalLinks: [],
+          workMarkerCounts: {
+            redCross: 0,
+            boxedRedCross: 0,
+            redCircle: 0,
+            greenCheck: 0,
+          },
+          isSubtask: false,
+          nextSubtaskPreview: null,
         },
       ],
       archivedTasks: [
@@ -157,6 +183,14 @@ describe("updateTaskLabelsInProject", () => {
             },
           ],
           externalLinks: [],
+          workMarkerCounts: {
+            redCross: 0,
+            boxedRedCross: 0,
+            redCircle: 0,
+            greenCheck: 0,
+          },
+          isSubtask: false,
+          nextSubtaskPreview: null,
         },
       ],
     };

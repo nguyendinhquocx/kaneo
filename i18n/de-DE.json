@@ -1794,10 +1794,12 @@
       "deleteAction": "Aufgabe löschen",
       "completeAria": "Mark subtask complete",
       "drag": "{{title}} zum Neuanordnen ziehen",
-      "moveUp": "{{title}} nach oben verschieben",
-      "moveDown": "{{title}} nach unten verschieben",
       "editTitle": "Titel von {{title}} bearbeiten",
-      "saveTitle": "Titel speichern"
+      "saveTitle": "Titel speichern",
+      "dragStart": "{title} aufgenommen. Position {position} von {total}.",
+      "dragMove": "{title}. Zu Position {position} von {total} verschoben.",
+      "dragEnd": "{title} an Position {position} von {total} abgelegt.",
+      "dragCancel": "Ziehen von {title} abgebrochen. Position beibehalten."
     },
     "properties": {
       "title": "Eigenschaften",
@@ -2038,6 +2040,26 @@
         "deleteRow": "Delete row",
         "deleteTable": "Delete table"
       }
+    },
+    "display": {
+      "menu": "Anzeige",
+      "showSubtaskCards": "Unteraufgaben-Karten anzeigen",
+      "showNextSubtaskPreview": "Nächste Unteraufgabe anzeigen"
+    },
+    "workMarkers": {
+      "title": "Work-Marker",
+      "redCross": "Rotes Kreuz",
+      "boxedRedCross": "Rotes Kreuz im Kasten",
+      "redCircle": "Roter Kreis",
+      "greenCheck": "Grüner Haken",
+      "increase": "Marker {name} für {title} erhöhen",
+      "decrease": "Marker {name} für {title} verringern",
+      "countAria": "{name}: {count}",
+      "saveError": "Work-Marker konnten nicht gespeichert werden"
+    },
+    "subtaskPreview": {
+      "next": "Als Nächstes: {title}",
+      "aria": "Als Nächstes: {title}"
     }
   },
   "invitations": {

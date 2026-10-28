@@ -351,6 +351,13 @@
       "when": 1792475243376,
       "tag": "0049_wise_loners",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793117191121,
+      "tag": "0050_cultured_sleeper",
+      "breakpoints": true
     }
   ]
 }

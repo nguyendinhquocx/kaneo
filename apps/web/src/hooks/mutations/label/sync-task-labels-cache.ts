@@ -5,11 +5,11 @@ import type Task from "@/types/task";
 type TaskLabel = NonNullable<Task["labels"]>[number];
 type TaskLabelsUpdater = (labels: TaskLabel[]) => TaskLabel[];
 
-function updateTaskLabels(
-  task: Task,
+function updateTaskLabels<T extends Task>(
+  task: T,
   taskId: string,
   updater: TaskLabelsUpdater,
-): Task {
+): T {
   if (task.id !== taskId) {
     return task;
   }

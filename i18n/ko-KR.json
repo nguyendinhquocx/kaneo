@@ -1794,10 +1794,12 @@
       "deleteAction": "작업 삭제",
       "completeAria": "Mark subtask complete",
       "drag": "{{title}} 순서 드래그",
-      "moveUp": "{{title}} 위로 이동",
-      "moveDown": "{{title}} 아래로 이동",
       "editTitle": "{{title}} 제목 수정",
-      "saveTitle": "제목 저장"
+      "saveTitle": "제목 저장",
+      "dragStart": "Picked up {title}. Position {position} of {total}.",
+      "dragMove": "{title}. Moved to position {position} of {total}.",
+      "dragEnd": "Dropped {title} at position {position} of {total}.",
+      "dragCancel": "Cancelled dragging {title}. Position kept."
     },
     "properties": {
       "title": "속성",
@@ -2038,6 +2040,26 @@
         "deleteRow": "Delete row",
         "deleteTable": "Delete table"
       }
+    },
+    "display": {
+      "menu": "Display",
+      "showSubtaskCards": "Show subtask cards",
+      "showNextSubtaskPreview": "Show next subtask"
+    },
+    "workMarkers": {
+      "title": "Work markers",
+      "redCross": "Red cross",
+      "boxedRedCross": "Boxed red cross",
+      "redCircle": "Red circle",
+      "greenCheck": "Green check",
+      "increase": "Increase {name} marker for {title}",
+      "decrease": "Decrease {name} marker for {title}",
+      "countAria": "{name}: {count}",
+      "saveError": "Failed to save work markers"
+    },
+    "subtaskPreview": {
+      "next": "Next: {title}",
+      "aria": "Next up: {title}"
     }
   },
   "invitations": {

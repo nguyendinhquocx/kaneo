@@ -7378,16 +7378,22 @@
 						"drag": {
 							"type": "string"
 						},
-						"moveUp": {
-							"type": "string"
-						},
-						"moveDown": {
-							"type": "string"
-						},
 						"editTitle": {
 							"type": "string"
 						},
 						"saveTitle": {
+							"type": "string"
+						},
+						"dragStart": {
+							"type": "string"
+						},
+						"dragMove": {
+							"type": "string"
+						},
+						"dragEnd": {
+							"type": "string"
+						},
+						"dragCancel": {
 							"type": "string"
 						}
 					},
@@ -7404,10 +7410,12 @@
 						"deleteDialogDescription",
 						"deleteAction",
 						"drag",
-						"moveUp",
-						"moveDown",
 						"editTitle",
-						"saveTitle"
+						"saveTitle",
+						"dragStart",
+						"dragMove",
+						"dragEnd",
+						"dragCancel"
 					]
 				},
 				"properties": {
@@ -8337,6 +8345,86 @@
 						"noActionsFound",
 						"changeStatus"
 					]
+				},
+				"display": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"menu": {
+							"type": "string"
+						},
+						"showSubtaskCards": {
+							"type": "string"
+						},
+						"showNextSubtaskPreview": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"menu",
+						"showSubtaskCards",
+						"showNextSubtaskPreview"
+					]
+				},
+				"workMarkers": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"title": {
+							"type": "string"
+						},
+						"redCross": {
+							"type": "string"
+						},
+						"boxedRedCross": {
+							"type": "string"
+						},
+						"redCircle": {
+							"type": "string"
+						},
+						"greenCheck": {
+							"type": "string"
+						},
+						"increase": {
+							"type": "string"
+						},
+						"decrease": {
+							"type": "string"
+						},
+						"countAria": {
+							"type": "string"
+						},
+						"saveError": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"title",
+						"redCross",
+						"boxedRedCross",
+						"redCircle",
+						"greenCheck",
+						"increase",
+						"decrease",
+						"countAria",
+						"saveError"
+					]
+				},
+				"subtaskPreview": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"next": {
+							"type": "string"
+						},
+						"aria": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"next",
+						"aria"
+					]
 				}
 			},
 			"required": [
@@ -8368,7 +8456,10 @@
 				"update",
 				"contextMenu",
 				"actions",
-				"bulk"
+				"bulk",
+				"display",
+				"workMarkers",
+				"subtaskPreview"
 			]
 		},
 		"invitations": {

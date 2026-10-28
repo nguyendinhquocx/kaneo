@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Search } from "lucide-react";
+import { Eye, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
 import BoardToolbar from "@/components/board/board-toolbar";
 import ProjectLayout from "@/components/common/project-layout";
 import KanbanBoard from "@/components/kanban-board";
@@ -9,6 +10,12 @@ import ListView from "@/components/list-view";
 import PageTitle from "@/components/page-title";
 import CreateTaskModal from "@/components/shared/modals/create-task-modal";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/menu";
 import { Input } from "@/components/ui/input";
 import { shortcuts } from "@/constants/shortcuts";
 import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
@@ -18,6 +25,10 @@ import { useBoardSort } from "@/hooks/use-board-sort";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useTaskFiltersWithLabelsSupport } from "@/hooks/use-task-filters-with-labels-support";
 import { sortTasks } from "@/lib/sort-tasks";
+import {
+  resolveProjectDisplayPreferences,
+  useProjectDisplayPreferences,
+} from "@/store/project-display-preferences";
 import useProjectStore from "@/store/project";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 
@@ -79,9 +90,13 @@ function RouteComponent() {
   const { projectId, workspaceId } = Route.useParams();
   const { taskId } = Route.useSearch();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const { data } = useGetTasks(projectId);
   const { project, setProject } = useProjectStore();
   const { viewMode, setViewMode } = useUserPreferencesStore();
+  const { preferences: displayPreferences, setShowSubtaskCards, setShowNextSubtaskPreview } =
+    useProjectDisplayPreferences(userId, projectId);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [boardSearchQuery, setBoardSearchQuery] = useState("");
   const [isBoardSearchMounted, setIsBoardSearchMounted] = useState(false);
@@ -126,6 +141,27 @@ function RouteComponent() {
     }
   }, [data, setProject]);
 
+  // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: hiding subtask cards
+  // is a pure projection on top of the fetched data — children stay in the
+  // database, task detail and relation APIs. Same-project children of a
+  // board-visible parent are the only cards hidden from Board/List lanes;
+  // planned/archived parents never hide their children.
+  const { showSubtaskCards, showNextSubtaskPreview } =
+    resolveProjectDisplayPreferences(
+      displayPreferences,
+      data?.showSubtaskCardsByDefault,
+    );
+  const displayProject = useMemo(() => {
+    if (!data || showSubtaskCards) return data;
+    return {
+      ...data,
+      columns: data.columns.map((column) => ({
+        ...column,
+        tasks: column.tasks.filter((task) => !task.isSubtask),
+      })),
+    };
+  }, [data, showSubtaskCards]);
+
   const openBoardSearch = useCallback(() => {
     setIsBoardSearchMounted(true);
     window.requestAnimationFrame(() => setIsBoardSearchVisible(true));
@@ -163,7 +199,7 @@ function RouteComponent() {
     filteredProject,
     hasActiveFilters,
     clearFilters,
-  } = useTaskFiltersWithLabelsSupport(project, projectId, boardSearchQuery);
+  } = useTaskFiltersWithLabelsSupport(displayProject, projectId, boardSearchQuery);
 
   const sortedProject = useMemo(() => {
     if (!filteredProject || sort.field === "position") return filteredProject;
@@ -230,6 +266,52 @@ function RouteComponent() {
           setViewMode={setViewMode}
           sort={sort}
           onSortChange={setSort}
+          displayMenu={
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={t("tasks:display.menu")}
+                    className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-foreground text-xs font-medium outline-none ring-0 hover:bg-accent/60 sm:h-7 sm:min-w-0"
+                  />
+                }
+              >
+                <Eye className="h-3 w-3" />
+                <span className="hidden sm:inline">
+                  {t("tasks:display.menu")}
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-64" align="start">
+                <DropdownMenuItem
+                  onClick={() => setShowSubtaskCards(!showSubtaskCards)}
+                  className="h-11 rounded-md text-sm sm:h-8"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex size-4 shrink-0 items-center justify-center"
+                  >
+                    {showSubtaskCards ? "✓" : ""}
+                  </span>
+                  {t("tasks:display.showSubtaskCards")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    setShowNextSubtaskPreview(!showNextSubtaskPreview)
+                  }
+                  className="h-11 rounded-md text-sm sm:h-8"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex size-4 shrink-0 items-center justify-center"
+                  >
+                    {showNextSubtaskPreview ? "✓" : ""}
+                  </span>
+                  {t("tasks:display.showNextSubtaskPreview")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
         />
 
         <div className="flex h-full flex-1 overflow-hidden bg-background">

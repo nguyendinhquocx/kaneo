@@ -48,7 +48,12 @@ vi.mock("@/lib/toast", () => ({
   toast: { error: vi.fn() },
 }));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => {
+      if (!opts) return key;
+      return `${key} ${Object.values(opts).map(String).join(" ")}`;
+    },
+  }),
 }));
 vi.mock("./subtask-assignee-popover", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -71,6 +76,12 @@ const task: Task = {
   userId: null,
   assigneeId: null,
   assigneeName: null,
+  workMarkerCounts: {
+    redCross: 2,
+    boxedRedCross: 0,
+    redCircle: 4,
+    greenCheck: 0,
+  },
   projectId: "project-1",
 };
 
@@ -101,16 +112,14 @@ describe("SubtaskRow inline title editing", () => {
         onToggleComplete={vi.fn()}
         onNavigate={onNavigate}
         onDeleteClick={vi.fn()}
-        onMoveUp={vi.fn()}
-        onMoveDown={vi.fn()}
       />,
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "tasks:subtasks.editTitle" }),
+      screen.getByRole("button", { name: /tasks:subtasks\.editTitle/ }),
     );
     const input = screen.getByRole("textbox", {
-      name: "tasks:subtasks.editTitle",
+      name: /tasks:subtasks\.editTitle/,
     });
     fireEvent.change(input, { target: { value: "New title" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -123,5 +132,49 @@ describe("SubtaskRow inline title editing", () => {
       expect(screen.getByText("New title")).toBeVisible();
     });
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+});
+
+describe("SubtaskRow reorder affordances and markers", () => {
+  function renderRow() {
+    return render(
+      <SubtaskRow
+        task={task}
+        tasks={[task]}
+        projectId="project-1"
+        workspaceId="workspace-1"
+        isSelected={false}
+        isFocused={false}
+        isCompleted={false}
+        canEdit
+        selectionRadius="rounded-md"
+        assignee={null}
+        onToggleComplete={vi.fn()}
+        onNavigate={vi.fn()}
+        onDeleteClick={vi.fn()}
+      />,
+    );
+  }
+
+  it("renders no up/down arrow buttons — drag handle is the only reorder control", () => {
+    renderRow();
+    expect(
+      screen.queryByRole("button", { name: "tasks:subtasks.moveUp" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "tasks:subtasks.moveDown" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /tasks:subtasks\.drag/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the marker cluster with compacted counts next to the title", () => {
+    renderRow();
+    // Accessible name carries marker name + count, never a status meaning.
+    const cluster = screen.getByRole("img");
+    expect(cluster.getAttribute("aria-label")).toContain("4");
+    // Compaction: 4+ renders one glyph plus ×N instead of repeated glyphs.
+    expect(cluster.textContent).toContain("×4");
   });
 });

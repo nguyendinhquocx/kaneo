@@ -37,7 +37,7 @@ import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-rela
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
-import { moveTaskId } from "@/lib/subtask-order";
+import { normalizeWorkMarkerCounts } from "@/lib/work-markers";
 import { toast } from "@/lib/toast";
 import queryClient from "@/query-client";
 import type Task from "@/types/task";
@@ -123,8 +123,6 @@ export default function TaskSubtasks({
       orderedTargetTaskIds: ids,
     });
   };
-  const moveSubtask = (id: string, offset: -1 | 1) =>
-    saveSubtaskOrder(moveTaskId(orderedSubtaskIds, id, offset));
   const handleSubtaskDragEnd = (event: DragEndEvent) => {
     const overId = event.over?.id;
     if (overId === undefined || event.active.id === overId) return;
@@ -133,6 +131,46 @@ export default function TaskSubtasks({
     if (from >= 0 && to >= 0) {
       saveSubtaskOrder(arrayMove(orderedSubtaskIds, from, to));
     }
+  };
+
+  // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: while a keyboard drag
+  // is active, dnd-kit owns Space/Enter/ArrowUp/ArrowDown/Escape. The list
+  // key handler below must not interpret those keys as selection, open or
+  // clear actions — and Escape must keep the pre-drag focus/selection.
+  const [isDndActive, setIsDndActive] = useState(false);
+  const subtaskTitleById = new Map(
+    subtasks.map(({ task: subtask }) => [subtask.id, subtask.title]),
+  );
+  const dndAnnouncements = {
+    onDragStart: ({ active }: { active: { id: string | number } }) =>
+      t("tasks:subtasks.dragStart", {
+        title: subtaskTitleById.get(String(active.id)) ?? "",
+        position: orderedSubtaskIds.indexOf(String(active.id)) + 1,
+        total: orderedSubtaskIds.length,
+      }),
+    onDragOver: ({ active, over }: { active: { id: string | number }; over: { id: string | number } | null }) => {
+      if (!over) return undefined;
+      return t("tasks:subtasks.dragMove", {
+        title: subtaskTitleById.get(String(active.id)) ?? "",
+        position: orderedSubtaskIds.indexOf(String(over.id)) + 1,
+        total: orderedSubtaskIds.length,
+      });
+    },
+    onDragEnd: ({ active, over }: { active: { id: string | number }; over: { id: string | number } | null }) => {
+      const title = subtaskTitleById.get(String(active.id)) ?? "";
+      if (!over) {
+        return t("tasks:subtasks.dragCancel", { title });
+      }
+      return t("tasks:subtasks.dragEnd", {
+        title,
+        position: orderedSubtaskIds.indexOf(String(over.id)) + 1,
+        total: orderedSubtaskIds.length,
+      });
+    },
+    onDragCancel: ({ active }: { active: { id: string | number } }) =>
+      t("tasks:subtasks.dragCancel", {
+        title: subtaskTitleById.get(String(active.id)) ?? "",
+      }),
   };
 
   const completedCount = subtasks.filter((s) =>
@@ -172,6 +210,9 @@ export default function TaskSubtasks({
     userId: subtask.task.userId,
     assigneeId: subtask.task.userId,
     assigneeName: subtask.task.assigneeName,
+    // Relation rows carry marker counts; copy them so markers render next
+    // to subtask titles without another fetch.
+    workMarkerCounts: normalizeWorkMarkerCounts(subtask.task.workMarkerCounts),
     projectId: subtask.task.projectId,
   });
 
@@ -238,6 +279,12 @@ export default function TaskSubtasks({
       if (!container.contains(document.activeElement) && focusedIndex === -1)
         return;
 
+      // During an active keyboard drag these five keys drive the drag
+      // exclusively. Escape must not clear the pre-drag selection/focus.
+      if (isDndActive && [" ", "Enter", "ArrowUp", "ArrowDown", "Escape"].includes(e.key)) {
+        return;
+      }
+
       switch (e.key) {
         case "ArrowDown":
         case "j": {
@@ -290,6 +337,7 @@ export default function TaskSubtasks({
     workspaceId,
     projectId,
     toggleSelection,
+    isDndActive,
   ]);
 
   const handleAddSubtask = async () => {
@@ -387,9 +435,13 @@ export default function TaskSubtasks({
 
         <CollapsibleContent>
           <DndContext
+            accessibility={{ announcements: dndAnnouncements }}
+            onDragStart={() => setIsDndActive(true)}
             onDragEnd={(event) => {
+              setIsDndActive(false);
               handleSubtaskDragEnd(event);
             }}
+            onDragCancel={() => setIsDndActive(false)}
           >
             <SortableContext
               items={orderedSubtaskIds}
@@ -426,8 +478,6 @@ export default function TaskSubtasks({
                         onToggleComplete={() => handleToggleComplete(taskObj)}
                         onNavigate={() => navigateToTask(subtask.task.id)}
                         onDeleteClick={() => setDeleteTaskId(subtask.task.id)}
-                        onMoveUp={() => moveSubtask(subtask.task.id, -1)}
-                        onMoveDown={() => moveSubtask(subtask.task.id, 1)}
                       />
                     );
                   })}

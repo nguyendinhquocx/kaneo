@@ -15,6 +15,25 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+// SPEC-2026-10-27-kaneo-subtask-board-focus-markers: four fixed work marker
+// counters stored as one JSONB map. Counters are visual cues only — never a
+// status or priority signal. Every persisted value keeps all four keys.
+export type TaskMarkerCounts = {
+  redCross: number;
+  boxedRedCross: number;
+  redCircle: number;
+  greenCheck: number;
+};
+
+export const ZERO_TASK_MARKER_COUNTS: TaskMarkerCounts = {
+  redCross: 0,
+  boxedRedCross: 0,
+  redCircle: 0,
+  greenCheck: 0,
+};
+
+export const TASK_MARKER_COUNTS_JSONB_DEFAULT = sql`'{"redCross":0,"boxedRedCross":0,"redCircle":0,"greenCheck":0}'::jsonb`;
+
 export const userTable = pgTable("user", {
   id: text("id")
     .$defaultFn(() => createId())
@@ -283,6 +302,13 @@ export const projectTable = pgTable(
     isPublic: boolean("is_public").default(false),
     archivedAt: timestamp("archived_at", { mode: "date" }),
     lastTaskNumber: integer("last_task_number").notNull().default(0),
+    // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: per-user preference
+    // fallback only. Existing rows keep `true` via migration backfill; rows
+    // created after the migration default to `false` (new projects start with
+    // subtask cards hidden). The local user preference overrides this value.
+    showSubtaskCardsByDefault: boolean("show_subtask_cards_by_default")
+      .notNull()
+      .default(false),
     // SPEC-kaneo-phase-cards-full-run-server-v0-1: server-owned revision for
     // graph publish / ready CAS (WHERE project_revision = expected).
     projectRevision: integer("project_revision").notNull().default(1),
@@ -558,6 +584,12 @@ export const taskTable = pgTable(
     // Kanban `status`/`columnId` above are presentation mapping only.
     executionState: text("execution_state").notNull().default("published"),
     taskRevision: integer("task_revision").notNull().default(1),
+    // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: repeated work marker
+    // counts. Never derived from title/status/priority.
+    workMarkerCounts: jsonb("work_marker_counts")
+      .$type<TaskMarkerCounts>()
+      .notNull()
+      .default(TASK_MARKER_COUNTS_JSONB_DEFAULT),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

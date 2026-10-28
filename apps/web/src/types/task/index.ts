@@ -33,6 +33,13 @@ type TaskExternalLink = {
   metadata: Record<string, unknown> | null;
 };
 
+export type TaskMarkerCounts = {
+  redCross: number;
+  boxedRedCross: number;
+  redCircle: number;
+  greenCheck: number;
+};
+
 type Task = {
   id: string;
   title: string;
@@ -50,6 +57,9 @@ type Task = {
   assigneeName: string | null;
   assigneeImage?: string | null;
   projectId: string;
+  // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: always present —
+  // the API normalizes the full map and share mappings supply zero counts.
+  workMarkerCounts: TaskMarkerCounts;
   columnId?: string | null;
   labels?: TaskLabel[];
   externalLinks?: TaskExternalLink[];

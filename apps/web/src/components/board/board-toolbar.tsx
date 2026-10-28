@@ -59,6 +59,8 @@ type BoardToolbarProps = {
   setViewMode: (mode: "board" | "list") => void;
   sort: SortConfig;
   onSortChange: (sort: SortConfig) => void;
+  /** Optional authenticated-only controls (e.g. display preferences). */
+  displayMenu?: ReactNode;
 };
 
 function CheckSlot({ checked }: { checked: boolean }) {
@@ -146,6 +148,7 @@ export default function BoardToolbar({
   setViewMode,
   sort,
   onSortChange,
+  displayMenu,
 }: BoardToolbarProps) {
   const { t } = useTranslation();
   const selectedStatusIds = filters.status ?? [];
@@ -532,6 +535,8 @@ export default function BoardToolbar({
             </DropdownMenu>
 
             <SortControl sort={sort} onSortChange={onSortChange} />
+
+            {displayMenu}
 
             {selectedStatusIds.length > 0 && (
               <ActiveFilterChip

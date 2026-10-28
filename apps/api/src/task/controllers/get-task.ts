@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable, userTable } from "../../database/schema";
+import { normalizeWorkMarkerCounts } from "../work-marker-counts";
 
 async function getTask(taskId: string) {
   const task = await db
@@ -17,6 +18,7 @@ async function getTask(taskId: string) {
       position: taskTable.position,
       createdAt: taskTable.createdAt,
       userId: taskTable.userId,
+      workMarkerCounts: taskTable.workMarkerCounts,
       assigneeName: userTable.name,
       assigneeId: userTable.id,
       projectId: taskTable.projectId,
@@ -32,7 +34,10 @@ async function getTask(taskId: string) {
     });
   }
 
-  return task[0];
+  return {
+    ...task[0],
+    workMarkerCounts: normalizeWorkMarkerCounts(task[0].workMarkerCounts),
+  };
 }
 
 export default getTask;

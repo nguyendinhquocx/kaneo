@@ -167,7 +167,7 @@ function RouteComponent() {
   const filteredProject = useMemo(() => {
     if (!project) return null;
 
-    const filterTasks = (tasks: Task[]) => {
+    const filterTasks = <T extends Task>(tasks: T[]) => {
       return tasks.filter((task) => {
         if (filters.priority && task.priority !== filters.priority) {
           return false;

@@ -6,11 +6,13 @@ import {
   Calendar,
   CalendarClock,
   CalendarX,
+  CornerDownRight,
   GitMerge,
   GitPullRequest,
 } from "lucide-react";
 import { type CSSProperties, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -35,22 +37,35 @@ import { getInitials } from "@/lib/get-initials";
 import { getPriorityIcon } from "@/lib/priority";
 import { toast } from "@/lib/toast";
 import queryClient from "@/query-client";
+import {
+  resolveProjectDisplayPreferences,
+  useProjectDisplayPreferences,
+} from "@/store/project-display-preferences";
 import useBulkSelectionStore from "@/store/bulk-selection";
 import useProjectStore from "@/store/project";
 import { useUserPreferencesStore } from "@/store/user-preferences";
-import type Task from "@/types/task";
+import type { ProjectBoardTask } from "@/types/project";
 import { Button } from "../ui/button";
 import { ContextMenu, ContextMenuTrigger } from "../ui/context-menu";
 import TaskCardContextMenuContent from "./task-card-context-menu/task-card-context-menu-content";
 import TaskCardLabels from "./task-labels";
+import WorkMarkerCountList from "@/components/task/work-marker-counts";
 
 type TaskCardProps = {
-  task: Task;
+  task: ProjectBoardTask;
   disableDragDrop?: boolean;
+  /** Guest surfaces never render the per-user preview projection. */
+  showNextSubtaskPreviewRow?: boolean;
 };
 
-function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
+function TaskCard({
+  task,
+  disableDragDrop = false,
+  showNextSubtaskPreviewRow = true,
+}: TaskCardProps) {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const {
     attributes,
     listeners,
@@ -63,6 +78,15 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
   const { data: workspace } = useActiveWorkspace();
   const { mutateAsync: deleteTask } = useDeleteTask();
   const navigate = useNavigate();
+  const { preferences: displayPreferences } = useProjectDisplayPreferences(
+    userId,
+    task.projectId,
+  );
+  const { showNextSubtaskPreview: previewEnabled } =
+    resolveProjectDisplayPreferences(
+      displayPreferences,
+      project?.showSubtaskCardsByDefault,
+  );
   const {
     showAssignees,
     showPriority,
@@ -247,7 +271,34 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
               >
                 {task.title}
               </div>
+              <WorkMarkerCountList
+                counts={task.workMarkerCounts}
+                className="mt-1"
+              />
             </div>
+
+            {showNextSubtaskPreviewRow &&
+              previewEnabled &&
+              task.nextSubtaskPreview && (
+                <div
+                  className="mb-2.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+                  role="note"
+                  aria-label={t("tasks:subtaskPreview.aria", {
+                    title: task.nextSubtaskPreview.title,
+                  })}
+                >
+                  <CornerDownRight
+                    className="size-3 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 truncate">
+                    {task.nextSubtaskPreview.title}
+                  </span>
+                  <WorkMarkerCountList
+                    counts={task.nextSubtaskPreview.workMarkerCounts}
+                  />
+                </div>
+              )}
 
             {showLabels && (
               <div className="mb-2.5">

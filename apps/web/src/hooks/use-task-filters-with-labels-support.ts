@@ -72,7 +72,7 @@ export function useTaskFiltersWithLabelsSupport(
   }, [filters, storageKey]);
 
   const filterTasks = useCallback(
-    (tasks: Task[]): Task[] => {
+    <T extends Task>(tasks: T[]): T[] => {
       const normalizedTextQuery = textQuery?.trim().toLowerCase();
 
       return tasks.filter((task) => {

@@ -37,22 +37,31 @@ import { getInitials } from "@/lib/get-initials";
 import { getPriorityIcon } from "@/lib/priority";
 import { toast } from "@/lib/toast";
 import queryClient from "@/query-client";
+import {
+  resolveProjectDisplayPreferences,
+  useProjectDisplayPreferences,
+} from "@/store/project-display-preferences";
 import useBulkSelectionStore from "@/store/bulk-selection";
 import useProjectStore from "@/store/project";
 import { useUserPreferencesStore } from "@/store/user-preferences";
-import type Task from "@/types/task";
+import type { ProjectBoardTask } from "@/types/project";
+import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
+import WorkMarkerCountList from "@/components/task/work-marker-counts";
+import { CornerDownRight } from "lucide-react";
 import TaskCardContextMenuContent from "../kanban-board/task-card-context-menu/task-card-context-menu-content";
 import TaskCardLabels from "../kanban-board/task-labels";
 import { ContextMenu, ContextMenuTrigger } from "../ui/context-menu";
 
 type TaskRowProps = {
-  task: Task;
+  task: ProjectBoardTask;
   projectSlug: string;
 };
 
 function TaskRow({ task, projectSlug }: TaskRowProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const {
     attributes,
     listeners,
@@ -64,6 +73,15 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
 
   const { project } = useProjectStore();
   const { data: workspace } = useActiveWorkspace();
+  const { preferences: displayPreferences } = useProjectDisplayPreferences(
+    userId,
+    task.projectId,
+  );
+  const { showNextSubtaskPreview: previewEnabled } =
+    resolveProjectDisplayPreferences(
+      displayPreferences,
+      project?.showSubtaskCardsByDefault,
+  );
   const {
     showAssignees,
     showPriority,
@@ -209,11 +227,12 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
               </div>
             )}
 
-            <div className="flex-1 min-w-0 flex items-center gap-2">
+            <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
               <div className="flex items-center gap-2 justify-between w-full">
                 <span className="text-sm text-foreground truncate">
                   {task.title}
                 </span>
+                <WorkMarkerCountList counts={task.workMarkerCounts} />
                 <div className="flex items-center gap-1">
                   {showLabels && <TaskCardLabels taskId={task.id} />}
 
@@ -329,6 +348,26 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
                     })()}
                 </div>
               </div>
+              {previewEnabled && task.nextSubtaskPreview && (
+                <div
+                  className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground"
+                  role="note"
+                  aria-label={t("tasks:subtaskPreview.aria", {
+                    title: task.nextSubtaskPreview.title,
+                  })}
+                >
+                  <CornerDownRight
+                    className="size-3 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 truncate">
+                    {task.nextSubtaskPreview.title}
+                  </span>
+                  <WorkMarkerCountList
+                    counts={task.nextSubtaskPreview.workMarkerCounts}
+                  />
+                </div>
+              )}
             </div>
 
             {showDueDates && task.dueDate && (

@@ -1,11 +1,13 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import db from "../../database";
 import {
+  type TaskMarkerCounts,
   projectTable,
   taskRelationTable,
   taskTable,
   userTable,
 } from "../../database/schema";
+import { normalizeWorkMarkerCounts } from "../../task/work-marker-counts";
 
 async function getTaskRelations(taskId: string, workspaceId: string) {
   const relations = await db
@@ -43,6 +45,7 @@ async function getTaskRelations(taskId: string, workspaceId: string) {
       projectId: string;
       position: number | null;
       userId: string | null;
+      workMarkerCounts: TaskMarkerCounts;
       assigneeName: string | null;
     }
   >();
@@ -58,6 +61,7 @@ async function getTaskRelations(taskId: string, workspaceId: string) {
         projectId: taskTable.projectId,
         position: taskTable.position,
         userId: taskTable.userId,
+        workMarkerCounts: taskTable.workMarkerCounts,
         assigneeName: userTable.name,
       })
       .from(taskTable)
@@ -71,7 +75,10 @@ async function getTaskRelations(taskId: string, workspaceId: string) {
       );
 
     for (const task of taskRows) {
-      tasks.set(task.id, task);
+      tasks.set(task.id, {
+        ...task,
+        workMarkerCounts: normalizeWorkMarkerCounts(task.workMarkerCounts),
+      });
     }
   }
 

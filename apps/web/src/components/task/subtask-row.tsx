@@ -1,14 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion, useReducedMotion } from "framer-motion";
-import {
-  ArrowDown,
-  ArrowUp,
-  Check,
-  GripVertical,
-  Pencil,
-  X,
-} from "lucide-react";
+import { Check, GripVertical, Pencil, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import TaskCardContextMenuContent from "@/components/kanban-board/task-card-context-menu/task-card-context-menu-content";
@@ -23,6 +16,7 @@ import { toast } from "@/lib/toast";
 import type Task from "@/types/task";
 import SubtaskAssigneePopover from "./subtask-assignee-popover";
 import SubtaskStatusPopover from "./subtask-status-popover";
+import WorkMarkerCountList from "./work-marker-counts";
 
 type SubtaskRowProps = {
   task: Task;
@@ -40,8 +34,6 @@ type SubtaskRowProps = {
   onToggleComplete: () => void;
   onNavigate: () => void;
   onDeleteClick: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
 };
 
 export default function SubtaskRow({
@@ -58,8 +50,6 @@ export default function SubtaskRow({
   onToggleComplete,
   onNavigate,
   onDeleteClick,
-  onMoveUp,
-  onMoveDown,
 }: SubtaskRowProps) {
   const reduceMotion = useReducedMotion();
   const { t } = useTranslation();
@@ -135,40 +125,16 @@ export default function SubtaskRow({
             className={`group flex items-center gap-2 py-1 px-2 ${selectionRadius} transition-colors cursor-default ${isSelected ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-accent/50"} ${isFocused ? "ring-1 ring-inset ring-ring/50" : ""}`}
           >
             {canEdit ? (
-              <div className="flex shrink-0 items-center gap-0.5">
-                <button
-                  type="button"
-                  ref={setActivatorNodeRef}
-                  className="flex size-8 items-center justify-center rounded text-muted-foreground hover:bg-accent sm:size-7"
-                  aria-label={t("tasks:subtasks.drag", { title: task.title })}
-                  {...attributes}
-                  {...listeners}
-                >
-                  <GripVertical className="size-3.5" aria-hidden="true" />
-                </button>
-                <div className="hidden flex-col sm:flex">
-                  <button
-                    type="button"
-                    className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent"
-                    onClick={onMoveUp}
-                    aria-label={t("tasks:subtasks.moveUp", {
-                      title: task.title,
-                    })}
-                  >
-                    <ArrowUp className="size-3" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent"
-                    onClick={onMoveDown}
-                    aria-label={t("tasks:subtasks.moveDown", {
-                      title: task.title,
-                    })}
-                  >
-                    <ArrowDown className="size-3" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                ref={setActivatorNodeRef}
+                className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent sm:size-8"
+                aria-label={t("tasks:subtasks.drag", { title: task.title })}
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="size-3.5" aria-hidden="true" />
+              </button>
             ) : null}
 
             {/* Completion — toggles the subtask done/undone and persists it. */}
@@ -250,6 +216,7 @@ export default function SubtaskRow({
                       {displayTitle}
                     </span>
                   </button>
+                  <WorkMarkerCountList counts={task.workMarkerCounts} />
                   {canEdit ? (
                     <button
                       type="button"

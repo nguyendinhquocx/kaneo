@@ -1796,10 +1796,12 @@
       "deleteAction": "Видалити завдання",
       "completeAria": "Mark subtask complete",
       "drag": "Перетягніть, щоб змінити порядок {{title}}",
-      "moveUp": "Перемістити {{title}} вгору",
-      "moveDown": "Перемістити {{title}} вниз",
       "editTitle": "Змінити назву {{title}}",
-      "saveTitle": "Зберегти назву"
+      "saveTitle": "Зберегти назву",
+      "dragStart": "Picked up {title}. Position {position} of {total}.",
+      "dragMove": "{title}. Moved to position {position} of {total}.",
+      "dragEnd": "Dropped {title} at position {position} of {total}.",
+      "dragCancel": "Cancelled dragging {title}. Position kept."
     },
     "properties": {
       "title": "Властивості",
@@ -2042,6 +2044,26 @@
         "deleteRow": "Delete row",
         "deleteTable": "Delete table"
       }
+    },
+    "display": {
+      "menu": "Display",
+      "showSubtaskCards": "Show subtask cards",
+      "showNextSubtaskPreview": "Show next subtask"
+    },
+    "workMarkers": {
+      "title": "Work markers",
+      "redCross": "Red cross",
+      "boxedRedCross": "Boxed red cross",
+      "redCircle": "Red circle",
+      "greenCheck": "Green check",
+      "increase": "Increase {name} marker for {title}",
+      "decrease": "Decrease {name} marker for {title}",
+      "countAria": "{name}: {count}",
+      "saveError": "Failed to save work markers"
+    },
+    "subtaskPreview": {
+      "next": "Next: {title}",
+      "aria": "Next up: {title}"
     }
   },
   "invitations": {

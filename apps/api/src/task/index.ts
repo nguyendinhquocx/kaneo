@@ -42,7 +42,23 @@ import updateTaskDueDate from "./controllers/update-task-due-date";
 import updateTaskPriority from "./controllers/update-task-priority";
 import updateTaskStatus from "./controllers/update-task-status";
 import updateTaskTitle from "./controllers/update-task-title";
+import updateWorkMarkers from "./controllers/update-work-markers";
 import { VALID_PRIORITIES } from "./validate-task-fields";
+import { normalizeWorkMarkerCounts } from "./work-marker-counts";
+
+const workMarkerCountSchema = v.pipe(
+  v.number(),
+  v.integer("Marker count must be an integer"),
+  v.minValue(0, "Marker count must be between 0 and 99"),
+  v.maxValue(99, "Marker count must be between 0 and 99"),
+);
+
+const workMarkerCountsSchema = v.strictObject({
+  redCross: workMarkerCountSchema,
+  boxedRedCross: workMarkerCountSchema,
+  redCircle: workMarkerCountSchema,
+  greenCheck: workMarkerCountSchema,
+});
 
 const task = new Hono<{
   Variables: {
@@ -559,6 +575,39 @@ const task = new Hono<{
       const task = await updateTaskPriority({ id, priority, currentUserId });
 
       return c.json(task);
+    },
+  )
+  .put(
+    "/work-markers/:id",
+    describeRoute({
+      operationId: "updateWorkMarkers",
+      tags: ["Tasks"],
+      description:
+        "Replace the full work marker count map of a task (visual cues only)",
+      responses: {
+        200: {
+          description: "Work marker counts updated successfully",
+          content: {
+            "application/json": { schema: resolver(taskSchema) },
+          },
+        },
+      },
+    }),
+    validator("param", v.object({ id: v.string() })),
+    validator(
+      "json",
+      v.object({ workMarkerCounts: workMarkerCountsSchema }),
+    ),
+    workspaceAccess.fromTask(),
+    phaseCardTaskGuard("param", "id"),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { workMarkerCounts } = c.req.valid("json");
+
+      const task = await updateWorkMarkers({ id, workMarkerCounts });
+
+      return c.json({ ...task, workMarkerCounts: normalizeWorkMarkerCounts(task.workMarkerCounts) });
     },
   )
   .put(

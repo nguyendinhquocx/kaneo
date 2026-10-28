@@ -1794,10 +1794,12 @@
       "deleteAction": "Eliminar tarea",
       "completeAria": "Mark subtask complete",
       "drag": "Arrastrar para reordenar {{title}}",
-      "moveUp": "Mover {{title}} hacia arriba",
-      "moveDown": "Mover {{title}} hacia abajo",
       "editTitle": "Editar el título de {{title}}",
-      "saveTitle": "Guardar título"
+      "saveTitle": "Guardar título",
+      "dragStart": "Picked up {title}. Position {position} of {total}.",
+      "dragMove": "{title}. Moved to position {position} of {total}.",
+      "dragEnd": "Dropped {title} at position {position} of {total}.",
+      "dragCancel": "Cancelled dragging {title}. Position kept."
     },
     "properties": {
       "title": "Propiedades",
@@ -2038,6 +2040,26 @@
       "statusLabel": "Destination status",
       "success": "Task moved successfully",
       "title": "Move task"
+    },
+    "display": {
+      "menu": "Display",
+      "showSubtaskCards": "Show subtask cards",
+      "showNextSubtaskPreview": "Show next subtask"
+    },
+    "workMarkers": {
+      "title": "Work markers",
+      "redCross": "Red cross",
+      "boxedRedCross": "Boxed red cross",
+      "redCircle": "Red circle",
+      "greenCheck": "Green check",
+      "increase": "Increase {name} marker for {title}",
+      "decrease": "Decrease {name} marker for {title}",
+      "countAria": "{name}: {count}",
+      "saveError": "Failed to save work markers"
+    },
+    "subtaskPreview": {
+      "next": "Next: {title}",
+      "aria": "Next up: {title}"
     }
   },
   "invitations": {

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ZERO_WORK_MARKER_COUNTS } from "@/lib/work-markers";
 import TaskDescriptionEditor from "@/components/task/task-description-editor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -101,6 +102,8 @@ function normalizeTask(
     assigneeImage: task.assigneeImage ?? null,
     labels: task.labels ?? [],
     externalLinks: task.externalLinks ?? [],
+    workMarkerCounts:
+      task.workMarkerCounts ?? { ...ZERO_WORK_MARKER_COUNTS },
   };
 }
 
@@ -290,6 +293,8 @@ function CreateTaskModal({
         targetColumn.tasks.push({
           ...existingTask,
           ...task,
+          isSubtask: existingTask?.isSubtask ?? false,
+          nextSubtaskPreview: existingTask?.nextSubtaskPreview ?? null,
           assigneeId: task.userId,
           assigneeName:
             workspaceUsers?.members?.find(

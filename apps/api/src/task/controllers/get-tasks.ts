@@ -6,6 +6,7 @@ import {
   gte,
   inArray,
   lte,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -16,9 +17,11 @@ import {
   externalLinkTable,
   labelTable,
   projectTable,
+  taskRelationTable,
   taskTable,
   userTable,
 } from "../../database/schema";
+import { normalizeWorkMarkerCounts } from "../work-marker-counts";
 
 type GetTasksOptions = {
   assigneeId?: string;
@@ -132,6 +135,7 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     position: taskTable.position,
     createdAt: taskTable.createdAt,
     userId: taskTable.userId,
+    workMarkerCounts: taskTable.workMarkerCounts,
     assigneeName: userTable.name,
     assigneeId: userTable.id,
     assigneeImage: userTable.image,
@@ -221,6 +225,133 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     .where(eq(columnTable.projectId, projectId))
     .orderBy(asc(columnTable.position));
 
+  const columnBySlug = new Map(
+    projectColumns.map((column) => [column.slug, column]),
+  );
+  const isBoardVisibleStatus = (status: string) => columnBySlug.has(status);
+  const isFinalStatus = (status: string) =>
+    columnBySlug.get(status)?.isFinal === true;
+
+  // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: batch subtask
+  // projection. One relation query + one related-task query regardless of how
+  // many parents/children the project has (no per-card fetch).
+  const subtaskRelationsOfProject =
+    taskIds.length > 0
+      ? await db
+          .select({
+            id: taskRelationTable.id,
+            sourceTaskId: taskRelationTable.sourceTaskId,
+            targetTaskId: taskRelationTable.targetTaskId,
+            position: taskRelationTable.position,
+            createdAt: taskRelationTable.createdAt,
+          })
+          .from(taskRelationTable)
+          .where(
+            and(
+              eq(taskRelationTable.relationType, "subtask"),
+              or(
+                inArray(taskRelationTable.sourceTaskId, taskIds),
+                inArray(taskRelationTable.targetTaskId, taskIds),
+              ),
+            ),
+          )
+          .orderBy(
+            asc(taskRelationTable.position),
+            asc(taskRelationTable.createdAt),
+          )
+      : [];
+
+  const relatedTaskIds = new Set<string>();
+  for (const relation of subtaskRelationsOfProject) {
+    relatedTaskIds.add(relation.sourceTaskId);
+    relatedTaskIds.add(relation.targetTaskId);
+  }
+
+  const relatedTaskRows =
+    relatedTaskIds.size > 0
+      ? await db
+          .select({
+            id: taskTable.id,
+            title: taskTable.title,
+            projectId: taskTable.projectId,
+            status: taskTable.status,
+            workMarkerCounts: taskTable.workMarkerCounts,
+          })
+          .from(taskTable)
+          .where(inArray(taskTable.id, [...relatedTaskIds]))
+      : [];
+
+  const relatedTaskById = new Map(
+    relatedTaskRows.map((task) => [task.id, task]),
+  );
+
+  // A task is a subtask card only when it is a child of a parent in the same
+  // project whose status maps to a real board column (planned/archived
+  // parents must NOT hide their children from the board).
+  const childRelationByTaskId = new Map<string, boolean>();
+  const subtaskChildrenByParentId = new Map<
+    string,
+    Array<{
+      targetTaskId: string;
+    }>
+  >();
+
+  for (const relation of subtaskRelationsOfProject) {
+    const child = relatedTaskById.get(relation.targetTaskId);
+    const parent = relatedTaskById.get(relation.sourceTaskId);
+    if (!child || !parent) {
+      continue;
+    }
+    if (
+      child.projectId !== projectId ||
+      parent.projectId !== projectId ||
+      !isBoardVisibleStatus(parent.status)
+    ) {
+      continue;
+    }
+
+    childRelationByTaskId.set(child.id, true);
+    const children = subtaskChildrenByParentId.get(parent.id) ?? [];
+    children.push({ targetTaskId: child.id });
+    subtaskChildrenByParentId.set(parent.id, children);
+  }
+
+  // First same-project, board-visible, non-final child in relation order is
+  // the "next work" preview. planned/archived and final-column children are
+  // never selected. Relations were ordered by position, createdAt already.
+  const buildNextSubtaskPreview = (parentId: string) => {
+    const children = subtaskChildrenByParentId.get(parentId);
+    if (!children || children.length === 0) {
+      return null;
+    }
+
+    for (const child of children) {
+      const full = relatedTaskById.get(child.targetTaskId);
+      if (!full) {
+        continue;
+      }
+      if (
+        full.projectId === projectId &&
+        isBoardVisibleStatus(full.status) &&
+        !isFinalStatus(full.status)
+      ) {
+        return {
+          id: full.id,
+          title: full.title,
+          workMarkerCounts: normalizeWorkMarkerCounts(full.workMarkerCounts),
+        };
+      }
+    }
+    return null;
+  };
+
+  const decorateTask = (task: (typeof paginatedTasks)[number]) => ({
+    ...task,
+    workMarkerCounts: normalizeWorkMarkerCounts(task.workMarkerCounts),
+    isSubtask: childRelationByTaskId.has(task.id),
+    nextSubtaskPreview: buildNextSubtaskPreview(task.id),
+  });
+
   const columns = projectColumns.map((column) => ({
     id: column.slug,
     slug: column.slug,
@@ -229,6 +360,7 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     isFinal: column.isFinal,
     tasks: paginatedTasks
       .filter((task) => task.status === column.slug)
+      .map(decorateTask)
       .map((task) => ({
         ...task,
         labels: taskLabelsMap.get(task.id) || [],
@@ -238,6 +370,7 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
 
   const archivedTasks = paginatedTasks
     .filter((task) => task.status === "archived")
+    .map(decorateTask)
     .map((task) => ({
       ...task,
       labels: taskLabelsMap.get(task.id) || [],
@@ -246,6 +379,7 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
 
   const plannedTasks = paginatedTasks
     .filter((task) => task.status === "planned")
+    .map(decorateTask)
     .map((task) => ({
       ...task,
       labels: taskLabelsMap.get(task.id) || [],
@@ -261,6 +395,7 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
       description: project.description,
       isPublic: project.isPublic,
       workspaceId: project.workspaceId,
+      showSubtaskCardsByDefault: project.showSubtaskCardsByDefault,
       columns,
       archivedTasks,
       plannedTasks,

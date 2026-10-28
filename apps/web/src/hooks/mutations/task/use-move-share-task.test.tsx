@@ -3,7 +3,6 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ShareCapabilityProvider } from "@/components/share/share-capability";
-import { moveShareFullTask } from "@/fetchers/share/share-full-api";
 import type { ProjectWithTasks } from "@/types/project";
 import { useMoveShareTask } from "./use-update-task";
 

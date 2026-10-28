@@ -3,6 +3,7 @@ import { getShareCapability } from "@/components/share/share-capability";
 import { getShareFullTaskDetail } from "@/fetchers/share/share-full-api";
 import getTask from "@/fetchers/task/get-task";
 import type Task from "@/types/task";
+import { ZERO_WORK_MARKER_COUNTS } from "@/lib/work-markers";
 
 function useGetTask(taskId: string) {
   const capability = getShareCapability();
@@ -29,6 +30,8 @@ function useGetTask(taskId: string) {
           userId: detail.assigneeId,
           assigneeId: detail.assigneeId,
           assigneeName: null,
+          // Guest payloads carry no marker data — map to zero counts.
+          workMarkerCounts: { ...ZERO_WORK_MARKER_COUNTS },
           projectId: detail.projectId,
           labels: detail.labels.map((label) => ({
             id: label.id,

@@ -27,7 +27,7 @@ function getPriorityValue(priority: string | null): number {
   return priorityOrder[priority] ?? 0;
 }
 
-export function sortTasks(tasks: Task[], config: SortConfig): Task[] {
+export function sortTasks<T extends Task>(tasks: T[], config: SortConfig): T[] {
   if (config.field === "position") {
     return tasks;
   }

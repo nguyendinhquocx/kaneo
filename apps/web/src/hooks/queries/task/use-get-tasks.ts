@@ -8,6 +8,7 @@ import {
 import getTasks from "@/fetchers/task/get-tasks";
 import type { ProjectWithTasks } from "@/types/project";
 import type Task from "@/types/task";
+import { ZERO_WORK_MARKER_COUNTS } from "@/lib/work-markers";
 
 function mapShareTask(task: ShareFullTask): Task {
   return {
@@ -24,6 +25,8 @@ function mapShareTask(task: ShareFullTask): Task {
     userId: task.assigneeId,
     assigneeId: task.assigneeId,
     assigneeName: null,
+    // Public DTOs never carry markers: guests always see zero counts.
+    workMarkerCounts: { ...ZERO_WORK_MARKER_COUNTS },
     projectId: task.projectId,
     labels: (task.labels ?? []).map((label) => ({
       id: label.id,
@@ -44,12 +47,27 @@ export function mapShareFullProjectPayload(
     description: payload.description,
     workspaceId: "",
     isPublic: true,
+    // Guests never receive the project display default; the share surface
+    // keeps child cards visible exactly as before.
+    showSubtaskCardsByDefault: true,
     columns: payload.columns.map((column) => ({
       ...column,
-      tasks: column.tasks.map(mapShareTask),
+      tasks: column.tasks.map((task) => ({
+        ...mapShareTask(task),
+        isSubtask: false,
+        nextSubtaskPreview: null,
+      })),
     })),
-    archivedTasks: payload.archivedTasks.map(mapShareTask),
-    plannedTasks: payload.plannedTasks.map(mapShareTask),
+    archivedTasks: payload.archivedTasks.map((task) => ({
+      ...mapShareTask(task),
+      isSubtask: false,
+      nextSubtaskPreview: null,
+    })),
+    plannedTasks: payload.plannedTasks.map((task) => ({
+      ...mapShareTask(task),
+      isSubtask: false,
+      nextSubtaskPreview: null,
+    })),
   } as unknown as ProjectWithTasks;
 }
 

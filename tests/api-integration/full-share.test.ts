@@ -1099,6 +1099,9 @@ describe("API integration: full project share capability", () => {
     const createdPayload = (await created.json()) as Record<string, unknown>;
     expect(createdPayload).not.toHaveProperty("executionState");
     expect(createdPayload).not.toHaveProperty("taskRevision");
+    // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: work marker counts
+    // are authenticated-only data and must never leak into guest payloads.
+    expect(createdPayload).not.toHaveProperty("workMarkerCounts");
     const task = createdPayload as { id: string; status: string };
     expect(task.status).toBe("planned");
 
@@ -1398,6 +1401,7 @@ describe("API integration: full project share capability", () => {
     expect(detailPayload.description).toBeNull();
     expect(detailPayload).not.toHaveProperty("agentControlled");
     expect(detailPayload).not.toHaveProperty("descriptionLocked");
+    expect(detailPayload).not.toHaveProperty("workMarkerCounts");
     expect(detailPayload.comments.map((comment) => comment.content)).toEqual([
       "Member comment",
     ]);
