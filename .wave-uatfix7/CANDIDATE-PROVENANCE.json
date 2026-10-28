@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "spec": "SPEC-2026-10-27-kaneo-subtask-board-focus-markers (post-UAT visual refinement)",
+  "source_sha": "d56f1bbae914269fdd3b322fae4cbea19528603c",
+  "upstream_sha": "d56f1bbae914269fdd3b322fae4cbea19528603c",
+  "dirty_state": "clean-tracked",
+  "dirty_paths": [],
+  "dirty_manifest_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "patch_manifest_sha256": "3e19023f459862486b9c5a7644f6366f7c34f181873ddbb7f248b1908da48243",
+  "output_tree_sha256": "3e19023f459862486b9c5a7644f6366f7c34f181873ddbb7f248b1908da48243",
+  "committed_files": [
+    "apps/web/src/components/kanban-board/task-card.tsx",
+    "apps/web/src/components/list-view/task-row.tsx",
+    "apps/web/src/components/task/task-properties-sidebar.test.tsx",
+    "apps/web/src/components/task/task-properties-sidebar.tsx",
+    "apps/web/src/components/task/work-marker-picker.test.tsx",
+    "apps/web/src/components/task/work-marker-picker.tsx",
+    "docs/specs/.working/SPEC-2026-10-27-kaneo-subtask-board-focus-markers.md"
+  ]
+}

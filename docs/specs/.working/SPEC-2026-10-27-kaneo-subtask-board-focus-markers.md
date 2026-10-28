@@ -347,7 +347,7 @@ Owner production UAT found three visual refinements; supplied screenshots: `c3e0
 - `TaskCard` and List `TaskRow` title/preview spans now shrink without growing, leaving marker clusters immediately after the visible text; ellipsis remains on the text before markers.
 - `WorkMarkerPicker` keeps `Marker` as the accessible name; the visible text is present only when counts are empty. Selected glyphs are the only visible trigger content. The shared trigger is left-aligned; the stacked desktop properties instance uses the full property width. Picker options now use a labeled `fieldset`.
 - Regression evidence: focused marker/sidebar tests 9/9 PASS; complete web suite 37 files / 111 tests PASS; web typecheck PASS; web build PASS (existing >500KB chunk-size warning); `pnpm i18n:check` 13 locales PASS; `git diff --check` PASS; Impeccable detector `[]`.
-- Local visual capture after the patch was not completed: the managed browser session no longer had an authenticated local session and redirected to sign-in. No credentials were passed to browser tooling. The owner-provided screenshots are the verified before-state; production re-UAT remains the visual acceptance gate after rollout.
+- Local visual capture after the patch was not completed: the managed browser session no longer had an authenticated local session and redirected to sign-in. No credentials were passed to browser tooling. The owner-provided screenshots are the verified before-state. Candidate `uatfix7` is deployed; owner production re-UAT remains the visual acceptance gate. Receipt: `.wave-uatfix7/APPLY-RECEIPT.md`.
 
 ## Completion Gates
 
