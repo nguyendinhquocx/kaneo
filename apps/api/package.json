@@ -23,6 +23,7 @@
     "test:watch": "vitest --config vitest.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:check-0050": "node ../../scripts/check-migration-0050-upgrade.mjs",
     "db:studio": "drizzle-kit studio",
     "db:seed:user-data": "tsx scripts/seed-user-data.ts",
     "openapi:export": "tsx scripts/export-openapi.ts"

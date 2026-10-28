@@ -31,17 +31,3 @@ export function normalizeWorkMarkerCounts(value: unknown): TaskMarkerCounts {
   }
   return normalized;
 }
-
-export function isTaskMarkerCountsShape(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const raw = value as Record<string, unknown>;
-  return MARKER_KEYS.every(
-    (key) =>
-      typeof raw[key] === "number" &&
-      Number.isInteger(raw[key]) &&
-      raw[key] >= 0 &&
-      raw[key] <= 99,
-  );
-}

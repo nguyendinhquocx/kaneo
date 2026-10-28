@@ -9,11 +9,18 @@ export const labelSchema = v.object({
   workspaceId: v.nullable(v.string()),
 });
 
+const taskMarkerCountSchema = v.pipe(
+  v.number(),
+  v.integer(),
+  v.minValue(0),
+  v.maxValue(99),
+);
+
 export const taskMarkerCountsSchema = v.object({
-  redCross: v.number(),
-  boxedRedCross: v.number(),
-  redCircle: v.number(),
-  greenCheck: v.number(),
+  redCross: taskMarkerCountSchema,
+  boxedRedCross: taskMarkerCountSchema,
+  redCircle: taskMarkerCountSchema,
+  greenCheck: taskMarkerCountSchema,
 });
 
 export const projectSchema = v.object({

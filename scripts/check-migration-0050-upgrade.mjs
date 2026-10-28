@@ -9,8 +9,8 @@
 //   3. applies migrations 0000..0049 (everything BEFORE 0050),
 //   4. seeds a legacy workspace/project/task (rows that exist before the
 //      new migration),
-//   5. applies 0050 and asserts the legacy project flips to `true` while
-//      rows inserted after it default to `false`.
+//   5. applies 0050 and asserts legacy project/task defaults, while project
+//      and task rows inserted after it receive their declared defaults.
 // The disposable database is dropped at the end — no shared state touched.
 //
 // Usage: node scripts/check-migration-0050-upgrade.mjs
@@ -151,15 +151,31 @@ try {
     }
     console.log("Backfill OK: pre-existing task row got all-zero marker counts");
 
-    // 5. Rows inserted after the migration default to false.
+    // 5. Rows inserted after migration get the declared project/task defaults.
+    const newProjectId = `proj-${randomUUID()}`;
     const newProject = await client.query(
       `INSERT INTO "project" ("id", "workspace_id", "name", "slug", "created_at") VALUES ($1, $2, 'Post-upgrade project', $3, now()) RETURNING "show_subtask_cards_by_default"`,
-      [`proj-${randomUUID()}`, workspaceId, `post-${randomUUID()}`],
+      [newProjectId, workspaceId, `post-${randomUUID()}`],
     );
-    if (newProject.rows[0].show_subtask_cards_by_default !== false) {
+    if (newProject.rows[0]?.show_subtask_cards_by_default !== false) {
       fail("post-migration project rows must default to false");
     }
-    console.log("New-row check OK: post-migration inserts default to false");
+    console.log("New-project check OK: post-migration rows default to false");
+
+    const newTask = await client.query(
+      `INSERT INTO "task" ("id", "project_id", "title", "created_at") VALUES ($1, $2, 'Post-upgrade task', now()) RETURNING "work_marker_counts"`,
+      [`task-${randomUUID()}`, newProjectId],
+    );
+    const newTaskCounts = newTask.rows[0]?.work_marker_counts;
+    if (
+      newTaskCounts?.redCross !== 0 ||
+      newTaskCounts?.boxedRedCross !== 0 ||
+      newTaskCounts?.redCircle !== 0 ||
+      newTaskCounts?.greenCheck !== 0
+    ) {
+      fail(`post-migration task rows must default to all-zero markers, got ${JSON.stringify(newTaskCounts)}`);
+    }
+    console.log("New-task check OK: post-migration rows default to all-zero markers");
   } finally {
     await client.end();
   }

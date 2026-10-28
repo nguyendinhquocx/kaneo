@@ -1144,6 +1144,23 @@ describe("API integration: full project share capability", () => {
     expect(updatedPayload).not.toHaveProperty("executionState");
     expect(updatedPayload).not.toHaveProperty("taskRevision");
 
+    const guestMarkerWrite = await app.request(
+      `/api/share/project/${link.token}/task/${task.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workMarkerCounts: {
+            redCross: 1,
+            boxedRedCross: 0,
+            redCircle: 0,
+            greenCheck: 0,
+          },
+        }),
+      },
+    );
+    expect(guestMarkerWrite.status).toBe(400);
+
     // Lane order is owned by the POST move endpoint; PUT must not accept it.
     const positionWrite = await app.request(
       `/api/share/project/${link.token}/task/${task.id}`,

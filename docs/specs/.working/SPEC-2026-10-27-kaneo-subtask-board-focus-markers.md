@@ -231,7 +231,7 @@ erDiagram
   - Screenshot evidence covers Board/List at 1280px and 375px for legacy default, new-project default, hidden/shown children, long preview, repeated/compacted markers, keyboard/pointer reorder; overflow matrix 320/375/414/768/1024/1280/1440.
   - Keyboard regression proves lift/drop keys do not select/open tasks; Escape cancels drag without clearing pre-drag selection/focus; idle list keyboard shortcuts remain unchanged.
 - Reproduce: repo root `pnpm --filter @kaneo/api build`; chạy riêng các gate web/i18n dưới Verify để shell không phụ thuộc `&&`.
-- Verify: existing API test from T1 plus expanded web tests from T2; separate migration upgrade check; screenshots/runtime evidence; `D:\.claude\skills\impeccable\scripts\impeccable.cmd detect --json apps/web/src/components/board/board-toolbar.tsx apps/web/src/components/kanban-board/task-card.tsx apps/web/src/components/list-view/task-row.tsx apps/web/src/components/task/subtask-row.tsx apps/web/src/components/task/task-properties-sidebar.tsx`.
+- Verify: existing API test from T1 plus expanded web tests from T2; `DATABASE_URL=<connection-to-*_test> pnpm --filter @kaneo/api db:check-0050` runs the real pre-0050→0050 upgrade check on a unique disposable database; screenshots/runtime evidence; `D:\.claude\skills\impeccable\scripts\impeccable.cmd detect --json apps/web/src/components/board/board-toolbar.tsx apps/web/src/components/kanban-board/task-card.tsx apps/web/src/components/list-view/task-row.tsx apps/web/src/components/task/subtask-row.tsx apps/web/src/components/task/task-properties-sidebar.tsx`.
 - Files: paths listed under T1/T2; evidence under `.impeccable/review/` or `uat/` per repo convention.
 
 ## Checkpoints
