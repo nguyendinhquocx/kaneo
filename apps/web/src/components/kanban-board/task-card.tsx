@@ -291,7 +291,7 @@ function TaskCard({
                     className="size-3 shrink-0"
                     aria-hidden="true"
                   />
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 flex-1 truncate">
                     {task.nextSubtaskPreview.title}
                   </span>
                   <WorkMarkerCountList

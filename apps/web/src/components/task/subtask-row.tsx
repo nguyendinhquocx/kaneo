@@ -128,7 +128,7 @@ export default function SubtaskRow({
               <button
                 type="button"
                 ref={setActivatorNodeRef}
-                className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent sm:size-8"
+                className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent"
                 aria-label={t("tasks:subtasks.drag", { title: task.title })}
                 {...attributes}
                 {...listeners}

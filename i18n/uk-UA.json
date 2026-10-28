@@ -1798,10 +1798,10 @@
       "drag": "Перетягніть, щоб змінити порядок {{title}}",
       "editTitle": "Змінити назву {{title}}",
       "saveTitle": "Зберегти назву",
-      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
-      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
-      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
-      "dragCancel": "Cancelled dragging {{title}}. Position kept."
+      "dragStart": "Завдання {{title}} піднято. Позиція {{position}} із {{total}}.",
+      "dragMove": "{{title}} переміщено на позицію {{position}} із {{total}}.",
+      "dragEnd": "{{title}} розміщено на позиції {{position}} із {{total}}.",
+      "dragCancel": "Перетягування {{title}} скасовано. Позицію збережено."
     },
     "properties": {
       "title": "Властивості",
@@ -2046,24 +2046,24 @@
       }
     },
     "display": {
-      "menu": "Display",
-      "showSubtaskCards": "Show subtask cards",
-      "showNextSubtaskPreview": "Show next subtask"
+      "menu": "Відображення",
+      "showSubtaskCards": "Показувати картки підзавдань",
+      "showNextSubtaskPreview": "Показувати наступне підзавдання"
     },
     "workMarkers": {
-      "title": "Work markers",
-      "redCross": "Red cross",
-      "boxedRedCross": "Boxed red cross",
-      "redCircle": "Red circle",
-      "greenCheck": "Green check",
-      "increase": "Increase {{name}} marker for {{title}}",
-      "decrease": "Decrease {{name}} marker for {{title}}",
+      "title": "Робочі маркери",
+      "redCross": "Червоний хрестик",
+      "boxedRedCross": "Червоний хрестик у рамці",
+      "redCircle": "Червоне коло",
+      "greenCheck": "Зелена позначка",
+      "increase": "Збільшити маркер {{name}} для {{title}}",
+      "decrease": "Зменшити маркер {{name}} для {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Failed to save work markers"
+      "saveError": "Не вдалося зберегти робочі маркери"
     },
     "subtaskPreview": {
-      "next": "Next: {{title}}",
-      "aria": "Next up: {{title}}"
+      "next": "Далі: {{title}}",
+      "aria": "Наступна робота: {{title}}"
     }
   },
   "invitations": {

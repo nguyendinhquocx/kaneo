@@ -1,4 +1,5 @@
 import { Minus, Plus } from "lucide-react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useUpdateWorkMarkers } from "@/hooks/mutations/task/use-update-work-markers";
@@ -19,15 +20,26 @@ export function WorkMarkerEditor({
   workspaceId: string;
 }) {
   const { t } = useTranslation();
-  const { mutateAsync: saveMarkers } = useUpdateWorkMarkers(task.id, projectId);
+  const {
+    mutateAsync: saveMarkers,
+    isPending: isSavingMarkers,
+  } = useUpdateWorkMarkers(task.id, projectId);
+  const saveLock = useRef(false);
 
   const changeCount = async (key: keyof TaskMarkerCounts, delta: -1 | 1) => {
+    // The endpoint replaces all four counts. Lock synchronously, then disable
+    // the controls while pending, so rapid clicks cannot submit the same
+    // stale map twice and silently lose one increment.
+    if (isSavingMarkers || saveLock.current) {
+      return;
+    }
     const current = normalizeWorkMarkerCounts(task.workMarkerCounts);
     const nextValue = Math.min(99, Math.max(0, current[key] + delta));
     if (nextValue === current[key]) {
       return;
     }
     const next: TaskMarkerCounts = { ...current, [key]: nextValue };
+    saveLock.current = true;
     try {
       await saveMarkers(next);
     } catch (error) {
@@ -36,6 +48,8 @@ export function WorkMarkerEditor({
           ? error.message
           : t("tasks:workMarkers.saveError"),
       );
+    } finally {
+      saveLock.current = false;
     }
   };
 
@@ -73,7 +87,7 @@ export function WorkMarkerEditor({
                     name: markerName,
                     title: task.title,
                   })}
-                  disabled={count === 0 || !workspaceId}
+                  disabled={count === 0 || !workspaceId || isSavingMarkers}
                   onClick={() => void changeCount(key, -1)}
                 >
                   <Minus className="size-3.5" />
@@ -87,7 +101,7 @@ export function WorkMarkerEditor({
                     name: markerName,
                     title: task.title,
                   })}
-                  disabled={count >= 99 || !workspaceId}
+                  disabled={count >= 99 || !workspaceId || isSavingMarkers}
                   onClick={() => void changeCount(key, 1)}
                 >
                   <Plus className="size-3.5" />

@@ -42,7 +42,7 @@ export function WorkMarkerCountList({
       role="img"
       aria-label={accessibleName}
       className={cn(
-        "inline max-w-full min-w-0 shrink items-center gap-0.5 overflow-hidden whitespace-nowrap align-middle text-xs leading-none",
+        "inline-flex max-w-full shrink-0 items-center gap-0.5 whitespace-nowrap align-middle text-xs leading-none",
         className,
       )}
     >

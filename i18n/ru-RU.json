@@ -1806,10 +1806,10 @@
       "drag": "Перетащите, чтобы изменить порядок: {{title}}",
       "editTitle": "Изменить название: {{title}}",
       "saveTitle": "Сохранить название",
-      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
-      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
-      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
-      "dragCancel": "Cancelled dragging {{title}}. Position kept."
+      "dragStart": "Выбрана задача «{{title}}». Позиция {{position}} из {{total}}.",
+      "dragMove": "Задача «{{title}}» перемещена на позицию {{position}} из {{total}}.",
+      "dragEnd": "Задача «{{title}}» установлена на позицию {{position}} из {{total}}.",
+      "dragCancel": "Перетаскивание задачи «{{title}}» отменено. Позиция сохранена."
     },
     "properties": {
       "title": "Свойства",
@@ -2102,24 +2102,24 @@
       }
     },
     "display": {
-      "menu": "Display",
-      "showSubtaskCards": "Show subtask cards",
-      "showNextSubtaskPreview": "Show next subtask"
+      "menu": "Отображение",
+      "showSubtaskCards": "Показывать карточки подзадач",
+      "showNextSubtaskPreview": "Показывать следующую подзадачу"
     },
     "workMarkers": {
-      "title": "Work markers",
-      "redCross": "Red cross",
-      "boxedRedCross": "Boxed red cross",
-      "redCircle": "Red circle",
-      "greenCheck": "Green check",
-      "increase": "Increase {{name}} marker for {{title}}",
-      "decrease": "Decrease {{name}} marker for {{title}}",
+      "title": "Рабочие маркеры",
+      "redCross": "Красный крест",
+      "boxedRedCross": "Красный крест в рамке",
+      "redCircle": "Красный круг",
+      "greenCheck": "Зелёная галочка",
+      "increase": "Увеличить маркер «{{name}}» для задачи «{{title}}»",
+      "decrease": "Уменьшить маркер «{{name}}» для задачи «{{title}}»",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Failed to save work markers"
+      "saveError": "Не удалось сохранить рабочие маркеры"
     },
     "subtaskPreview": {
-      "next": "Next: {{title}}",
-      "aria": "Next up: {{title}}"
+      "next": "Далее: {{title}}",
+      "aria": "Следующая задача: {{title}}"
     }
   },
   "invitations": {

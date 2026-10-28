@@ -1796,10 +1796,10 @@
       "drag": "Seret untuk menyusun ulang {{title}}",
       "editTitle": "Edit judul {{title}}",
       "saveTitle": "Simpan judul",
-      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
-      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
-      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
-      "dragCancel": "Cancelled dragging {{title}}. Position kept."
+      "dragStart": "{{title}} diangkat. Posisi {{position}} dari {{total}}.",
+      "dragMove": "{{title}} dipindahkan ke posisi {{position}} dari {{total}}.",
+      "dragEnd": "{{title}} dijatuhkan di posisi {{position}} dari {{total}}.",
+      "dragCancel": "Penarikan {{title}} dibatalkan. Posisi tetap."
     },
     "properties": {
       "title": "Properti",
@@ -2042,24 +2042,24 @@
       }
     },
     "display": {
-      "menu": "Display",
-      "showSubtaskCards": "Show subtask cards",
-      "showNextSubtaskPreview": "Show next subtask"
+      "menu": "Tampilan",
+      "showSubtaskCards": "Tampilkan kartu subtugas",
+      "showNextSubtaskPreview": "Tampilkan subtugas berikutnya"
     },
     "workMarkers": {
-      "title": "Work markers",
-      "redCross": "Red cross",
-      "boxedRedCross": "Boxed red cross",
-      "redCircle": "Red circle",
-      "greenCheck": "Green check",
-      "increase": "Increase {{name}} marker for {{title}}",
-      "decrease": "Decrease {{name}} marker for {{title}}",
+      "title": "Penanda pekerjaan",
+      "redCross": "Silang merah",
+      "boxedRedCross": "Silang merah dalam kotak",
+      "redCircle": "Lingkaran merah",
+      "greenCheck": "Tanda centang hijau",
+      "increase": "Tambah penanda {{name}} untuk {{title}}",
+      "decrease": "Kurangi penanda {{name}} untuk {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Failed to save work markers"
+      "saveError": "Penanda pekerjaan gagal disimpan"
     },
     "subtaskPreview": {
-      "next": "Next: {{title}}",
-      "aria": "Next up: {{title}}"
+      "next": "Berikutnya: {{title}}",
+      "aria": "Pekerjaan berikutnya: {{title}}"
     }
   },
   "invitations": {

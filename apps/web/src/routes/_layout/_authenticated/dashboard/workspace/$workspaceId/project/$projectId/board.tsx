@@ -12,8 +12,8 @@ import CreateTaskModal from "@/components/shared/modals/create-task-modal";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/menu";
 import { Input } from "@/components/ui/input";
@@ -273,7 +273,7 @@ function RouteComponent() {
                   <button
                     type="button"
                     aria-label={t("tasks:display.menu")}
-                    className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-foreground text-xs font-medium outline-none ring-0 hover:bg-accent/60 sm:h-7 sm:min-w-0"
+                    className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-foreground text-xs font-medium outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:h-7 sm:min-w-0"
                   />
                 }
               >
@@ -283,32 +283,20 @@ function RouteComponent() {
                 </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-64" align="start">
-                <DropdownMenuItem
-                  onClick={() => setShowSubtaskCards(!showSubtaskCards)}
-                  className="h-11 rounded-md text-sm sm:h-8"
+                <DropdownMenuCheckboxItem
+                  checked={showSubtaskCards}
+                  onCheckedChange={setShowSubtaskCards}
+                  className="min-h-11 rounded-md text-sm sm:min-h-8"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="inline-flex size-4 shrink-0 items-center justify-center"
-                  >
-                    {showSubtaskCards ? "✓" : ""}
-                  </span>
                   {t("tasks:display.showSubtaskCards")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    setShowNextSubtaskPreview(!showNextSubtaskPreview)
-                  }
-                  className="h-11 rounded-md text-sm sm:h-8"
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={showNextSubtaskPreview}
+                  onCheckedChange={setShowNextSubtaskPreview}
+                  className="min-h-11 rounded-md text-sm sm:min-h-8"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="inline-flex size-4 shrink-0 items-center justify-center"
-                  >
-                    {showNextSubtaskPreview ? "✓" : ""}
-                  </span>
                   {t("tasks:display.showNextSubtaskPreview")}
-                </DropdownMenuItem>
+                </DropdownMenuCheckboxItem>
               </DropdownMenuContent>
             </DropdownMenu>
           }

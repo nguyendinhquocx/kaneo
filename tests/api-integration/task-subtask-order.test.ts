@@ -535,5 +535,175 @@ describe("API integration: work markers, project default and subtask projection"
     );
     expect(parentARow?.nextSubtaskPreview).toBeNull();
   });
-});
 
+  it("exposes marker counts on relation source/target payloads", async () => {
+    await resetTestDatabase();
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const parent = await insertTask(project.id, columns.todo.id, "Parent", 0);
+    const child = await insertTask(project.id, columns.todo.id, "Child", 1);
+    await insertSubtaskRelation(parent.id, child.id, 0);
+
+    await db
+      .update(schema.taskTable)
+      .set({
+        workMarkerCounts: { redCross: 2, boxedRedCross: 1, redCircle: 0, greenCheck: 0 },
+      })
+      .where(eq(schema.taskTable.id, parent.id));
+    await db
+      .update(schema.taskTable)
+      .set({
+        workMarkerCounts: { redCross: 0, boxedRedCross: 3, redCircle: 4, greenCheck: 2 },
+      })
+      .where(eq(schema.taskTable.id, child.id));
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+    const response = await app.request(`/api/task-relation/${parent.id}`);
+    expect(response.status).toBe(200);
+    const relations = (await response.json()) as Array<{
+      sourceTask:
+        | { id: string; workMarkerCounts: Record<string, number> }
+        | null;
+      targetTask:
+        | { id: string; workMarkerCounts: Record<string, number> }
+        | null;
+    }>;
+    const subtask = relations.find(
+      (relation) => relation.targetTask?.id === child.id,
+    );
+    expect(subtask?.sourceTask?.workMarkerCounts).toEqual({
+      redCross: 2,
+      boxedRedCross: 1,
+      redCircle: 0,
+      greenCheck: 0,
+    });
+    expect(subtask?.targetTask?.workMarkerCounts).toEqual({
+      redCross: 0,
+      boxedRedCross: 3,
+      redCircle: 4,
+      greenCheck: 2,
+    });
+  });
+
+  it("keeps immutable task fields untouched when replacing markers", async () => {
+    await resetTestDatabase();
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const task = await insertTask(project.id, columns.todo.id, "Frozen", 0);
+    const before = (await db.query.taskTable.findFirst({
+      where: eq(schema.taskTable.id, task.id),
+    }))!;
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+    const response = await app.request(`/api/task/work-markers/${task.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workMarkerCounts: {
+          redCross: 1,
+          boxedRedCross: 2,
+          redCircle: 3,
+          greenCheck: 4,
+        },
+      }),
+    });
+    expect(response.status).toBe(200);
+
+    const after = (await db.query.taskTable.findFirst({
+      where: eq(schema.taskTable.id, task.id),
+    }))!;
+    expect(after.title).toBe(before.title);
+    expect(after.status).toBe(before.status);
+    expect(after.priority).toBe(before.priority);
+    expect(after.position).toBe(before.position);
+    expect(after.number).toBe(before.number);
+    expect(after.executionState).toBe(before.executionState);
+    expect(after.taskRevision).toBe(before.taskRevision);
+    expect(after.workMarkerCounts).toEqual({
+      redCross: 1,
+      boxedRedCross: 2,
+      redCircle: 3,
+      greenCheck: 4,
+    });
+  });
+
+  it("keeps projection correct across pagination and archived parents", async () => {
+    await resetTestDatabase();
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project, columns } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const parent = await insertTask(project.id, columns.todo.id, "Parent", 0);
+    const child = await insertTask(project.id, columns.todo.id, "Child", 1);
+    await insertSubtaskRelation(parent.id, child.id, 0);
+
+    const archivedParent = await insertTask(
+      project.id,
+      columns.todo.id,
+      "Archived parent",
+      2,
+      "archived",
+    );
+    const archivedChild = await insertTask(
+      project.id,
+      columns.todo.id,
+      "Archived child",
+      3,
+    );
+    await insertSubtaskRelation(archivedParent.id, archivedChild.id, 0);
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    // Parent and child land on different pages; the preview must still be
+    // computed over the full project relation graph.
+    const page1 = await app.request(
+      `/api/task/tasks/${project.id}?page=1&limit=1`,
+    );
+    expect(page1.status).toBe(200);
+    const page1Payload = (await page1.json()) as {
+      data: { columns: Array<{ slug: string; tasks: Array<Record<string, unknown>> }> };
+    };
+    const parentRow = todoColumnTasks(page1Payload).find(
+      (task) => task.id === parent.id,
+    );
+    expect(parentRow?.nextSubtaskPreview).toMatchObject({ id: child.id });
+
+    const page2 = await app.request(
+      `/api/task/tasks/${project.id}?page=2&limit=1`,
+    );
+    expect(page2.status).toBe(200);
+    const page2Payload = (await page2.json()) as {
+      data: {
+        columns: Array<{ slug: string; tasks: Array<Record<string, unknown>> }>;
+        archivedTasks: Array<Record<string, unknown>>;
+      };
+    };
+    const childRow = todoColumnTasks(page2Payload).find(
+      (task) => task.id === child.id,
+    );
+    expect(childRow?.isSubtask).toBe(true);
+
+    // Archived parent is not board-visible: its child stays visible and is
+    // not treated as a hidden subtask card.
+    const full = await app.request(`/api/task/tasks/${project.id}`);
+    expect(full.status).toBe(200);
+    const fullPayload = (await full.json()) as {
+      data: {
+        columns: Array<{ slug: string; tasks: Array<Record<string, unknown>> }>;
+        archivedTasks: Array<Record<string, unknown>>;
+      };
+    };
+    const archivedChildRow = todoColumnTasks(fullPayload).find(
+      (task) => task.id === archivedChild.id,
+    );
+    expect(archivedChildRow).toBeDefined();
+    expect(archivedChildRow?.isSubtask).toBe(false);
+  });
+});

@@ -210,7 +210,7 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
             onClick={handleClick}
             onKeyDown={handleKeyDown}
             className={cn(
-              "group relative flex items-center gap-3 px-4 py-1.5 transition-colors cursor-pointer",
+              "group relative flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5 transition-colors cursor-pointer sm:flex-nowrap sm:gap-3",
               isTaskSelected ? "bg-accent/45" : "hover:bg-accent/60",
             )}
             {...attributes}
@@ -227,13 +227,13 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
               </div>
             )}
 
-            <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-              <div className="flex items-center gap-2 justify-between w-full">
-                <span className="text-sm text-foreground truncate">
+            <div className="basis-full min-w-0 flex-1 flex flex-col justify-center gap-0.5 sm:basis-0">
+              <div className="flex w-full min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-1.5">
+                <span className="w-full min-w-0 truncate text-sm text-foreground sm:w-auto sm:flex-1">
                   {task.title}
                 </span>
                 <WorkMarkerCountList counts={task.workMarkerCounts} />
-                <div className="flex items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1 sm:ml-auto">
                   {showLabels && <TaskCardLabels taskId={task.id} />}
 
                   {pullRequests.length === 1 && (
@@ -360,7 +360,7 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
                     className="size-3 shrink-0"
                     aria-hidden="true"
                   />
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 flex-1 truncate">
                     {task.nextSubtaskPreview.title}
                   </span>
                   <WorkMarkerCountList

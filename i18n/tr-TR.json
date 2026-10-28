@@ -1796,10 +1796,10 @@
       "drag": "Sıralamak için {{title}} öğesini sürükleyin",
       "editTitle": "{{title}} başlığını düzenle",
       "saveTitle": "Başlığı kaydet",
-      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
-      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
-      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
-      "dragCancel": "Cancelled dragging {{title}}. Position kept."
+      "dragStart": "{{title}} alındı. {{total}} içinde {{position}}. sırada.",
+      "dragMove": "{{title}}, {{total}} içinde {{position}}. sıraya taşındı.",
+      "dragEnd": "{{title}}, {{total}} içinde {{position}}. sıraya bırakıldı.",
+      "dragCancel": "{{title}} sürükleme işlemi iptal edildi. Sırası korundu."
     },
     "properties": {
       "title": "Özellikler",
@@ -2042,24 +2042,24 @@
       }
     },
     "display": {
-      "menu": "Display",
-      "showSubtaskCards": "Show subtask cards",
-      "showNextSubtaskPreview": "Show next subtask"
+      "menu": "Görünüm",
+      "showSubtaskCards": "Alt görev kartlarını göster",
+      "showNextSubtaskPreview": "Sıradaki alt görevi göster"
     },
     "workMarkers": {
-      "title": "Work markers",
-      "redCross": "Red cross",
-      "boxedRedCross": "Boxed red cross",
-      "redCircle": "Red circle",
-      "greenCheck": "Green check",
-      "increase": "Increase {{name}} marker for {{title}}",
-      "decrease": "Decrease {{name}} marker for {{title}}",
+      "title": "İşaretçiler",
+      "redCross": "Kırmızı çarpı",
+      "boxedRedCross": "Kutulu kırmızı çarpı",
+      "redCircle": "Kırmızı daire",
+      "greenCheck": "Yeşil onay işareti",
+      "increase": "{{title}} için {{name}} işaretçisini artır",
+      "decrease": "{{title}} için {{name}} işaretçisini azalt",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Failed to save work markers"
+      "saveError": "İşaretçiler kaydedilemedi"
     },
     "subtaskPreview": {
-      "next": "Next: {{title}}",
-      "aria": "Next up: {{title}}"
+      "next": "Sıradaki: {{title}}",
+      "aria": "Sıradaki iş: {{title}}"
     }
   },
   "invitations": {

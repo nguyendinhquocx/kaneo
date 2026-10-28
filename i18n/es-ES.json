@@ -1796,10 +1796,10 @@
       "drag": "Arrastrar para reordenar {{title}}",
       "editTitle": "Editar el título de {{title}}",
       "saveTitle": "Guardar título",
-      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
-      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
-      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
-      "dragCancel": "Cancelled dragging {{title}}. Position kept."
+      "dragStart": "Se ha seleccionado {{title}}. Posición {{position}} de {{total}}.",
+      "dragMove": "{{title}} se ha movido a la posición {{position}} de {{total}}.",
+      "dragEnd": "{{title}} se ha colocado en la posición {{position}} de {{total}}.",
+      "dragCancel": "Se ha cancelado el arrastre de {{title}}. Se mantiene la posición."
     },
     "properties": {
       "title": "Propiedades",
@@ -2042,24 +2042,24 @@
       "title": "Move task"
     },
     "display": {
-      "menu": "Display",
-      "showSubtaskCards": "Show subtask cards",
-      "showNextSubtaskPreview": "Show next subtask"
+      "menu": "Visualización",
+      "showSubtaskCards": "Mostrar tarjetas de subtareas",
+      "showNextSubtaskPreview": "Mostrar la siguiente subtarea"
     },
     "workMarkers": {
-      "title": "Work markers",
-      "redCross": "Red cross",
-      "boxedRedCross": "Boxed red cross",
-      "redCircle": "Red circle",
-      "greenCheck": "Green check",
-      "increase": "Increase {{name}} marker for {{title}}",
-      "decrease": "Decrease {{name}} marker for {{title}}",
+      "title": "Marcadores de trabajo",
+      "redCross": "Cruz roja",
+      "boxedRedCross": "Cruz roja enmarcada",
+      "redCircle": "Círculo rojo",
+      "greenCheck": "Marca verde",
+      "increase": "Aumentar el marcador {{name}} de {{title}}",
+      "decrease": "Reducir el marcador {{name}} de {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Failed to save work markers"
+      "saveError": "No se pudieron guardar los marcadores de trabajo"
     },
     "subtaskPreview": {
-      "next": "Next: {{title}}",
-      "aria": "Next up: {{title}}"
+      "next": "Siguiente: {{title}}",
+      "aria": "Siguiente tarea: {{title}}"
     }
   },
   "invitations": {

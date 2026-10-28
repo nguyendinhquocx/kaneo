@@ -1796,10 +1796,10 @@
       "drag": "{{title}} 순서 드래그",
       "editTitle": "{{title}} 제목 수정",
       "saveTitle": "제목 저장",
-      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
-      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
-      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
-      "dragCancel": "Cancelled dragging {{title}}. Position kept."
+      "dragStart": "{{title}}을(를) 들었습니다. {{total}}개 중 {{position}}번째입니다.",
+      "dragMove": "{{title}}을(를) {{total}}개 중 {{position}}번째로 옮겼습니다.",
+      "dragEnd": "{{title}}을(를) {{total}}개 중 {{position}}번째에 놓았습니다.",
+      "dragCancel": "{{title}} 이동을 취소했습니다. 위치를 유지합니다."
     },
     "properties": {
       "title": "속성",
@@ -2042,24 +2042,24 @@
       }
     },
     "display": {
-      "menu": "Display",
-      "showSubtaskCards": "Show subtask cards",
-      "showNextSubtaskPreview": "Show next subtask"
+      "menu": "표시",
+      "showSubtaskCards": "하위 작업 카드 표시",
+      "showNextSubtaskPreview": "다음 하위 작업 표시"
     },
     "workMarkers": {
-      "title": "Work markers",
-      "redCross": "Red cross",
-      "boxedRedCross": "Boxed red cross",
-      "redCircle": "Red circle",
-      "greenCheck": "Green check",
-      "increase": "Increase {{name}} marker for {{title}}",
-      "decrease": "Decrease {{name}} marker for {{title}}",
-      "countAria": "{{name}}: {{count}}",
-      "saveError": "Failed to save work markers"
+      "title": "작업 마커",
+      "redCross": "빨간 십자",
+      "boxedRedCross": "네모 안의 빨간 십자",
+      "redCircle": "빨간 원",
+      "greenCheck": "초록 체크",
+      "increase": "{{title}}의 {{name}} 마커 늘리기",
+      "decrease": "{{title}}의 {{name}} 마커 줄이기",
+      "countAria": "{{name}}: {{count}}개",
+      "saveError": "작업 마커를 저장하지 못했습니다"
     },
     "subtaskPreview": {
-      "next": "Next: {{title}}",
-      "aria": "Next up: {{title}}"
+      "next": "다음 작업: {{title}}",
+      "aria": "다음 작업: {{title}}"
     }
   },
   "invitations": {

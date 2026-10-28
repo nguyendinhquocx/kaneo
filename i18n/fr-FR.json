@@ -1796,10 +1796,10 @@
       "drag": "Glisser pour réorganiser {{title}}",
       "editTitle": "Modifier le titre de {{title}}",
       "saveTitle": "Enregistrer le titre",
-      "dragStart": "Picked up {{title}}. Position {{position}} of {{total}}.",
-      "dragMove": "{{title}}. Moved to position {{position}} of {{total}}.",
-      "dragEnd": "Dropped {{title}} at position {{position}} of {{total}}.",
-      "dragCancel": "Cancelled dragging {{title}}. Position kept."
+      "dragStart": "{{title}} est sélectionnée. Position {{position}} sur {{total}}.",
+      "dragMove": "{{title}} déplacée en position {{position}} sur {{total}}.",
+      "dragEnd": "{{title}} déposée en position {{position}} sur {{total}}.",
+      "dragCancel": "Déplacement de {{title}} annulé. La position est conservée."
     },
     "properties": {
       "title": "Propriétés",
@@ -2042,24 +2042,24 @@
       }
     },
     "display": {
-      "menu": "Display",
-      "showSubtaskCards": "Show subtask cards",
-      "showNextSubtaskPreview": "Show next subtask"
+      "menu": "Affichage",
+      "showSubtaskCards": "Afficher les cartes de sous-tâches",
+      "showNextSubtaskPreview": "Afficher la prochaine sous-tâche"
     },
     "workMarkers": {
-      "title": "Work markers",
-      "redCross": "Red cross",
-      "boxedRedCross": "Boxed red cross",
-      "redCircle": "Red circle",
-      "greenCheck": "Green check",
-      "increase": "Increase {{name}} marker for {{title}}",
-      "decrease": "Decrease {{name}} marker for {{title}}",
-      "countAria": "{{name}}: {{count}}",
-      "saveError": "Failed to save work markers"
+      "title": "Marqueurs de travail",
+      "redCross": "Croix rouge",
+      "boxedRedCross": "Croix rouge encadrée",
+      "redCircle": "Cercle rouge",
+      "greenCheck": "Coche verte",
+      "increase": "Augmenter le marqueur {{name}} pour {{title}}",
+      "decrease": "Diminuer le marqueur {{name}} pour {{title}}",
+      "countAria": "{{name}} : {{count}}",
+      "saveError": "Échec de l’enregistrement des marqueurs de travail"
     },
     "subtaskPreview": {
-      "next": "Next: {{title}}",
-      "aria": "Next up: {{title}}"
+      "next": "À suivre : {{title}}",
+      "aria": "Prochaine tâche : {{title}}"
     }
   },
   "invitations": {

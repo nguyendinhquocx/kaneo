@@ -744,6 +744,32 @@ describe("API integration: full project share capability", () => {
       },
     );
     expect(moved.status).toBe(200);
+
+    // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: even when the owner
+    // task carries non-zero marker counts, the guest board payload must not
+    // expose the marker keys or the authenticated subtask projection.
+    await db
+      .update(schema.taskTable)
+      .set({
+        workMarkerCounts: { redCross: 3, boxedRedCross: 1, redCircle: 5, greenCheck: 0 },
+      })
+      .where(eq(schema.taskTable.id, createdTask.id));
+    const boardAfterMarker = await app.request(
+      `/api/share/project/${link.token}`,
+    );
+    expect(boardAfterMarker.status).toBe(200);
+    const markerPayload = (await boardAfterMarker.json()) as {
+      showSubtaskCardsByDefault?: unknown;
+      columns: Array<{ tasks: Array<Record<string, unknown>> }>;
+    };
+    expect(markerPayload).not.toHaveProperty("showSubtaskCardsByDefault");
+    for (const column of markerPayload.columns) {
+      for (const guestTask of column.tasks) {
+        expect(guestTask).not.toHaveProperty("workMarkerCounts");
+        expect(guestTask).not.toHaveProperty("isSubtask");
+        expect(guestTask).not.toHaveProperty("nextSubtaskPreview");
+      }
+    }
   });
 
   it("moves guest kanban cards in one write and reindexes integer lane positions", async () => {
