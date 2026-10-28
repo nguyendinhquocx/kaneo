@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
-import { activitySchema, projectSchema, taskSchema } from "../schemas";
+import { activitySchema, projectSchema } from "../schemas";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import globalSearch from "./controllers/global-search";
 
@@ -15,8 +15,29 @@ const workspaceSchema = v.object({
   createdAt: v.date(),
 });
 
+const searchTaskSchema = v.object({
+  id: v.string(),
+  type: v.literal("task"),
+  title: v.string(),
+  description: v.optional(v.string()),
+  projectId: v.optional(v.string()),
+  projectName: v.optional(v.string()),
+  projectSlug: v.optional(v.string()),
+  workspaceId: v.optional(v.string()),
+  workspaceName: v.optional(v.string()),
+  userId: v.optional(v.string()),
+  userName: v.optional(v.string()),
+  createdAt: v.date(),
+  relevanceScore: v.number(),
+  taskNumber: v.optional(v.number()),
+  priority: v.optional(v.string()),
+  status: v.optional(v.string()),
+});
+
 const searchResultSchema = v.object({
-  tasks: v.optional(v.array(taskSchema)),
+  // Search hits are intentionally a smaller projection than task detail; do
+  // not claim they contain marker counts that this query does not fetch.
+  tasks: v.optional(v.array(searchTaskSchema)),
   projects: v.optional(v.array(projectSchema)),
   workspaces: v.optional(v.array(workspaceSchema)),
   comments: v.optional(v.array(activitySchema)),

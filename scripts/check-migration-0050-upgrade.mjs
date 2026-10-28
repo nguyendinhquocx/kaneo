@@ -5,7 +5,7 @@
 // legacy backfill. This check builds a throwaway database that mimics the
 // pre-upgrade state and then runs the real migration:
 //   1. reviews the migration file for an explicit UPDATE statement,
-//   2. creates a disposable `kaneo_migration_check_tmp` database,
+//   2. creates a uniquely named disposable `kaneo_migration_check_<uuid>` database,
 //   3. applies migrations 0000..0049 (everything BEFORE 0050),
 //   4. seeds a legacy workspace/project/task (rows that exist before the
 //      new migration),
@@ -16,8 +16,9 @@
 // Usage: node scripts/check-migration-0050-upgrade.mjs
 // (DATABASE_URL must point at a *_test database; only its server connection
 // info is reused — the check runs against its own temporary database.)
-import { readFileSync } from "node:fs";
+
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 // pnpm keeps `pg` inside apps/api's dependency folder — resolve from there.
@@ -60,7 +61,9 @@ if (updateStatements.length !== 1) {
     `expected exactly one "UPDATE \\"project\\"..." backfill statement in 0050, found ${updateStatements.length}`,
   );
 }
-console.log(`SQL review OK: backfill statement found:\n  ${updateStatements[0]}`);
+console.log(
+  `SQL review OK: backfill statement found:\n  ${updateStatements[0]}`,
+);
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || !new URL(databaseUrl).pathname.endsWith("_test")) {
@@ -147,9 +150,13 @@ try {
       counts?.redCircle !== 0 ||
       counts?.greenCheck !== 0
     ) {
-      fail(`legacy task row must get all-zero marker counts, got ${JSON.stringify(counts)}`);
+      fail(
+        `legacy task row must get all-zero marker counts, got ${JSON.stringify(counts)}`,
+      );
     }
-    console.log("Backfill OK: pre-existing task row got all-zero marker counts");
+    console.log(
+      "Backfill OK: pre-existing task row got all-zero marker counts",
+    );
 
     // 5. Rows inserted after migration get the declared project/task defaults.
     const newProjectId = `proj-${randomUUID()}`;
@@ -173,17 +180,25 @@ try {
       newTaskCounts?.redCircle !== 0 ||
       newTaskCounts?.greenCheck !== 0
     ) {
-      fail(`post-migration task rows must default to all-zero markers, got ${JSON.stringify(newTaskCounts)}`);
+      fail(
+        `post-migration task rows must default to all-zero markers, got ${JSON.stringify(newTaskCounts)}`,
+      );
     }
-    console.log("New-task check OK: post-migration rows default to all-zero markers");
+    console.log(
+      "New-task check OK: post-migration rows default to all-zero markers",
+    );
   } finally {
     await client.end();
   }
-  console.log("Upgrade check PASS: 0050 verified on a real pre-upgrade database");
+  console.log(
+    "Upgrade check PASS: 0050 verified on a real pre-upgrade database",
+  );
 } finally {
   if (adminConnected) {
     if (tempDatabaseCreated) {
-      await admin.query(`DROP DATABASE IF EXISTS "${tmpDatabase}" WITH (FORCE)`);
+      await admin.query(
+        `DROP DATABASE IF EXISTS "${tmpDatabase}" WITH (FORCE)`,
+      );
       console.log("Cleanup OK: disposable database dropped");
     }
     await admin.end();
