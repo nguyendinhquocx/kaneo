@@ -277,7 +277,7 @@ function TaskCard({
             )}
 
             <div className="mb-2.5 flex min-w-0 items-center gap-1 pr-6">
-              <span className="min-w-0 flex-1 truncate text-sm leading-5 font-medium text-foreground/95">
+              <span className="min-w-0 shrink truncate text-sm leading-5 font-medium text-foreground/95">
                 {task.title}
               </span>
               <WorkMarkerCountList counts={task.workMarkerCounts} />
@@ -296,7 +296,7 @@ function TaskCard({
                     className="size-3 shrink-0"
                     aria-hidden="true"
                   />
-                  <span aria-hidden="true" className="min-w-0 flex-1 truncate">
+                  <span aria-hidden="true" className="min-w-0 shrink truncate">
                     {task.nextSubtaskPreview.title}
                   </span>
                   <WorkMarkerCountList

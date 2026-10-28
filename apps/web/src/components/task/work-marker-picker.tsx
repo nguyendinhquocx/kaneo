@@ -8,6 +8,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useUpdateWorkMarkers } from "@/hooks/mutations/task/use-update-work-markers";
+import { cn } from "@/lib/cn";
+import { toast } from "@/lib/toast";
 import {
   normalizeWorkMarkerCounts,
   toggleWorkMarkerPreset,
@@ -15,7 +17,6 @@ import {
   WORK_MARKER_KEYS,
   type WorkMarkerKey,
 } from "@/lib/work-markers";
-import { toast } from "@/lib/toast";
 import type Task from "@/types/task";
 import WorkMarkerCountList from "./work-marker-counts";
 
@@ -24,6 +25,7 @@ type WorkMarkerPickerProps = {
   projectId: string;
   workspaceId: string;
   trigger?: "label" | "icon";
+  triggerClassName?: string;
 };
 
 /** One quick picker serves the task header and each editable subtask row. */
@@ -32,6 +34,7 @@ export default function WorkMarkerPicker({
   projectId,
   workspaceId,
   trigger = "label",
+  triggerClassName,
 }: WorkMarkerPickerProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -70,7 +73,10 @@ export default function WorkMarkerPicker({
             type="button"
             variant="ghost"
             size="sm"
-            className="size-11 shrink-0 p-0 text-muted-foreground hover:text-foreground sm:size-7"
+            className={cn(
+              "size-11 shrink-0 p-0 text-muted-foreground hover:text-foreground sm:size-7",
+              triggerClassName,
+            )}
             aria-label={t("tasks:workMarkers.openForTask", {
               title: task.title,
             })}
@@ -83,12 +89,18 @@ export default function WorkMarkerPicker({
             type="button"
             variant="ghost"
             size="sm"
-            className="min-h-11 shrink-0 gap-1.5 px-2 text-xs font-medium sm:min-h-7"
+            className={cn(
+              "min-h-11 shrink-0 justify-start gap-1.5 px-2 text-left text-xs font-medium sm:min-h-7",
+              triggerClassName,
+            )}
             aria-label={t("tasks:workMarkers.title")}
             aria-haspopup="dialog"
           >
-            <span>{t("tasks:workMarkers.title")}</span>
-            {hasMarkers && <WorkMarkerCountList counts={counts} />}
+            {hasMarkers ? (
+              <WorkMarkerCountList counts={counts} />
+            ) : (
+              <span>{t("tasks:workMarkers.title")}</span>
+            )}
           </Button>
         )}
       </PopoverTrigger>
@@ -97,11 +109,8 @@ export default function WorkMarkerPicker({
         className="w-64 p-1"
         aria-label={t("tasks:workMarkers.title")}
       >
-        <div
-          role="group"
-          aria-label={t("tasks:workMarkers.title")}
-          className="flex flex-col gap-0.5"
-        >
+        <fieldset className="m-0 flex min-w-0 flex-col gap-0.5 border-0 p-0">
+          <legend className="sr-only">{t("tasks:workMarkers.title")}</legend>
           {WORK_MARKER_KEYS.map((key) => {
             const markerName = t(`tasks:workMarkers.${key}`);
             const isActive = counts[key] > 0;
@@ -120,17 +129,22 @@ export default function WorkMarkerPicker({
                 aria-disabled={!workspaceId || isPending}
                 onClick={() => void selectPreset(key)}
               >
-                <span className="inline-flex shrink-0 items-center gap-0.5 text-base" aria-hidden="true">
+                <span
+                  className="inline-flex shrink-0 items-center gap-0.5 text-base"
+                  aria-hidden="true"
+                >
                   {WORK_MARKER_GLYPHS[key].repeat(3)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-xs">
                   {markerName}
                 </span>
-                {isActive && <Check className="size-4 shrink-0" aria-hidden="true" />}
+                {isActive && (
+                  <Check className="size-4 shrink-0" aria-hidden="true" />
+                )}
               </Button>
             );
           })}
-        </div>
+        </fieldset>
         {isPending && (
           <span role="status" aria-live="polite" className="sr-only">
             {t("tasks:workMarkers.saving")}

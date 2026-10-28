@@ -143,6 +143,46 @@ describe("WorkMarkerPicker", () => {
     });
   });
 
+  it("shows only glyphs when selected and keeps the trigger left-aligned", () => {
+    const { rerender } = render(
+      <WorkMarkerPicker
+        task={task}
+        projectId="project-1"
+        workspaceId="workspace-1"
+        triggerClassName="w-full"
+      />,
+    );
+
+    const emptyTrigger = screen.getByRole("button", {
+      name: "tasks:workMarkers.title",
+    });
+    expect(emptyTrigger).toHaveTextContent("tasks:workMarkers.title");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+
+    rerender(
+      <WorkMarkerPicker
+        task={{
+          ...task,
+          workMarkerCounts: { ...task.workMarkerCounts, redCircle: 3 },
+        }}
+        projectId="project-1"
+        workspaceId="workspace-1"
+        triggerClassName="w-full"
+      />,
+    );
+
+    const selectedTrigger = screen.getByRole("button", {
+      name: "tasks:workMarkers.title",
+    });
+    expect(selectedTrigger).not.toHaveTextContent("tasks:workMarkers.title");
+    expect(
+      screen.getByRole("img", {
+        name: "tasks:workMarkers.countAria tasks:workMarkers.redCircle 3",
+      }),
+    ).toBeVisible();
+    expect(selectedTrigger).toHaveClass("justify-start", "text-left", "w-full");
+  });
+
   it("reports a failed save and leaves the picker open for recovery", async () => {
     saveMarkers.mockRejectedValue(new Error("network failure"));
     render(

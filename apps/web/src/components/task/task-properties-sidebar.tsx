@@ -739,6 +739,7 @@ export default function TaskPropertiesSidebar({
                     task={task}
                     projectId={projectId}
                     workspaceId={workspaceId}
+                    triggerClassName="w-full"
                   />
                 )}
               </div>

@@ -83,8 +83,18 @@ vi.mock("@/hooks/mutations/task/use-update-task-due-date", () => ({
 }));
 
 vi.mock("./work-marker-picker", () => ({
-  default: ({ task }: { task: { id: string } }) => (
-    <button type="button" aria-label={`marker:${task.id}`}>
+  default: ({
+    task,
+    triggerClassName,
+  }: {
+    task: { id: string };
+    triggerClassName?: string;
+  }) => (
+    <button
+      type="button"
+      className={triggerClassName}
+      aria-label={`marker:${task.id}`}
+    >
       Marker
     </button>
   ),
@@ -171,5 +181,22 @@ describe("task properties in full share mode", () => {
     );
 
     expect(screen.getByRole("button", { name: "marker:task-1" })).toBeVisible();
+  });
+
+  it("left-aligns the marker action with full-width desktop properties", () => {
+    render(
+      <TaskPropertiesSidebar
+        taskId="task-1"
+        projectId="project-1"
+        workspaceId="workspace-1"
+      />,
+    );
+
+    const markerTriggers = screen.getAllByRole("button", {
+      name: "marker:task-1",
+    });
+    expect(markerTriggers).toHaveLength(2);
+    expect(markerTriggers[0]).not.toHaveClass("w-full");
+    expect(markerTriggers[1]).toHaveClass("w-full");
   });
 });

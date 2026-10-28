@@ -253,7 +253,7 @@ function TaskRow({
 
             <div className="basis-full min-w-0 flex-1 flex flex-col justify-center gap-0.5 sm:basis-0">
               <div className="flex w-full min-w-0 items-center gap-1.5">
-                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                <span className="min-w-0 shrink truncate text-sm text-foreground">
                   {task.title}
                 </span>
                 <WorkMarkerCountList counts={task.workMarkerCounts} />
@@ -383,7 +383,7 @@ function TaskRow({
                     className="size-3 shrink-0"
                     aria-hidden="true"
                   />
-                  <span aria-hidden="true" className="min-w-0 flex-1 truncate">
+                  <span aria-hidden="true" className="min-w-0 shrink truncate">
                     {task.nextSubtaskPreview.title}
                   </span>
                   <WorkMarkerCountList

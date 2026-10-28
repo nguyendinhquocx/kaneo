@@ -315,7 +315,7 @@ Owner request: after production UAT, correct the drag settling delay, put work m
 - Marker placement: title and marker share one row at 320/375/414/768/1024/1280/1440px; long titles ellipsize; no horizontal overflow; SubtaskRow quick picker does not open/navigate the task and is keyboard/touch accessible.
 - Project display defaults: existing project rows return both display defaults `true`, newly created projects return both `false`; account/project local overrides do not bleed across users or projects. Guest/share payloads do not gain these authenticated-only controls or marker data.
 - API regression: real 0050→0051 upgrade check verifies legacy backfill; API integration verifies new-project defaults and task-list DTO values. Web tests verify optimistic drop/rollback, single-preset writes, local preference isolation, and inline marker rendering.
-- `pnpm --filter @kaneo/api build`, relevant API integration tests, relevant web tests, web typecheck/build, `pnpm i18n:check`, `git diff --check`, one Impeccable detector pass, and rendered visual evidence for the supplied surfaces plus mobile/desktop. Production deploy is not part of this worker pass; report it separately.
+- `pnpm --filter @kaneo/api build`, relevant API integration tests, relevant web tests, web typecheck/build, `pnpm i18n:check`, `git diff --check`, one Impeccable detector pass, and rendered visual evidence for the supplied surfaces plus mobile/desktop. Production deploy is recorded separately in `.wave-uatfix6/APPLY-RECEIPT.md`; owner UAT remains the acceptance gate.
 
 ### Verification results — 2026-10-28 (final re-run)
 
@@ -323,6 +323,31 @@ Owner request: after production UAT, correct the drag settling delay, put work m
 - API: build PASS; integration 22 files / 222 tests PASS. i18n check PASS (13 locales in sync). Migration `0051` real-disposable-DB upgrade check PASS (run earlier, files unchanged since).
 - Rendered UI (local dev, project Legacy Board / New Board / fresh `UAT Fresh Project`): drag of `legacy-board-5` to top of ToDo updated DOM order on drop and persisted after full reload (5→1→2); marker picker 4×3 in task properties; subtask quick picker writes counts that render on the subtask row and the board preview line; display menu shows legacy projects all-on (backfill) and a project created after 0051 all-off for assignee/priority/subtask-cards with next-subtask preview on; List view renders markers inline; 320/375px no horizontal overflow (eye icon collapse); browser console clean across all flows.
 - Rendered evidence: `.impeccable/review/uat-revision-2026-10-28/` (board legacy 1280/375/320, list 1280, display-hidden state, task-detail marker picker, subtask marker selected, board after drag).
+
+## Post-UAT round 2 — 2026-10-29
+
+Owner production UAT found three visual refinements; supplied screenshots: `c3e0be17-1b88-4741-8b2c-c2b0096f6052.png` (current board), `c43f8812-3282-4d7b-af16-c966c07107af.png` (desired inline marker placement), and `cf210f38-17ab-42e6-8e94-d710d2095ba3.png` (task detail).
+
+### Required behavior
+
+- On Board cards, put parent markers immediately after the parent title and preview-child markers immediately after the preview title. Do not pin either cluster to the far right; keep the title shrinkable/ellipsized before its marker. Apply the same title/preview rule to List rows so the shared task presentation stays consistent.
+- In the task-properties marker trigger, show only the marker glyph cluster when a task already has markers; keep the text `Marker` when it has none. The trigger remains accessible as `Marker` to assistive technology.
+- Left-align the selected marker trigger with the other task properties in the stacked detail view; keep compact/mobile property rows left-aligned without forcing a full-width item into their wrapping layout.
+- Do not change marker counts, picker choices, preview ordering, card visibility, or any API/data behavior.
+
+### Acceptance / verification
+
+- Render parent and child-preview marker clusters adjacent to their own titles at 320/375/1280px; a long title ends in ellipsis before the marker, and no horizontal overflow appears.
+- Verify the marker trigger's empty state says `Marker`; selected state contains only glyphs visually while retaining its accessible name; desktop properties align left. Cover compact/mobile and stacked desktop placements of the shared picker.
+- Add/update picker component tests for empty/selected labels and left-alignment class; run focused web tests, web typecheck/build, `git diff --check`, and one Impeccable detector pass. Render the same board/task-detail states after the change.
+- Scope excludes API, migrations, data, marker preset semantics, reorder, and share DTOs.
+
+### Implementation checks — 2026-10-29
+
+- `TaskCard` and List `TaskRow` title/preview spans now shrink without growing, leaving marker clusters immediately after the visible text; ellipsis remains on the text before markers.
+- `WorkMarkerPicker` keeps `Marker` as the accessible name; the visible text is present only when counts are empty. Selected glyphs are the only visible trigger content. The shared trigger is left-aligned; the stacked desktop properties instance uses the full property width. Picker options now use a labeled `fieldset`.
+- Regression evidence: focused marker/sidebar tests 9/9 PASS; complete web suite 37 files / 111 tests PASS; web typecheck PASS; web build PASS (existing >500KB chunk-size warning); `pnpm i18n:check` 13 locales PASS; `git diff --check` PASS; Impeccable detector `[]`.
+- Local visual capture after the patch was not completed: the managed browser session no longer had an authenticated local session and redirected to sign-in. No credentials were passed to browser tooling. The owner-provided screenshots are the verified before-state; production re-UAT remains the visual acceptance gate after rollout.
 
 ## Completion Gates
 
