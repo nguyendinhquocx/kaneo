@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "spec": "SPEC-2026-10-27-kaneo-subtask-board-focus-markers",
+  "source_sha": "c491af9763e91a8b246de092e44cbe32e9737428",
+  "upstream_sha": "c491af9763e91a8b246de092e44cbe32e9737428",
+  "dirty_state": "clean-tracked",
+  "dirty_paths": [],
+  "dirty_manifest_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "patch_manifest_sha256": "f23e9591804bdde3a289f0e0404e14b0a0676bc736eaa803d9b8492fbd5a79ef",
+  "output_tree_sha256": "f23e9591804bdde3a289f0e0404e14b0a0676bc736eaa803d9b8492fbd5a79ef",
+  "committed_files": [
+    "apps/api/src/search/index.ts",
+    "scripts/check-migration-0050-upgrade.mjs"
+  ]
+}
