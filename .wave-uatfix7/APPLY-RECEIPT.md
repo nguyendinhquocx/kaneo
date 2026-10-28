@@ -1,6 +1,6 @@
 # Kaneo Wave uatfix7 Deployment Receipt — 2026-10-29
 
-## Result: APPLIED & VERIFIED — owner UAT pending
+## Result: APPLIED & VERIFIED — owner UAT PASS (2026-10-29)
 
 Post-UAT visual refinement for SPEC-2026-10-27-kaneo-subtask-board-focus-markers deployed to ProDesk production under the previously approved Kaneo rollout scope. This wave has no API or schema changes.
 
@@ -27,7 +27,7 @@ Post-UAT visual refinement for SPEC-2026-10-27-kaneo-subtask-board-focus-markers
 - Web: 37 test files / 111 tests PASS; typecheck PASS; build PASS; `pnpm i18n:check` 13 locales PASS; `git diff --check` PASS; final Impeccable detector `[]`.
 - Focused marker/sidebar regression tests: 9/9 PASS. The new selected-state test failed before the fix because the visible `Marker` text remained; it passed after the conditional label change.
 - Build warnings: the existing bundle still includes chunks >500 kB; unrelated to this CSS/trigger change.
-- Local after-patch screenshot was not captured: the managed browser session had lost its authenticated local session and redirected to sign-in. No credentials were passed to browser tooling. The production UAT below remains the visual acceptance gate.
+- Local after-patch screenshot was not captured: the managed browser session had lost its authenticated local session and redirected to sign-in. No credentials were passed to browser tooling. Owner then tested the deployed production UI against the requested marker adjacency, selected/empty trigger, left alignment, long-title and narrow-viewport checks and confirmed UAT PASS on 2026-10-29.
 
 ## Deployment evidence
 
@@ -38,12 +38,12 @@ Post-UAT visual refinement for SPEC-2026-10-27-kaneo-subtask-board-focus-markers
 - Runtime: Kaneo healthy, PostgreSQL healthy, `caddy-kaneo.service` active. External checks: `https://kaneo.quoc.app/` → 200, `/api/health` → `{"status":"ok"}`, `/auth/sign-in` → 200.
 - Deprecated generic ServerOps contract `alpha-host.toml` was not touched; no legacy `kaneo-activate-release` lane used.
 
-## Owner UAT — pending
+## Owner UAT — PASS (2026-10-29)
 
-Verify on production:
+Owner explicitly confirmed `uat pass, hoàn tất` after being asked to verify:
 
-1. On a Board card, parent markers appear directly after the parent title; child-preview markers appear directly after the preview text, not at the far edge. Long titles ellipsize before markers.
-2. In task details, an empty marker control says `Marker`; with a selected preset it shows only the glyph cluster, aligned left.
-3. Check the same selected/empty state in the compact detail sheet and on a narrow screen (320/375px).
+1. Board parent markers and child-preview markers sit next to their respective titles; long title truncates before the marker cluster.
+2. Task detail shows only glyphs when selected, keeps `Marker` when empty, and aligns the control left.
+3. The same selected/empty behavior works in compact detail and at narrow viewport sizes.
 
-The working spec remains unarchived until the owner confirms this UAT.
+The working spec was archived after this confirmation; `docs/specs/INDEX.md` and `--spec-check` PASS.
