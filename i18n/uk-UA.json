@@ -2059,11 +2059,11 @@
       "increase": "Збільшити маркер {{name}} для {{title}}",
       "decrease": "Зменшити маркер {{name}} для {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Не вдалося зберегти робочі маркери"
+      "saveError": "Не вдалося зберегти робочі маркери",
+      "saving": "Збереження робочих маркерів…"
     },
     "subtaskPreview": {
-      "next": "Далі: {{title}}",
-      "aria": "Наступна робота: {{title}}"
+      "next": "Далі: {{title}}"
     }
   },
   "invitations": {

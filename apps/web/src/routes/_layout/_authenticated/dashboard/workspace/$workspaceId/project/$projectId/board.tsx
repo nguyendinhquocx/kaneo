@@ -284,6 +284,7 @@ function RouteComponent() {
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-64" align="start">
                 <DropdownMenuCheckboxItem
+                  closeOnClick={false}
                   checked={showSubtaskCards}
                   onCheckedChange={setShowSubtaskCards}
                   className="min-h-11 rounded-md text-sm sm:min-h-8"
@@ -291,6 +292,7 @@ function RouteComponent() {
                   {t("tasks:display.showSubtaskCards")}
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem
+                  closeOnClick={false}
                   checked={showNextSubtaskPreview}
                   onCheckedChange={setShowNextSubtaskPreview}
                   className="min-h-11 rounded-md text-sm sm:min-h-8"

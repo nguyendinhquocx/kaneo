@@ -136,10 +136,10 @@ describe("SubtaskRow inline title editing", () => {
 });
 
 describe("SubtaskRow reorder affordances and markers", () => {
-  function renderRow() {
+  function renderRow(rowTask: Task = task) {
     return render(
       <SubtaskRow
-        task={task}
+        task={rowTask}
         tasks={[task]}
         projectId="project-1"
         workspaceId="workspace-1"
@@ -156,14 +156,14 @@ describe("SubtaskRow reorder affordances and markers", () => {
     );
   }
 
-  it("renders no up/down arrow buttons — drag handle is the only reorder control", () => {
-    renderRow();
+  it("renders no arrow reorder buttons — the drag handle is the only reorder control", () => {
+    const { container } = renderRow();
     expect(
-      screen.queryByRole("button", { name: "tasks:subtasks.moveUp" }),
+      screen.queryByRole("button", { name: /move(up|down)/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "tasks:subtasks.moveDown" }),
-    ).not.toBeInTheDocument();
+      container.querySelector("svg.lucide-arrow-up, svg.lucide-arrow-down"),
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: /tasks:subtasks\.drag/ }),
     ).toBeInTheDocument();
@@ -176,5 +176,30 @@ describe("SubtaskRow reorder affordances and markers", () => {
     expect(cluster.getAttribute("aria-label")).toContain("4");
     // Compaction: 4+ renders one glyph plus ×N instead of repeated glyphs.
     expect(cluster.textContent).toContain("×4");
+  });
+
+  it("renders all four repeated markers in a mobile-wrappable row", () => {
+    const allRepeated: Task = {
+      ...task,
+      workMarkerCounts: {
+        redCross: 3,
+        boxedRedCross: 3,
+        redCircle: 3,
+        greenCheck: 3,
+      },
+    };
+    const { container } = renderRow(allRepeated);
+    const cluster = screen.getByRole("img");
+    expect(cluster.getAttribute("aria-label")).toContain("redCross");
+    expect(cluster.getAttribute("aria-label")).toContain("boxedRedCross");
+    expect(cluster.getAttribute("aria-label")).toContain("redCircle");
+    expect(cluster.getAttribute("aria-label")).toContain("greenCheck");
+    expect(cluster.textContent).toContain("❌❌❌");
+    expect(cluster.textContent).toContain("❎❎❎");
+    expect(cluster.textContent).toContain("⭕⭕⭕");
+    expect(cluster.textContent).toContain("✅✅✅");
+    // The row gives its marker band the full mobile line instead of squeezing
+    // twelve glyphs into the narrow title/action strip.
+    expect(container.querySelector(".basis-full.flex-col")).toBeInTheDocument();
   });
 });

@@ -8396,6 +8396,9 @@
 						},
 						"saveError": {
 							"type": "string"
+						},
+						"saving": {
+							"type": "string"
 						}
 					},
 					"required": [
@@ -8407,7 +8410,8 @@
 						"increase",
 						"decrease",
 						"countAria",
-						"saveError"
+						"saveError",
+						"saving"
 					]
 				},
 				"subtaskPreview": {
@@ -8416,14 +8420,10 @@
 					"properties": {
 						"next": {
 							"type": "string"
-						},
-						"aria": {
-							"type": "string"
 						}
 					},
 					"required": [
-						"next",
-						"aria"
+						"next"
 					]
 				}
 			},

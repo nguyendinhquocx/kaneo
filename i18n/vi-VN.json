@@ -2055,11 +2055,11 @@
       "increase": "Tăng marker {{name}} cho {{title}}",
       "decrease": "Giảm marker {{name}} cho {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Không lưu được work marker"
+      "saveError": "Không lưu được work marker",
+      "saving": "Đang lưu work marker…"
     },
     "subtaskPreview": {
-      "next": "Tiếp theo: {{title}}",
-      "aria": "Việc tiếp theo: {{title}}"
+      "next": "Tiếp theo: {{title}}"
     }
   },
   "invitations": {

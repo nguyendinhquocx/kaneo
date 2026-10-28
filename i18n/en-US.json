@@ -2055,11 +2055,11 @@
       "increase": "Increase {{name}} marker for {{title}}",
       "decrease": "Decrease {{name}} marker for {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Failed to save work markers"
+      "saveError": "Failed to save work markers",
+      "saving": "Saving work markers…"
     },
     "subtaskPreview": {
-      "next": "Next: {{title}}",
-      "aria": "Next up: {{title}}"
+      "next": "Next: {{title}}"
     }
   },
   "invitations": {

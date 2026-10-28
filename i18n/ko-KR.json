@@ -2055,11 +2055,11 @@
       "increase": "{{title}}의 {{name}} 마커 늘리기",
       "decrease": "{{title}}의 {{name}} 마커 줄이기",
       "countAria": "{{name}}: {{count}}개",
-      "saveError": "작업 마커를 저장하지 못했습니다"
+      "saveError": "작업 마커를 저장하지 못했습니다",
+      "saving": "작업 마커 저장 중…"
     },
     "subtaskPreview": {
-      "next": "다음 작업: {{title}}",
-      "aria": "다음 작업: {{title}}"
+      "next": "다음 작업: {{title}}"
     }
   },
   "invitations": {

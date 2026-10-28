@@ -2055,11 +2055,11 @@
       "increase": "Αύξηση δείκτη {{name}} για {{title}}",
       "decrease": "Μείωση δείκτη {{name}} για {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Αποτυχία αποθήκευσης δεικτών εργασίας"
+      "saveError": "Αποτυχία αποθήκευσης δεικτών εργασίας",
+      "saving": "Αποθήκευση δεικτών εργασίας…"
     },
     "subtaskPreview": {
-      "next": "Επόμενο: {{title}}",
-      "aria": "Επόμενη εργασία: {{title}}"
+      "next": "Επόμενο: {{title}}"
     }
   },
   "invitations": {

@@ -26,14 +26,22 @@ export function WorkMarkerEditor({
   } = useUpdateWorkMarkers(task.id, projectId);
   const saveLock = useRef(false);
 
+  const headingId = `work-marker-heading-${task.id}`;
+
   const changeCount = async (key: keyof TaskMarkerCounts, delta: -1 | 1) => {
-    // The endpoint replaces all four counts. Lock synchronously, then disable
-    // the controls while pending, so rapid clicks cannot submit the same
-    // stale map twice and silently lose one increment.
-    if (isSavingMarkers || saveLock.current) {
+    // The endpoint replaces all four counts. Lock synchronously, then mark
+    // controls unavailable while pending without natively disabling them
+    // (so keyboard focus stays in place). Guard all invalid actions here.
+    const current = normalizeWorkMarkerCounts(task.workMarkerCounts);
+    if (
+      !workspaceId ||
+      isSavingMarkers ||
+      saveLock.current ||
+      (delta < 0 && current[key] === 0) ||
+      (delta > 0 && current[key] >= 99)
+    ) {
       return;
     }
-    const current = normalizeWorkMarkerCounts(task.workMarkerCounts);
     const nextValue = Math.min(99, Math.max(0, current[key] + delta));
     if (nextValue === current[key]) {
       return;
@@ -55,12 +63,24 @@ export function WorkMarkerEditor({
 
   return (
     <div
+      role="group"
+      aria-labelledby={headingId}
       className="flex flex-col gap-1"
-      aria-label={t("tasks:workMarkers.title")}
     >
-      <span className="text-xs font-medium text-foreground/70 px-2">
+      <span
+        id={headingId}
+        className="text-xs font-medium text-foreground/70 px-2"
+      >
         {t("tasks:workMarkers.title")}
       </span>
+      {isSavingMarkers && (
+        <span
+          role="status"
+          className="px-2 text-xs text-muted-foreground"
+        >
+          {t("tasks:workMarkers.saving")}
+        </span>
+      )}
       <div className="flex flex-col gap-0.5">
         {WORK_MARKER_KEYS.map((key) => {
           const count = normalizeWorkMarkerCounts(task.workMarkerCounts)[key];
@@ -73,7 +93,11 @@ export function WorkMarkerEditor({
               <span className="flex min-w-0 items-center gap-1.5 text-xs text-foreground/90">
                 <span aria-hidden="true">{WORK_MARKER_GLYPHS[key]}</span>
                 <span className="truncate">{markerName}</span>
-                <span className="min-w-4 text-right font-mono text-[10px] text-muted-foreground">
+                <span
+                  aria-live="polite"
+                  aria-atomic="true"
+                  className="min-w-4 text-right font-mono text-[10px] text-muted-foreground"
+                >
                   {count}
                 </span>
               </span>
@@ -82,12 +106,12 @@ export function WorkMarkerEditor({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="size-11 p-0 sm:size-8"
+                  className="size-11 p-0 aria-disabled:opacity-64 sm:size-8"
+                  aria-disabled={count === 0 || !workspaceId || isSavingMarkers}
                   aria-label={t("tasks:workMarkers.decrease", {
                     name: markerName,
                     title: task.title,
                   })}
-                  disabled={count === 0 || !workspaceId || isSavingMarkers}
                   onClick={() => void changeCount(key, -1)}
                 >
                   <Minus className="size-3.5" />
@@ -96,12 +120,12 @@ export function WorkMarkerEditor({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="size-11 p-0 sm:size-8"
+                  className="size-11 p-0 aria-disabled:opacity-64 sm:size-8"
+                  aria-disabled={count >= 99 || !workspaceId || isSavingMarkers}
                   aria-label={t("tasks:workMarkers.increase", {
                     name: markerName,
                     title: task.title,
                   })}
-                  disabled={count >= 99 || !workspaceId || isSavingMarkers}
                   onClick={() => void changeCount(key, 1)}
                 >
                   <Plus className="size-3.5" />

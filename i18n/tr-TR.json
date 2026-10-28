@@ -2055,11 +2055,11 @@
       "increase": "{{title}} için {{name}} işaretçisini artır",
       "decrease": "{{title}} için {{name}} işaretçisini azalt",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "İşaretçiler kaydedilemedi"
+      "saveError": "İşaretçiler kaydedilemedi",
+      "saving": "İşaretçiler kaydediliyor…"
     },
     "subtaskPreview": {
-      "next": "Sıradaki: {{title}}",
-      "aria": "Sıradaki iş: {{title}}"
+      "next": "Sıradaki: {{title}}"
     }
   },
   "invitations": {

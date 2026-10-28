@@ -349,18 +349,17 @@ function TaskRow({ task, projectSlug }: TaskRowProps) {
                 </div>
               </div>
               {previewEnabled && task.nextSubtaskPreview && (
-                <div
-                  className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground"
-                  role="note"
-                  aria-label={t("tasks:subtaskPreview.aria", {
-                    title: task.nextSubtaskPreview.title,
-                  })}
-                >
+                <div className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="sr-only">
+                    {t("tasks:subtaskPreview.next", {
+                      title: task.nextSubtaskPreview.title,
+                    })}
+                  </span>
                   <CornerDownRight
                     className="size-3 shrink-0"
                     aria-hidden="true"
                   />
-                  <span className="min-w-0 flex-1 truncate">
+                  <span aria-hidden="true" className="min-w-0 flex-1 truncate">
                     {task.nextSubtaskPreview.title}
                   </span>
                   <WorkMarkerCountList

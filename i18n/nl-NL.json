@@ -2055,11 +2055,11 @@
       "increase": "Markering {{name}} voor {{title}} verhogen",
       "decrease": "Markering {{name}} voor {{title}} verlagen",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Werkmarkeringen opslaan mislukt"
+      "saveError": "Werkmarkeringen opslaan mislukt",
+      "saving": "Werkmarkeringen worden opgeslagen…"
     },
     "subtaskPreview": {
-      "next": "Volgende: {{title}}",
-      "aria": "Hierna: {{title}}"
+      "next": "Volgende: {{title}}"
     }
   },
   "invitations": {

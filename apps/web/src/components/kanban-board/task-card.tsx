@@ -280,18 +280,17 @@ function TaskCard({
             {showNextSubtaskPreviewRow &&
               previewEnabled &&
               task.nextSubtaskPreview && (
-                <div
-                  className="mb-2.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
-                  role="note"
-                  aria-label={t("tasks:subtaskPreview.aria", {
-                    title: task.nextSubtaskPreview.title,
-                  })}
-                >
+                <div className="mb-2.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                  <span className="sr-only">
+                    {t("tasks:subtaskPreview.next", {
+                      title: task.nextSubtaskPreview.title,
+                    })}
+                  </span>
                   <CornerDownRight
                     className="size-3 shrink-0"
                     aria-hidden="true"
                   />
-                  <span className="min-w-0 flex-1 truncate">
+                  <span aria-hidden="true" className="min-w-0 flex-1 truncate">
                     {task.nextSubtaskPreview.title}
                   </span>
                   <WorkMarkerCountList

@@ -2055,11 +2055,11 @@
       "increase": "Augmenter le marqueur {{name}} pour {{title}}",
       "decrease": "Diminuer le marqueur {{name}} pour {{title}}",
       "countAria": "{{name}} : {{count}}",
-      "saveError": "Échec de l’enregistrement des marqueurs de travail"
+      "saveError": "Échec de l’enregistrement des marqueurs de travail",
+      "saving": "Enregistrement des marqueurs de travail…"
     },
     "subtaskPreview": {
-      "next": "À suivre : {{title}}",
-      "aria": "Prochaine tâche : {{title}}"
+      "next": "À suivre : {{title}}"
     }
   },
   "invitations": {

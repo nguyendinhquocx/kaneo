@@ -8,12 +8,23 @@ const { saveMarkers, toastError } = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
-vi.mock("@/hooks/mutations/task/use-update-work-markers", () => ({
-  useUpdateWorkMarkers: () => ({
-    mutateAsync: saveMarkers,
-    isPending: false,
-  }),
-}));
+vi.mock("@/hooks/mutations/task/use-update-work-markers", async () => {
+  const React = await import("react");
+  return {
+    useUpdateWorkMarkers: () => {
+      const [isPending, setIsPending] = React.useState(false);
+      const mutateAsync = async (counts: unknown) => {
+        setIsPending(true);
+        try {
+          return await saveMarkers(counts);
+        } finally {
+          setIsPending(false);
+        }
+      };
+      return { mutateAsync, isPending };
+    },
+  };
+});
 vi.mock("@/lib/toast", () => ({
   toast: { error: toastError },
 }));
@@ -70,16 +81,26 @@ describe("WorkMarkerEditor", () => {
         workspaceId="workspace-1"
       />,
     );
+    expect(
+      screen.getByRole("group", { name: "tasks:workMarkers.title" }),
+    ).toBeInTheDocument();
 
     const increase = screen.getByRole("button", {
       name: "tasks:workMarkers.increase tasks:workMarkers.redCross Task under test",
     });
-    fireEvent.click(increase);
+    increase.focus();
     fireEvent.click(increase);
 
-    // Only the first full-map update is sent while it is in flight. Without
-    // the synchronous lock, both calls would submit redCross=1 from stale
-    // props, and the second click would be silently lost.
+    // The pending state is exposed to assistive technology, but the button
+    // is not natively disabled: keyboard focus must remain on the control.
+    expect(increase).toHaveAttribute("aria-disabled", "true");
+    expect(increase).not.toBeDisabled();
+    expect(document.activeElement).toBe(increase);
+    expect(screen.getByRole("status")).toBeVisible();
+
+    // A second rapid click is guarded synchronously while the first full-map
+    // request is in flight; it cannot overwrite the same stale count map.
+    fireEvent.click(increase);
     expect(saveMarkers).toHaveBeenCalledTimes(1);
     expect(saveMarkers).toHaveBeenCalledWith({
       redCross: 1,
@@ -89,7 +110,31 @@ describe("WorkMarkerEditor", () => {
     });
 
     resolveSave?.();
-    await waitFor(() => expect(saveMarkers).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(increase).toHaveAttribute("aria-disabled", "false");
+      expect(document.activeElement).toBe(increase);
+    });
+  });
+
+  it("keeps boundary controls focusable while exposing aria-disabled", () => {
+    render(
+      <WorkMarkerEditor
+        task={task}
+        projectId="project-1"
+        workspaceId="workspace-1"
+      />,
+    );
+
+    const decrease = screen.getByRole("button", {
+      name: "tasks:workMarkers.decrease tasks:workMarkers.redCross Task under test",
+    });
+    expect(decrease).toHaveAttribute("aria-disabled", "true");
+    expect(decrease).not.toBeDisabled();
+
+    decrease.focus();
+    fireEvent.click(decrease);
+    expect(document.activeElement).toBe(decrease);
+    expect(saveMarkers).not.toHaveBeenCalled();
   });
 
   it("keeps saved counts unchanged and reports the error when a write fails", async () => {

@@ -2055,11 +2055,11 @@
       "increase": "Зголеми го маркерот {{name}} за {{title}}",
       "decrease": "Намали го маркерот {{name}} за {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Неуспешно зачувување на работните маркери"
+      "saveError": "Неуспешно зачувување на работните маркери",
+      "saving": "Се зачувуваат работните маркери…"
     },
     "subtaskPreview": {
-      "next": "Следно: {{title}}",
-      "aria": "Следна задача: {{title}}"
+      "next": "Следно: {{title}}"
     }
   },
   "invitations": {

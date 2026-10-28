@@ -2055,11 +2055,11 @@
       "increase": "Aumentar el marcador {{name}} de {{title}}",
       "decrease": "Reducir el marcador {{name}} de {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "No se pudieron guardar los marcadores de trabajo"
+      "saveError": "No se pudieron guardar los marcadores de trabajo",
+      "saving": "Guardando los marcadores de trabajo…"
     },
     "subtaskPreview": {
-      "next": "Siguiente: {{title}}",
-      "aria": "Siguiente tarea: {{title}}"
+      "next": "Siguiente: {{title}}"
     }
   },
   "invitations": {

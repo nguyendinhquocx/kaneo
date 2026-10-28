@@ -2055,11 +2055,11 @@
       "increase": "Marker {{name}} für {{title}} erhöhen",
       "decrease": "Marker {{name}} für {{title}} verringern",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Work-Marker konnten nicht gespeichert werden"
+      "saveError": "Work-Marker konnten nicht gespeichert werden",
+      "saving": "Work-Marker werden gespeichert …"
     },
     "subtaskPreview": {
-      "next": "Als Nächstes: {{title}}",
-      "aria": "Als Nächstes: {{title}}"
+      "next": "Als Nächstes: {{title}}"
     }
   },
   "invitations": {

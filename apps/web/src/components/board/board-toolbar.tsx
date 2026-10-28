@@ -267,7 +267,7 @@ export default function BoardToolbar({
                 render={
                   <button
                     type="button"
-                    className="inline-flex h-11 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 sm:h-7 text-foreground text-xs font-medium outline-none ring-0 hover:bg-accent/60"
+                    className="inline-flex h-11 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 sm:h-7 text-foreground text-xs font-medium outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   />
                 }
               >

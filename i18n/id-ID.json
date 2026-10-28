@@ -2055,11 +2055,11 @@
       "increase": "Tambah penanda {{name}} untuk {{title}}",
       "decrease": "Kurangi penanda {{name}} untuk {{title}}",
       "countAria": "{{name}}: {{count}}",
-      "saveError": "Penanda pekerjaan gagal disimpan"
+      "saveError": "Penanda pekerjaan gagal disimpan",
+      "saving": "Menyimpan penanda pekerjaan…"
     },
     "subtaskPreview": {
-      "next": "Berikutnya: {{title}}",
-      "aria": "Pekerjaan berikutnya: {{title}}"
+      "next": "Berikutnya: {{title}}"
     }
   },
   "invitations": {
