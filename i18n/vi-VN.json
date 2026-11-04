@@ -2488,6 +2488,7 @@
     "bindingError": "Không đọc được liên kết mind map",
     "configError": "Không đọc được cấu hình tích hợp",
     "calendarFrameTitle": "Mitra Calendar",
-    "mindMapFrameTitle": "WiseMapping Mind Map"
+    "mindMapFrameTitle": "WiseMapping Mind Map",
+    "frameSlowHint": "Nếu nội dung không hiện, chọn \"Mở riêng để đăng nhập\" rồi \"Tải lại\"."
   }
 }

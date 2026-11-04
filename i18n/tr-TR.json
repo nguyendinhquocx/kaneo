@@ -2484,6 +2484,7 @@
     "bindingError": "Zihin haritası bağlantısı okunamadı",
     "configError": "Entegrasyon yapılandırması okunamadı",
     "calendarFrameTitle": "Mitra Calendar",
-    "mindMapFrameTitle": "WiseMapping Mind Map"
+    "mindMapFrameTitle": "WiseMapping Mind Map",
+    "frameSlowHint": "Hiçbir şey görünmüyorsa \"Giriş yapmak için yeni sekmede aç\"ı kullan, sonra \"Yeniden yükle\"."
   }
 }

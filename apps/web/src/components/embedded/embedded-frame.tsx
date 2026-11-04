@@ -1,8 +1,13 @@
 import { ExternalLink, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+
+// If the frame is still loading after this long, surface a hint — browsers
+// do not reliably fire iframe error events for DNS/CSP/X-Frame-Options
+// failures, so the hint is the dependable recovery path (never a mode switch).
+const SLOW_FRAME_HINT_MS = 8000;
 
 type EmbeddedFrameProps = {
   src: string;
@@ -29,6 +34,16 @@ export default function EmbeddedFrame({
   const [reloadKey, setReloadKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [showSlowHint, setShowSlowHint] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setShowSlowHint(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowSlowHint(true), SLOW_FRAME_HINT_MS);
+    return () => clearTimeout(timer);
+  }, [isLoading, reloadKey]);
 
   if (hasError) {
     return (
@@ -72,9 +87,14 @@ export default function EmbeddedFrame({
       {isLoading && (
         <div
           role="status"
-          className="absolute inset-0 flex items-center justify-center bg-background"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background px-4 text-center"
         >
           <span className="text-sm text-muted-foreground">{t("loading")}</span>
+          {showSlowHint && (
+            <span className="max-w-md text-xs text-muted-foreground">
+              {t("frameSlowHint")}
+            </span>
+          )}
         </div>
       )}
       <iframe

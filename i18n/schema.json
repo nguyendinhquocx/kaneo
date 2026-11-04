@@ -10184,6 +10184,9 @@
 				},
 				"mindMapFrameTitle": {
 					"type": "string"
+				},
+				"frameSlowHint": {
+					"type": "string"
 				}
 			},
 			"required": [
@@ -10210,7 +10213,8 @@
 				"bindingError",
 				"configError",
 				"calendarFrameTitle",
-				"mindMapFrameTitle"
+				"mindMapFrameTitle",
+				"frameSlowHint"
 			]
 		}
 	},

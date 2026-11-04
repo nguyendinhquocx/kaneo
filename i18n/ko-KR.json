@@ -2484,6 +2484,7 @@
     "bindingError": "마인드맵 연결 정보를 읽을 수 없습니다",
     "configError": "통합 구성을 읽을 수 없습니다",
     "calendarFrameTitle": "Mitra Calendar",
-    "mindMapFrameTitle": "WiseMapping Mind Map"
+    "mindMapFrameTitle": "WiseMapping Mind Map",
+    "frameSlowHint": "내용이 보이지 않으면 \"로그인을 위해 새 탭에서 열기\"를 사용한 후 \"새로 고침\"을 눌어주세요."
   }
 }

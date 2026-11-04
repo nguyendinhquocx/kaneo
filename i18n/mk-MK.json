@@ -2484,6 +2484,7 @@
     "bindingError": "Поврзаната ментална мапа не можеше да се прочита",
     "configError": "Конфигурацијата за интеграција не можеше да се прочита",
     "calendarFrameTitle": "Mitra Calendar",
-    "mindMapFrameTitle": "WiseMapping Mind Map"
+    "mindMapFrameTitle": "WiseMapping Mind Map",
+    "frameSlowHint": "Ако ништо не се прикажува, користете “Отвори во нов таб за најава”, па “Превчитај”."
   }
 }

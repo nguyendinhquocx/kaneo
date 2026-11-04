@@ -172,6 +172,7 @@ export default function ProjectLayout({
               <div className="hidden h-8 items-center gap-0.5 rounded-lg border border-border/80 bg-background p-0.5 md:inline-flex">
                 <Button
                   variant={resolvedView === "backlog" ? "secondary" : "ghost"}
+                  aria-current={resolvedView === "backlog" ? "true" : undefined}
                   size="xs"
                   onClick={handleNavigateToBacklog}
                   className={cn(
@@ -184,6 +185,7 @@ export default function ProjectLayout({
                 </Button>
                 <Button
                   variant={resolvedView === "board" ? "secondary" : "ghost"}
+                  aria-current={resolvedView === "board" ? "true" : undefined}
                   size="xs"
                   onClick={handleNavigateToBoard}
                   className={cn(
@@ -196,6 +198,7 @@ export default function ProjectLayout({
                 </Button>
                 <Button
                   variant={resolvedView === "gantt" ? "secondary" : "ghost"}
+                  aria-current={resolvedView === "gantt" ? "true" : undefined}
                   size="xs"
                   onClick={handleNavigateToGantt}
                   className={cn(
@@ -208,6 +211,7 @@ export default function ProjectLayout({
                 </Button>
                 <Button
                   variant={resolvedView === "docs" ? "secondary" : "ghost"}
+                  aria-current={resolvedView === "docs" ? "true" : undefined}
                   size="xs"
                   onClick={handleNavigateToDocs}
                   className={cn(
@@ -220,6 +224,7 @@ export default function ProjectLayout({
                 </Button>
                 <Button
                   variant={resolvedView === "mindmap" ? "secondary" : "ghost"}
+                  aria-current={resolvedView === "mindmap" ? "true" : undefined}
                   size="xs"
                   onClick={handleNavigateToMindMap}
                   className={cn(

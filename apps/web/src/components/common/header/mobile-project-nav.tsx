@@ -106,6 +106,7 @@ export default function MobileProjectNav({
                   <button
                     key={view.key}
                     type="button"
+                    aria-current={activeView === view.key ? "true" : undefined}
                     onClick={view.onSelect}
                     className={cn(
                       VIEW_ITEM_CLASSES,

@@ -38,7 +38,7 @@ vi.mock("@/hooks/queries/embedded-integration/use-mind-map-mutations", () => ({
 
 vi.mock("@/hooks/use-workspace-permission", () => ({
   useWorkspacePermission: () => ({
-    canManageWorkspace: canManageMock,
+    canManageEmbeddedIntegrations: canManageMock,
     isCheckingPermissions: false,
   }),
 }));
@@ -121,7 +121,7 @@ describe("MindMapView", () => {
       baseUrl: "https://maps.internal.example",
       viewMode: "embedded",
     });
-    mockBinding("bàn m 1");
+    mockBinding("bàn-đồ-1");
     canManageMock.mockReturnValue(false);
 
     render(<MindMapView projectId="p-1" workspaceId="ws-1" />);
@@ -129,7 +129,7 @@ describe("MindMapView", () => {
     const frame = screen.getByTestId("mindmap-embedded-frame");
     expect(frame).toHaveAttribute(
       "src",
-      "https://maps.internal.example/c/maps/b%C3%A0n%20m%201/edit",
+      "https://maps.internal.example/c/maps/b%C3%A0n-%C4%91%E1%BB%93-1/edit",
     );
     expect(frame).toHaveAttribute("title", "embedded:mindMapFrameTitle");
   });

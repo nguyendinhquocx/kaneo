@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import db from "../../apps/api/src/database";
+import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
 import {
   mockAnonymousSession,
@@ -385,6 +385,87 @@ describe("API integration: project mind map binding", () => {
       },
     );
     expect(link.status).toBe(403);
+  });
+
+  it("blocks an authenticated outsider from the workspace services config", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const outsider = await createWorkspaceMember({ role: "admin" });
+    setServiceEnv({
+      KANEO_MITRA_BASE_URL: "https://calendar.internal.example",
+      KANEO_MITRA_VIEW_MODE: "embedded",
+    });
+    mockAuthenticatedSessions(admin.user, {
+      "outsider-token": outsider.user,
+    });
+    const { app } = createApp();
+
+    const response = await app.request(
+      `/api/embedded-integration/workspace-config?workspaceId=${admin.workspace.id}`,
+      { headers: { authorization: "Bearer outsider-token" } },
+    );
+    expect(response.status).toBe(403);
+    const body = (await response.text()) || "";
+    expect(body).not.toContain("calendar.internal.example");
+  });
+
+  it("lets a plain member read the binding but not mutate it", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const member = await createWorkspaceMember({ role: "member" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    // Member must share the workspace to pass the membership guard.
+    await db.insert(schema.workspaceUserTable).values({
+      workspaceId: admin.workspace.id,
+      userId: member.user.id,
+      role: "member",
+      joinedAt: new Date(),
+    });
+    mockAuthenticatedSessions(admin.user, {
+      "member-token": member.user,
+    });
+    const { app } = createApp();
+
+    const link = await app.request(
+      `/api/embedded-integration/project/${project.id}/mind-map`,
+      {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer member-token",
+        },
+        body: JSON.stringify({ mapId: "map-x" }),
+      },
+    );
+    expect(link.status).toBe(403);
+
+    const fetched = await app.request(
+      `/api/embedded-integration/project/${project.id}/mind-map`,
+      { headers: { authorization: "Bearer member-token" } },
+    );
+    expect(fetched.status).toBe(200);
+    expect(((await fetched.json()) as { mapId: unknown }).mapId).toBeNull();
+  });
+
+  it("treats a malformed binding row as unlinked", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    await db.insert(schema.integrationTable).values({
+      projectId: project.id,
+      type: "wisemapping",
+      config: "not-json{",
+      isActive: true,
+    });
+    mockAuthenticatedSessions(admin.user, {});
+    const { app } = createApp();
+
+    const fetched = await app.request(
+      `/api/embedded-integration/project/${project.id}/mind-map`,
+    );
+    expect(fetched.status).toBe(200);
+    expect(((await fetched.json()) as { mapId: unknown }).mapId).toBeNull();
   });
 
   it("blocks unauthenticated access to the binding", async () => {

@@ -29,6 +29,10 @@ const CAPABILITIES = {
   manageShareLinks: { project: ["share"] },
   manageLabels: { label: ["create", "update", "delete"] },
   manageWorkspace: { workspace: ["update", "manage_settings"] },
+  // SPEC-2026-10-31: linking a WiseMapping map only needs manage_settings —
+  // it must stay available to custom roles that grant manage_settings
+  // without workspace:update.
+  manageEmbeddedIntegrations: { workspace: ["manage_settings"] },
   deleteWorkspace: { workspace: ["delete"] },
   inviteUsers: { invitation: ["create"] },
   manageTeam: { member: ["update", "delete"] },
@@ -107,7 +111,8 @@ export function useWorkspacePermission() {
     },
   });
 
-  const can: CapabilityMap = capabilityMap ?? capabilities ?? emptyCapabilityMap();
+  const can: CapabilityMap =
+    capabilityMap ?? capabilities ?? emptyCapabilityMap();
 
   const helpers = useMemo(() => {
     return {
@@ -120,6 +125,7 @@ export function useWorkspacePermission() {
       canAssignTasks: () => can.assignTasks,
       canManageLabels: () => can.manageLabels,
       canManageWorkspace: () => can.manageWorkspace,
+      canManageEmbeddedIntegrations: () => can.manageEmbeddedIntegrations,
       canDeleteWorkspace: () => can.deleteWorkspace,
       canInviteUsers: () => can.inviteUsers,
       canManageTeam: () => can.manageTeam,
@@ -170,7 +176,9 @@ export function useWorkspacePermission() {
     // action UI during the initial render instead of flashing it on then
     // off when the server check resolves.
     isCheckingPermissions:
-      !capabilityMap && Boolean(workspaceId && role) && (isLoading || !capabilities),
+      !capabilityMap &&
+      Boolean(workspaceId && role) &&
+      (isLoading || !capabilities),
     isRefetchingPermissions: capabilityMap ? false : isFetching,
   };
 }

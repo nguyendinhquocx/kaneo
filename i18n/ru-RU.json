@@ -2546,6 +2546,7 @@
     "bindingError": "Не удалось прочитать привязку карты",
     "configError": "Не удалось прочитать конфигурацию интеграции",
     "calendarFrameTitle": "Mitra Calendar",
-    "mindMapFrameTitle": "WiseMapping Mind Map"
+    "mindMapFrameTitle": "WiseMapping Mind Map",
+    "frameSlowHint": "Если ничего не отображается, используйте «Открыть в новой вкладке для входа», затем «Обновить»."
   }
 }

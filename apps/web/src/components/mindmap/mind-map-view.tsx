@@ -37,13 +37,14 @@ export default function MindMapView({
     isError: isBindingError,
     refetch: refetchBinding,
   } = useMindMapBinding(projectId);
-  const { canManageWorkspace, isCheckingPermissions } =
+  const { canManageEmbeddedIntegrations, isCheckingPermissions } =
     useWorkspacePermission();
-  const canManage = canManageWorkspace();
+  const canManage = canManageEmbeddedIntegrations();
 
   if (isConfigLoading || (isBindingLoading && !isConfigError)) {
     return (
-      <div className="h-full w-full p-1">
+      <div role="status" className="h-full w-full p-1">
+        <span className="sr-only">{t("loading")}</span>
         <LoadingSkeleton className="h-full w-full" />
       </div>
     );
@@ -108,6 +109,16 @@ export default function MindMapView({
     : null;
 
   if (!mapId || !editorUrl) {
+    // While the capability check is still in flight, neither flash the
+    // manager form nor tell a manager the map is unlinked — keep loading.
+    if (isCheckingPermissions) {
+      return (
+        <div role="status" className="h-full w-full p-1">
+          <span className="sr-only">{t("loading")}</span>
+          <LoadingSkeleton className="h-full w-full" />
+        </div>
+      );
+    }
     return canManage ? (
       <MindMapLinkForm projectId={projectId} />
     ) : (
@@ -136,9 +147,7 @@ export default function MindMapView({
           <ExternalLink className="size-4" />
           {t("openExternally")}
         </Button>
-        {canManage && !isCheckingPermissions && (
-          <UnlinkButton projectId={projectId} />
-        )}
+        {canManage && <UnlinkButton projectId={projectId} />}
       </div>
     );
   }
@@ -169,9 +178,7 @@ export default function MindMapView({
           <RefreshCw className="size-3.5" />
           {t("reload")}
         </Button>
-        {canManage && !isCheckingPermissions && (
-          <UnlinkButton projectId={projectId} />
-        )}
+        {canManage && <UnlinkButton projectId={projectId} />}
       </div>
       <div className="min-h-0 flex-1">
         {/* Keyed by project: switching projects remounts the frame so the

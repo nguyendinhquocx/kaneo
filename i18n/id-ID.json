@@ -2484,6 +2484,7 @@
     "bindingError": "Tautan mind map tidak dapat dibaca",
     "configError": "Konfigurasi integrasi tidak dapat dibaca",
     "calendarFrameTitle": "Mitra Calendar",
-    "mindMapFrameTitle": "WiseMapping Mind Map"
+    "mindMapFrameTitle": "WiseMapping Mind Map",
+    "frameSlowHint": "Jika tidak ada yang tampil, gunakan \"Buka di tab baru untuk masuk\", lalu \"Muat ulang\"."
   }
 }

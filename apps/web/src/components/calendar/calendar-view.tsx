@@ -22,7 +22,8 @@ export default function CalendarView({ workspaceId }: CalendarViewProps) {
 
   if (isLoading) {
     return (
-      <div className="h-full w-full p-1">
+      <div role="status" className="h-full w-full p-1">
+        <span className="sr-only">{t("loading")}</span>
         <LoadingSkeleton className="h-full w-full" />
       </div>
     );

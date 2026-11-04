@@ -2484,6 +2484,7 @@
     "bindingError": "Le lien de la carte mentale n'a pas pu être lu",
     "configError": "La configuration de l'intégration n'a pas pu être lue",
     "calendarFrameTitle": "Mitra Calendar",
-    "mindMapFrameTitle": "WiseMapping Mind Map"
+    "mindMapFrameTitle": "WiseMapping Mind Map",
+    "frameSlowHint": "Si rien ne s'affiche, utilisez \"Ouvrir dans un nouvel onglet pour se connecter\" puis \"Recharger\"."
   }
 }

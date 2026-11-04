@@ -2484,6 +2484,7 @@
     "bindingError": "Η σύνδεση του νοητικού χάρτη δεν μπόρεσε να διαβαστεί",
     "configError": "Η ρύθμιση της ενσωμάτωσης δεν μπόρεσε να διαβαστεί",
     "calendarFrameTitle": "Mitra Calendar",
-    "mindMapFrameTitle": "WiseMapping Mind Map"
+    "mindMapFrameTitle": "WiseMapping Mind Map",
+    "frameSlowHint": "Αν δεν εμφανίζεται τίποτα, χρησιμοποιήστε το «Άνοιγμα σε νέα καρτέλα για σύνδεση» και μετά Επαναφόρτωση."
   }
 }
