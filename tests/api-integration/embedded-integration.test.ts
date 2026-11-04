@@ -177,6 +177,9 @@ describe("API integration: embedded services config", () => {
     expect(payload.mitra).toBeNull();
   });
 
+  // Share-guest boundary: the share surface never exposes embedded-service
+  // data (public DTO excludes external integration metadata), so anonymous
+  // auth is the correct unauthenticated boundary for these routes.
   it("blocks unauthenticated access to the services config", async () => {
     const member = await createWorkspaceMember({ role: "member" });
     setServiceEnv({

@@ -137,6 +137,9 @@ export default function MobileProjectNav({
                   <button
                     key={project.id}
                     type="button"
+                    aria-current={
+                      isCurrentProject ? "true" : undefined
+                    }
                     onClick={() => onSelectProject(project.id)}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors pointer-coarse:min-h-[44px]",
