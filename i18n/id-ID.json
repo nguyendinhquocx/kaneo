@@ -1308,7 +1308,8 @@
       "invitations": "Undangan",
       "more": "Lainnya",
       "backToBoard": "Kembali ke papan",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Kalender"
     },
     "projectList": {
       "viewProject": "Lihat Proyek",
@@ -2458,5 +2459,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Kalender",
+    "mindMapPageTitle": "Mind Map",
+    "loading": "Memuat...",
+    "retry": "Coba lagi",
+    "reload": "Muat ulang",
+    "openExternally": "Buka di tab baru",
+    "openExternallyForLogin": "Buka di tab baru untuk masuk",
+    "embeddedNotice": "Layanan eksternal ditampilkan dalam bingkai",
+    "calendarDisabled": "Kalender belum dikonfigurasi untuk ruang kerja ini",
+    "calendarOpenOnlyNotice": "Kalender terbuka di tab terpisah karena layanan tidak mengizinkan penyematan",
+    "mindMapDisabled": "Mind Map belum dikonfigurasi untuk ruang kerja ini",
+    "mindMapOpenOnlyNotice": "Mind map terbuka di tab terpisah karena layanan tidak mengizinkan penyematan",
+    "mindMapUnlinked": "Proyek ini belum memiliki mind map yang ditautkan",
+    "mindMapCreateThenLink": "Buat peta di WiseMapping, lalu tempel ID peta di sini untuk menautkannya",
+    "mapIdLabel": "ID peta",
+    "mapIdPlaceholder": "ID peta",
+    "mapIdInvalid": "ID peta tidak valid atau izin tidak mencukupi",
+    "linkMap": "Tautkan peta",
+    "unlinkMap": "Lepas tautan peta",
+    "frameError": "Layanan tidak dapat dimuat",
+    "bindingError": "Tautan mind map tidak dapat dibaca",
+    "configError": "Konfigurasi integrasi tidak dapat dibaca",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

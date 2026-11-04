@@ -45,6 +45,14 @@ export function NavMain() {
       badge: null,
     },
     {
+      title: t("navigation:sidebar.calendar"),
+      url: `/dashboard/workspace/${workspace.id}/calendar`,
+      isActive:
+        window.location.pathname ===
+        `/dashboard/workspace/${workspace.id}/calendar`,
+      badge: null,
+    },
+    {
       title: t("navigation:sidebar.members"),
       url: `/dashboard/workspace/${workspace.id}/members`,
       isActive:
@@ -64,7 +72,7 @@ export function NavMain() {
     <Collapsible defaultOpen className="group/collapsible">
       <SidebarGroup className="gap-1 p-2">
         <CollapsibleTrigger
-          className="data-panel-open:[&_svg]:rotate-90"
+          className="data-panel-open:[&_svg]:rotate-90 pointer-coarse:min-h-11"
           render={
             <SidebarGroupLabel className="h-7 cursor-pointer justify-between px-0 text-sidebar-accent-foreground" />
           }
@@ -81,7 +89,7 @@ export function NavMain() {
                     tooltip={item.title}
                     isActive={item.isActive}
                     size="default"
-                    className="h-8 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent"
+                    className="h-8 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent pointer-coarse:h-11"
                     onClick={() => navigate({ to: item.url })}
                   >
                     <span>{item.title}</span>

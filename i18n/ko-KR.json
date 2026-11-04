@@ -1308,7 +1308,8 @@
       "invitations": "초대",
       "more": "더 보기",
       "backToBoard": "보드로 돌아가기",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "캘린더"
     },
     "projectList": {
       "viewProject": "프로젝트 보기",
@@ -2458,5 +2459,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "캘린더",
+    "mindMapPageTitle": "마인드맵",
+    "loading": "불러오는 중...",
+    "retry": "다시 시도",
+    "reload": "새로 고침",
+    "openExternally": "새 탭에서 열기",
+    "openExternallyForLogin": "로그인을 위해 새 탭에서 열기",
+    "embeddedNotice": "외부 서비스가 프레임에 표시됩니다",
+    "calendarDisabled": "이 워크스페이스에 캘린더가 구성되어 있지 않습니다",
+    "calendarOpenOnlyNotice": "서비스가 임베딩을 허용하지 않아 캘린더가 별도 탭에서 열립니다",
+    "mindMapDisabled": "이 워크스페이스에 마인드맵이 구성되어 있지 않습니다",
+    "mindMapOpenOnlyNotice": "서비스가 임베딩을 허용하지 않아 마인드맵이 별도 탭에서 열립니다",
+    "mindMapUnlinked": "이 프로젝트에는 아직 연결된 마인드맵이 없습니다",
+    "mindMapCreateThenLink": "WiseMapping에서 맵을 만든 후 맵 ID를 여기에 붙여넣어 연결하세요",
+    "mapIdLabel": "맵 ID",
+    "mapIdPlaceholder": "맵 ID",
+    "mapIdInvalid": "맵 ID가 잘못되었거나 권한이 부족합니다",
+    "linkMap": "맵 연결",
+    "unlinkMap": "맵 연결 해제",
+    "frameError": "서비스를 불러올 수 없습니다",
+    "bindingError": "마인드맵 연결 정보를 읽을 수 없습니다",
+    "configError": "통합 구성을 읽을 수 없습니다",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

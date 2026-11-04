@@ -5354,6 +5354,9 @@
 						},
 						"goals": {
 							"type": "string"
+						},
+						"calendar": {
+							"type": "string"
 						}
 					},
 					"required": [
@@ -5363,7 +5366,8 @@
 						"invitations",
 						"more",
 						"backToBoard",
-						"goals"
+						"goals",
+						"calendar"
 					]
 				},
 				"projectList": {
@@ -10104,6 +10108,110 @@
 				"weeklyTarget",
 				"delete"
 			]
+		},
+		"embedded": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"calendarPageTitle": {
+					"type": "string"
+				},
+				"mindMapPageTitle": {
+					"type": "string"
+				},
+				"loading": {
+					"type": "string"
+				},
+				"retry": {
+					"type": "string"
+				},
+				"reload": {
+					"type": "string"
+				},
+				"openExternally": {
+					"type": "string"
+				},
+				"openExternallyForLogin": {
+					"type": "string"
+				},
+				"embeddedNotice": {
+					"type": "string"
+				},
+				"calendarDisabled": {
+					"type": "string"
+				},
+				"calendarOpenOnlyNotice": {
+					"type": "string"
+				},
+				"mindMapDisabled": {
+					"type": "string"
+				},
+				"mindMapOpenOnlyNotice": {
+					"type": "string"
+				},
+				"mindMapUnlinked": {
+					"type": "string"
+				},
+				"mindMapCreateThenLink": {
+					"type": "string"
+				},
+				"mapIdLabel": {
+					"type": "string"
+				},
+				"mapIdPlaceholder": {
+					"type": "string"
+				},
+				"mapIdInvalid": {
+					"type": "string"
+				},
+				"linkMap": {
+					"type": "string"
+				},
+				"unlinkMap": {
+					"type": "string"
+				},
+				"frameError": {
+					"type": "string"
+				},
+				"bindingError": {
+					"type": "string"
+				},
+				"configError": {
+					"type": "string"
+				},
+				"calendarFrameTitle": {
+					"type": "string"
+				},
+				"mindMapFrameTitle": {
+					"type": "string"
+				}
+			},
+			"required": [
+				"calendarPageTitle",
+				"mindMapPageTitle",
+				"loading",
+				"retry",
+				"reload",
+				"openExternally",
+				"openExternallyForLogin",
+				"embeddedNotice",
+				"calendarDisabled",
+				"calendarOpenOnlyNotice",
+				"mindMapDisabled",
+				"mindMapOpenOnlyNotice",
+				"mindMapUnlinked",
+				"mindMapCreateThenLink",
+				"mapIdLabel",
+				"mapIdPlaceholder",
+				"mapIdInvalid",
+				"linkMap",
+				"unlinkMap",
+				"frameError",
+				"bindingError",
+				"configError",
+				"calendarFrameTitle",
+				"mindMapFrameTitle"
+			]
 		}
 	},
 	"required": [
@@ -10120,6 +10228,7 @@
 		"publicProject",
 		"documents",
 		"share",
-		"goals"
+		"goals",
+		"embedded"
 	]
 }

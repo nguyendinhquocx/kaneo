@@ -1308,7 +1308,8 @@
       "invitations": "Einladungen",
       "more": "Mehr",
       "backToBoard": "Zurück zum Board",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Kalender"
     },
     "projectList": {
       "viewProject": "Projekt ansehen",
@@ -2458,5 +2459,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Kalender",
+    "mindMapPageTitle": "Mind Map",
+    "loading": "Wird geladen...",
+    "retry": "Erneut versuchen",
+    "reload": "Neu laden",
+    "openExternally": "In neuem Tab öffnen",
+    "openExternallyForLogin": "Zum Anmelden in neuem Tab öffnen",
+    "embeddedNotice": "Externer Dienst in einem Rahmen geöffnet",
+    "calendarDisabled": "Der Kalender ist für diesen Workspace nicht konfiguriert",
+    "calendarOpenOnlyNotice": "Der Kalender öffnet sich in einem eigenen Tab, da der Dienst kein Einbetten erlaubt",
+    "mindMapDisabled": "Die Mind Map ist für diesen Workspace nicht konfiguriert",
+    "mindMapOpenOnlyNotice": "Die Mind Map öffnet sich in einem eigenen Tab, da der Dienst kein Einbetten erlaubt",
+    "mindMapUnlinked": "Dieses Projekt hat noch keine verknüpfte Mind Map",
+    "mindMapCreateThenLink": "Erstelle eine Map in WiseMapping und füge hier die Map-ID ein, um sie zu verknüpfen",
+    "mapIdLabel": "Map-ID",
+    "mapIdPlaceholder": "Map-ID",
+    "mapIdInvalid": "Ungültige Map-ID oder unzureichende Berechtigung",
+    "linkMap": "Map verknüpfen",
+    "unlinkMap": "Verknüpfung entfernen",
+    "frameError": "Der Dienst konnte nicht geladen werden",
+    "bindingError": "Die Mind-Map-Verknüpfung konnte nicht gelesen werden",
+    "configError": "Die Integrationskonfiguration konnte nicht gelesen werden",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

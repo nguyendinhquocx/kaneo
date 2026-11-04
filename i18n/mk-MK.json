@@ -1308,7 +1308,8 @@
       "invitations": "Покани",
       "more": "Повеќе",
       "backToBoard": "Назад на табла",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Календар"
     },
     "projectList": {
       "viewProject": "Погледни проект",
@@ -2458,5 +2459,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Календар",
+    "mindMapPageTitle": "Ментална мапа",
+    "loading": "Се вчитува...",
+    "retry": "Обиди повторно",
+    "reload": "Превчитувај",
+    "openExternally": "Отвори во нов таб",
+    "openExternallyForLogin": "Отвори во нов таб за најава",
+    "embeddedNotice": "Надворешна услуга е прикажана во рамка",
+    "calendarDisabled": "Календарот не е конфигуриран за оваа работна област",
+    "calendarOpenOnlyNotice": "Календарот се отвора во посебен таб бидејќи услугата не дозволува вградување",
+    "mindMapDisabled": "Менталната мапа не е конфигурирана за оваа работна област",
+    "mindMapOpenOnlyNotice": "Менталната мапа се отвора во посебен таб бидејќи услугата не дозволува вградување",
+    "mindMapUnlinked": "Овој проект сè уште нема поврзана ментална мапа",
+    "mindMapCreateThenLink": "Креирајте мапа во WiseMapping, па залепете ја нејзината ID тука за поврзување",
+    "mapIdLabel": "ID на мапа",
+    "mapIdPlaceholder": "ID на мапа",
+    "mapIdInvalid": "Неважечка ID на мапа или недоволни дозволи",
+    "linkMap": "Поврзи мапа",
+    "unlinkMap": "Отстрани поврзана мапа",
+    "frameError": "Услугата не можеше да се вчита",
+    "bindingError": "Поврзаната ментална мапа не можеше да се прочита",
+    "configError": "Конфигурацијата за интеграција не можеше да се прочита",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

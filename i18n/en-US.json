@@ -1308,7 +1308,8 @@
       "invitations": "Invitations",
       "more": "More",
       "backToBoard": "Back to board",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Calendar"
     },
     "projectList": {
       "viewProject": "View Project",
@@ -2462,5 +2463,31 @@
       "cancel": "Cancel",
       "action": "Delete goal"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Calendar",
+    "mindMapPageTitle": "Mind Map",
+    "loading": "Loading...",
+    "retry": "Retry",
+    "reload": "Reload",
+    "openExternally": "Open in new tab",
+    "openExternallyForLogin": "Open in new tab to sign in",
+    "embeddedNotice": "External service shown in a frame",
+    "calendarDisabled": "Calendar is not configured for this workspace",
+    "calendarOpenOnlyNotice": "The calendar opens in its own tab because the service does not allow embedding",
+    "mindMapDisabled": "Mind Map is not configured for this workspace",
+    "mindMapOpenOnlyNotice": "The mind map opens in its own tab because the service does not allow embedding",
+    "mindMapUnlinked": "This project has no linked mind map yet",
+    "mindMapCreateThenLink": "Create a map in WiseMapping, then paste its map ID here to link it",
+    "mapIdLabel": "Map ID",
+    "mapIdPlaceholder": "Map ID",
+    "mapIdInvalid": "Invalid map ID or insufficient permissions",
+    "linkMap": "Link map",
+    "unlinkMap": "Unlink map",
+    "frameError": "The service could not be loaded",
+    "bindingError": "The mind map link could not be read",
+    "configError": "Integration configuration could not be read",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

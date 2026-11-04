@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   CalendarDays,
   FileText,
+  Network,
   SquareKanban,
   SquircleDashed,
 } from "lucide-react";
@@ -31,7 +32,7 @@ type ProjectLayoutProps = {
   headerActions?: ReactNode;
   children: ReactNode;
   showViewSwitcher?: boolean;
-  activeView?: "backlog" | "board" | "gantt" | "docs";
+  activeView?: "backlog" | "board" | "gantt" | "docs" | "mindmap";
 };
 
 export default function ProjectLayout({
@@ -56,9 +57,11 @@ export default function ProjectLayout({
       ? "backlog"
       : location.pathname.includes("/gantt")
         ? "gantt"
-        : location.pathname.includes("/docs")
-          ? "docs"
-          : "board");
+        : location.pathname.includes("/mindmap")
+          ? "mindmap"
+          : location.pathname.includes("/docs")
+            ? "docs"
+            : "board");
 
   const handleNavigateToBacklog = () => {
     navigate({
@@ -88,6 +91,13 @@ export default function ProjectLayout({
     });
   };
 
+  const handleNavigateToMindMap = () => {
+    navigate({
+      to: "/dashboard/workspace/$workspaceId/project/$projectId/mindmap",
+      params: { workspaceId, projectId },
+    });
+  };
+
   const handleProjectSwitch = (nextProjectId: string) => {
     navigate({
       to:
@@ -95,7 +105,9 @@ export default function ProjectLayout({
           ? "/dashboard/workspace/$workspaceId/project/$projectId/backlog"
           : resolvedView === "gantt"
             ? "/dashboard/workspace/$workspaceId/project/$projectId/gantt"
-            : "/dashboard/workspace/$workspaceId/project/$projectId/board",
+            : resolvedView === "mindmap"
+              ? "/dashboard/workspace/$workspaceId/project/$projectId/mindmap"
+              : "/dashboard/workspace/$workspaceId/project/$projectId/board",
       params: {
         workspaceId,
         projectId: nextProjectId,
@@ -111,7 +123,7 @@ export default function ProjectLayout({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <SidebarTrigger className="-ml-1 h-7 w-7 cursor-pointer text-foreground/85 hover:text-foreground" />
+                  <SidebarTrigger className="-ml-1 h-7 w-7 cursor-pointer text-foreground/85 hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-11" />
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="flex items-center gap-2 text-[10px]">
@@ -150,13 +162,14 @@ export default function ProjectLayout({
                 onSelectBoard={handleNavigateToBoard}
                 onSelectGantt={handleNavigateToGantt}
                 onSelectDocs={handleNavigateToDocs}
+                onSelectMindMap={handleNavigateToMindMap}
                 onSelectProject={handleProjectSwitch}
                 onAddProject={() => setIsCreateProjectModalOpen(true)}
               />
             </div>
 
             {showViewSwitcher && (
-              <div className="hidden h-8 items-center gap-0.5 rounded-lg border border-border/80 bg-background p-0.5 sm:inline-flex">
+              <div className="hidden h-8 items-center gap-0.5 rounded-lg border border-border/80 bg-background p-0.5 md:inline-flex">
                 <Button
                   variant={resolvedView === "backlog" ? "secondary" : "ghost"}
                   size="xs"
@@ -204,6 +217,18 @@ export default function ProjectLayout({
                 >
                   <FileText className="size-3.5" />
                   Docs
+                </Button>
+                <Button
+                  variant={resolvedView === "mindmap" ? "secondary" : "ghost"}
+                  size="xs"
+                  onClick={handleNavigateToMindMap}
+                  className={cn(
+                    "h-6 gap-1.5 rounded-md px-2 text-xs",
+                    resolvedView !== "mindmap" && "text-muted-foreground",
+                  )}
+                >
+                  <Network className="size-3.5" />
+                  Mind Map
                 </Button>
               </div>
             )}

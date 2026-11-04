@@ -1308,7 +1308,8 @@
       "invitations": "Lời mời",
       "more": "Thêm",
       "backToBoard": "Quay lại bảng",
-      "goals": "Mục tiêu"
+      "goals": "Mục tiêu",
+      "calendar": "Lịch"
     },
     "projectList": {
       "viewProject": "Xem dự án",
@@ -2462,5 +2463,31 @@
       "cancel": "Huỷ",
       "action": "Xoá mục tiêu"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Lịch",
+    "mindMapPageTitle": "Mind Map",
+    "loading": "Đang tải...",
+    "retry": "Thử lại",
+    "reload": "Tải lại",
+    "openExternally": "Mở riêng",
+    "openExternallyForLogin": "Mở riêng để đăng nhập",
+    "embeddedNotice": "Dịch vụ ngoài đang mở trong khung",
+    "calendarDisabled": "Lịch chưa được cấu hình cho workspace này",
+    "calendarOpenOnlyNotice": "Lịch mở ở tab riêng vì dịch vụ không cho phép nhúng",
+    "mindMapDisabled": "Mind Map chưa được cấu hình cho workspace này",
+    "mindMapOpenOnlyNotice": "Mind map mở ở tab riêng vì dịch vụ không cho phép nhúng",
+    "mindMapUnlinked": "Project này chưa liên kết mind map nào",
+    "mindMapCreateThenLink": "Tạo map trong WiseMapping rồi dán map ID vào đây để liên kết",
+    "mapIdLabel": "Map ID",
+    "mapIdPlaceholder": "Map ID",
+    "mapIdInvalid": "Map ID không hợp lệ hoặc bạn không đủ quyền",
+    "linkMap": "Liên kết map",
+    "unlinkMap": "Gỡ liên kết",
+    "frameError": "Không tải được dịch vụ",
+    "bindingError": "Không đọc được liên kết mind map",
+    "configError": "Không đọc được cấu hình tích hợp",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

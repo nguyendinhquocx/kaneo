@@ -3,6 +3,7 @@ import {
   Check,
   FileText,
   Menu,
+  Network,
   Plus,
   SquareKanban,
 } from "lucide-react";
@@ -19,14 +20,23 @@ import { cn } from "@/lib/cn";
 type MobileProjectNavProps = {
   workspaceId: string;
   projectId: string;
-  activeView: "backlog" | "board" | "gantt" | "docs";
+  activeView: "backlog" | "board" | "gantt" | "docs" | "mindmap";
   onSelectBoard: () => void;
   onSelectBacklog: () => void;
   onSelectGantt: () => void;
   onSelectDocs: () => void;
+  onSelectMindMap: () => void;
   onSelectProject: (projectId: string) => void;
   onAddProject: () => void;
 };
+
+// SPEC-2026-10-31: five views now share this picker, laid out on a 2-column
+// grid so every item keeps a comfortable hit area down to 320px wide. On
+// coarse pointers every target must be at least 44x44px; desktop switcher
+// sizes are untouched.
+const VIEW_GRID_CLASSES = "grid grid-cols-2 gap-1 pointer-coarse:gap-2";
+const VIEW_ITEM_CLASSES =
+  "flex w-full min-h-[36px] items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors pointer-coarse:min-h-[44px]";
 
 export default function MobileProjectNav({
   workspaceId,
@@ -36,10 +46,39 @@ export default function MobileProjectNav({
   onSelectBacklog,
   onSelectGantt,
   onSelectDocs,
+  onSelectMindMap,
   onSelectProject,
   onAddProject,
 }: MobileProjectNavProps) {
   const { data: projects = [] } = useGetProjects({ workspaceId });
+
+  const views: Array<{
+    key: typeof activeView;
+    label: string;
+    icon?: typeof Menu;
+    onSelect: () => void;
+  }> = [
+    { key: "backlog", label: "Backlog", onSelect: onSelectBacklog },
+    {
+      key: "board",
+      label: "Board",
+      icon: SquareKanban,
+      onSelect: onSelectBoard,
+    },
+    {
+      key: "gantt",
+      label: "Gantt",
+      icon: CalendarDays,
+      onSelect: onSelectGantt,
+    },
+    {
+      key: "mindmap",
+      label: "Mind Map",
+      icon: Network,
+      onSelect: onSelectMindMap,
+    },
+    { key: "docs", label: "Docs", icon: FileText, onSelect: onSelectDocs },
+  ];
 
   return (
     <Popover>
@@ -48,7 +87,7 @@ export default function MobileProjectNav({
           <Button
             variant="ghost"
             size="icon-xs"
-            className="size-7 border border-transparent"
+            className="size-7 border border-transparent pointer-coarse:size-11"
           />
         }
       >
@@ -60,58 +99,26 @@ export default function MobileProjectNav({
             <p className="px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
               View
             </p>
-            <div className="grid grid-cols-4 gap-1">
-              <button
-                type="button"
-                onClick={onSelectBacklog}
-                className={cn(
-                  "flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
-                  activeView === "backlog"
-                    ? "border-border bg-secondary text-foreground"
-                    : "border-transparent text-muted-foreground hover:bg-accent",
-                )}
-              >
-                Backlog
-              </button>
-              <button
-                type="button"
-                onClick={onSelectBoard}
-                className={cn(
-                  "flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
-                  activeView === "board"
-                    ? "border-border bg-secondary text-foreground"
-                    : "border-transparent text-muted-foreground hover:bg-accent",
-                )}
-              >
-                <SquareKanban className="size-3.5" />
-                Board
-              </button>
-              <button
-                type="button"
-                onClick={onSelectGantt}
-                className={cn(
-                  "flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
-                  activeView === "gantt"
-                    ? "border-border bg-secondary text-foreground"
-                    : "border-transparent text-muted-foreground hover:bg-accent",
-                )}
-              >
-                <CalendarDays className="size-3.5" />
-                Gantt
-              </button>
-              <button
-                type="button"
-                onClick={onSelectDocs}
-                className={cn(
-                  "flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
-                  activeView === "docs"
-                    ? "border-border bg-secondary text-foreground"
-                    : "border-transparent text-muted-foreground hover:bg-accent",
-                )}
-              >
-                <FileText className="size-3.5" />
-                Docs
-              </button>
+            <div className={VIEW_GRID_CLASSES}>
+              {views.map((view) => {
+                const Icon = view.icon;
+                return (
+                  <button
+                    key={view.key}
+                    type="button"
+                    onClick={view.onSelect}
+                    className={cn(
+                      VIEW_ITEM_CLASSES,
+                      activeView === view.key
+                        ? "border-border bg-secondary text-foreground"
+                        : "border-transparent text-muted-foreground hover:bg-accent",
+                    )}
+                  >
+                    {Icon ? <Icon className="size-3.5" /> : null}
+                    {view.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -131,7 +138,7 @@ export default function MobileProjectNav({
                     type="button"
                     onClick={() => onSelectProject(project.id)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors pointer-coarse:min-h-[44px]",
                       isCurrentProject
                         ? "bg-accent text-foreground"
                         : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -149,7 +156,7 @@ export default function MobileProjectNav({
           <button
             type="button"
             onClick={onAddProject}
-            className="flex w-full items-center gap-2 rounded-md border border-border px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent"
+            className="flex w-full items-center gap-2 rounded-md border border-border px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent pointer-coarse:min-h-[44px]"
           >
             <Plus className="size-3.5" />
             Add project

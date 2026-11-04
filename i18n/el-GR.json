@@ -1308,7 +1308,8 @@
       "invitations": "Προσκλήσεις",
       "more": "Περισσότερα",
       "backToBoard": "Επιστροφή στον πίνακα",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Ημερολόγιο"
     },
     "projectList": {
       "viewProject": "Προβολή έργου",
@@ -2458,5 +2459,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Ημερολόγιο",
+    "mindMapPageTitle": "Νοητική χάρτη",
+    "loading": "Φόρτωση...",
+    "retry": "Δοκιμή ξανά",
+    "reload": "Επαναφόρτωση",
+    "openExternally": "Άνοιγμα σε νέα καρτέλα",
+    "openExternallyForLogin": "Άνοιγμα σε νέα καρτέλα για σύνδεση",
+    "embeddedNotice": "Εξωτερική υπηρεσία εμφανίζεται σε πλαίσιο",
+    "calendarDisabled": "Το ημερολόγιο δεν έχει ρυθμιστεί για αυτόν τον χώρο εργασίας",
+    "calendarOpenOnlyNotice": "Το ημερολόγιο ανοίγει σε δική του καρτέλα γιατί η υπηρεσία δεν επιτρέπει ενσωμάτωση",
+    "mindMapDisabled": "Ο νοητικός χάρτης δεν έχει ρυθμιστεί για αυτόν τον χώρο εργασίας",
+    "mindMapOpenOnlyNotice": "Ο νοητικός χάρτης ανοίγει σε δική του καρτέλα γιατί η υπηρεσία δεν επιτρέπει ενσωμάτωση",
+    "mindMapUnlinked": "Αυτό το έργο δεν έχει συνδεδεμένο νοητικό χάρτη ακόμη",
+    "mindMapCreateThenLink": "Δημιουργήστε χάρτη στο WiseMapping και επικολλήστε το ID του εδώ για σύνδεση",
+    "mapIdLabel": "ID χάρτη",
+    "mapIdPlaceholder": "ID χάρτη",
+    "mapIdInvalid": "Μη έγκυρο ID χάρτη ή ανεπαρκή δικαιώματα",
+    "linkMap": "Σύνδεση χάρτη",
+    "unlinkMap": "Αποσύνδεση χάρτη",
+    "frameError": "Η υπηρεσία δεν μπόρεσε να φορτωθεί",
+    "bindingError": "Η σύνδεση του νοητικού χάρτη δεν μπόρεσε να διαβαστεί",
+    "configError": "Η ρύθμιση της ενσωμάτωσης δεν μπόρεσε να διαβαστεί",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

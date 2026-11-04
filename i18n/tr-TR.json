@@ -1308,7 +1308,8 @@
       "invitations": "Davetler",
       "more": "Daha fazla",
       "backToBoard": "Panoya dön",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Takvim"
     },
     "projectList": {
       "viewProject": "Projeyi Görüntüle",
@@ -2458,5 +2459,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Takvim",
+    "mindMapPageTitle": "Zihin Haritası",
+    "loading": "Yükleniyor...",
+    "retry": "Tekrar dene",
+    "reload": "Yeniden yükle",
+    "openExternally": "Yeni sekmede aç",
+    "openExternallyForLogin": "Giriş yapmak için yeni sekmede aç",
+    "embeddedNotice": "Harici hizmet bir çerçevede gösteriliyor",
+    "calendarDisabled": "Bu çalışma alanı için takvim yapılandırılmamış",
+    "calendarOpenOnlyNotice": "Hizmet gömmeye izin vermediği için takvim kendi sekmesinde açılır",
+    "mindMapDisabled": "Bu çalışma alanı için zihin haritası yapılandırılmamış",
+    "mindMapOpenOnlyNotice": "Hizmet gömmeye izin vermediği için zihin haritası kendi sekmesinde açılır",
+    "mindMapUnlinked": "Bu projeye henüz bağlı bir zihin haritası yok",
+    "mindMapCreateThenLink": "WiseMapping'de bir harita oluşturun, sonra bağlamak için harita kimliğini buraya yapıştırın",
+    "mapIdLabel": "Harita kimliği",
+    "mapIdPlaceholder": "Harita kimliği",
+    "mapIdInvalid": "Geçersiz harita kimliği veya yetersiz izin",
+    "linkMap": "Haritayı bağla",
+    "unlinkMap": "Harita bağlantısını kaldır",
+    "frameError": "Hizmet yüklenemedi",
+    "bindingError": "Zihin haritası bağlantısı okunamadı",
+    "configError": "Entegrasyon yapılandırması okunamadı",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

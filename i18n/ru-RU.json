@@ -1316,7 +1316,8 @@
       "invitations": "Приглашения",
       "more": "Ещё",
       "backToBoard": "Back to board",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Календарь"
     },
     "projectList": {
       "viewProject": "Открыть проект",
@@ -2520,5 +2521,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Календарь",
+    "mindMapPageTitle": "Интеллектуальная карта",
+    "loading": "Загрузка...",
+    "retry": "Повторить",
+    "reload": "Обновить",
+    "openExternally": "Открыть в новой вкладке",
+    "openExternallyForLogin": "Открыть в новой вкладке для входа",
+    "embeddedNotice": "Внешний сервис показан во фрейме",
+    "calendarDisabled": "Календарь не настроен для этого рабочего пространства",
+    "calendarOpenOnlyNotice": "Календарь открывается в отдельной вкладке, так как сервис не разрешает встраивание",
+    "mindMapDisabled": "Интеллектуальные карты не настроены для этого рабочего пространства",
+    "mindMapOpenOnlyNotice": "Карта открывается в отдельной вкладке, так как сервис не разрешает встраивание",
+    "mindMapUnlinked": "К этому проекту ещё не привязана интеллектуальная карта",
+    "mindMapCreateThenLink": "Создайте карту в WiseMapping и вставьте её ID здесь, чтобы привязать",
+    "mapIdLabel": "ID карты",
+    "mapIdPlaceholder": "ID карты",
+    "mapIdInvalid": "Неверный ID карты или недостаточно прав",
+    "linkMap": "Привязать карту",
+    "unlinkMap": "Отвязать карту",
+    "frameError": "Не удалось загрузить сервис",
+    "bindingError": "Не удалось прочитать привязку карты",
+    "configError": "Не удалось прочитать конфигурацию интеграции",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

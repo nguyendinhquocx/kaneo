@@ -1308,7 +1308,8 @@
       "invitations": "Invitaciones",
       "more": "Más",
       "backToBoard": "Volver al tablero",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Calendario"
     },
     "projectList": {
       "viewProject": "Ver Proyecto",
@@ -2458,5 +2459,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Calendario",
+    "mindMapPageTitle": "Mapa mental",
+    "loading": "Cargando...",
+    "retry": "Reintentar",
+    "reload": "Recargar",
+    "openExternally": "Abrir en nueva pestaña",
+    "openExternallyForLogin": "Abrir en nueva pestaña para iniciar sesión",
+    "embeddedNotice": "Servicio externo mostrado en un marco",
+    "calendarDisabled": "El calendario no está configurado para este espacio de trabajo",
+    "calendarOpenOnlyNotice": "El calendario se abre en su propia pestaña porque el servicio no permite incrustarlo",
+    "mindMapDisabled": "El mapa mental no está configurado para este espacio de trabajo",
+    "mindMapOpenOnlyNotice": "El mapa mental se abre en su propia pestaña porque el servicio no permite incrustarlo",
+    "mindMapUnlinked": "Este proyecto aún no tiene un mapa mental vinculado",
+    "mindMapCreateThenLink": "Crea un mapa en WiseMapping y pega su ID aquí para vincularlo",
+    "mapIdLabel": "ID del mapa",
+    "mapIdPlaceholder": "ID del mapa",
+    "mapIdInvalid": "ID de mapa no válido o permisos insuficientes",
+    "linkMap": "Vincular mapa",
+    "unlinkMap": "Desvincular mapa",
+    "frameError": "No se pudo cargar el servicio",
+    "bindingError": "No se pudo leer el vínculo del mapa mental",
+    "configError": "No se pudo leer la configuración de integración",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }

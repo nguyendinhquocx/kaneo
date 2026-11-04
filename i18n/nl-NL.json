@@ -1308,7 +1308,8 @@
       "invitations": "Uitnodigingen",
       "more": "Meer",
       "backToBoard": "Terug naar bord",
-      "goals": "Goals"
+      "goals": "Goals",
+      "calendar": "Agenda"
     },
     "projectList": {
       "viewProject": "Project bekijken",
@@ -2458,5 +2459,31 @@
       "description": "Permanently delete \"{{name}}\" with all of its check-ins and notes. This cannot be undone.",
       "title": "Delete goal?"
     }
+  },
+  "embedded": {
+    "calendarPageTitle": "Agenda",
+    "mindMapPageTitle": "Mindmap",
+    "loading": "Laden...",
+    "retry": "Opnieuw proberen",
+    "reload": "Herladen",
+    "openExternally": "Openen in nieuw tabblad",
+    "openExternallyForLogin": "Openen in nieuw tabblad om in te loggen",
+    "embeddedNotice": "Externe dienst weergegeven in een kader",
+    "calendarDisabled": "De agenda is niet geconfigureerd voor deze werkruimte",
+    "calendarOpenOnlyNotice": "De agenda opent in een eigen tabblad omdat de dienst insluiten niet toestaat",
+    "mindMapDisabled": "De mindmap is niet geconfigureerd voor deze werkruimte",
+    "mindMapOpenOnlyNotice": "De mindmap opent in een eigen tabblad omdat de dienst insluiten niet toestaat",
+    "mindMapUnlinked": "Dit project heeft nog geen gekoppelde mindmap",
+    "mindMapCreateThenLink": "Maak een map in WiseMapping en plak hier de map-ID om te koppelen",
+    "mapIdLabel": "Map-ID",
+    "mapIdPlaceholder": "Map-ID",
+    "mapIdInvalid": "Ongeldige map-ID of onvoldoende rechten",
+    "linkMap": "Map koppelen",
+    "unlinkMap": "Koppeling verwijderen",
+    "frameError": "De dienst kon niet worden geladen",
+    "bindingError": "De mindmapkoppeling kon niet worden gelezen",
+    "configError": "De integratieconfiguratie kon niet worden gelezen",
+    "calendarFrameTitle": "Mitra Calendar",
+    "mindMapFrameTitle": "WiseMapping Mind Map"
   }
 }
