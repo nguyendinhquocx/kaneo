@@ -2489,6 +2489,17 @@
     "configError": "Integration configuration could not be read",
     "calendarFrameTitle": "Mitra Calendar",
     "mindMapFrameTitle": "WiseMapping Mind Map",
-    "frameSlowHint": "If nothing shows up, use \"Open in new tab to sign in\", then \"Reload\"."
+    "frameSlowHint": "If nothing shows up, use \"Open in new tab to sign in\", then \"Reload\".",
+    "settings": {
+      "sectionTitle": "Integrations",
+      "mitraLabel": "Mitra Calendar",
+      "wisemappingLabel": "WiseMapping Mind Map",
+      "serviceNotConfigured": "These services have not been configured by the Kaneo administrator.",
+      "saving": "Saving integration settings…",
+      "saveSuccess": "Integration setting saved.",
+      "saveError": "Could not save integration setting. Try again."
+    },
+    "calendarDisabledByWorkspace": "Calendar is turned off for this workspace. A workspace manager can turn it on again in Settings → Integrations.",
+    "mindMapDisabledByWorkspace": "Mind Map is turned off for this workspace. A workspace manager can turn it on again in Settings → Integrations."
   }
 }

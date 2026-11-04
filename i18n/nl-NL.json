@@ -2485,6 +2485,17 @@
     "configError": "De integratieconfiguratie kon niet worden gelezen",
     "calendarFrameTitle": "Mitra Calendar",
     "mindMapFrameTitle": "WiseMapping Mind Map",
-    "frameSlowHint": "Als er niets verschijnt, gebruik \"Openen in nieuw tabblad om in te loggen\" en daarna \"Herladen\"."
+    "frameSlowHint": "Als er niets verschijnt, gebruik \"Openen in nieuw tabblad om in te loggen\" en daarna \"Herladen\".",
+    "settings": {
+      "sectionTitle": "Integraties",
+      "mitraLabel": "Mitra-agenda",
+      "wisemappingLabel": "WiseMapping-mindmap",
+      "serviceNotConfigured": "Deze diensten zijn niet geconfigureerd door de Kaneo-beheerder.",
+      "saving": "Integratie-instellingen opslaan…",
+      "saveSuccess": "Integratie-instelling opgeslagen.",
+      "saveError": "De instelling kon niet worden opgeslagen. Probeer het opnieuw."
+    },
+    "calendarDisabledByWorkspace": "De agenda is uitgeschakeld voor deze werkruimte. Een beheerder kan deze weer inschakelen via Instellingen → Integraties.",
+    "mindMapDisabledByWorkspace": "Mind Map is uitgeschakeld voor deze werkruimte. Een beheerder kan deze weer inschakelen via Instellingen → Integraties."
   }
 }

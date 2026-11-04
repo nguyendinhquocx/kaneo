@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import useEmbeddedServicesConfig from "@/hooks/queries/embedded-integration/use-embedded-services-config";
 import { usePendingInvitations } from "@/hooks/queries/invitation/use-pending-invitations";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 
@@ -22,6 +23,7 @@ export function NavMain() {
   const { data: workspace } = useActiveWorkspace();
   const navigate = useNavigate();
   const { data: invitations = [] } = usePendingInvitations();
+  const { data: services } = useEmbeddedServicesConfig(workspace?.id);
 
   if (!workspace) return null;
 
@@ -44,14 +46,18 @@ export function NavMain() {
         window.location.pathname === `/dashboard/workspace/${workspace.id}`,
       badge: null,
     },
-    {
-      title: t("navigation:sidebar.calendar"),
-      url: `/dashboard/workspace/${workspace.id}/calendar`,
-      isActive:
-        window.location.pathname ===
-        `/dashboard/workspace/${workspace.id}/calendar`,
-      badge: null,
-    },
+    ...(services?.mitra?.enabled
+      ? [
+          {
+            title: t("navigation:sidebar.calendar"),
+            url: `/dashboard/workspace/${workspace.id}/calendar`,
+            isActive:
+              window.location.pathname ===
+              `/dashboard/workspace/${workspace.id}/calendar`,
+            badge: null,
+          },
+        ]
+      : []),
     {
       title: t("navigation:sidebar.members"),
       url: `/dashboard/workspace/${workspace.id}/members`,

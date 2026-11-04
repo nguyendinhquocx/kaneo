@@ -78,7 +78,22 @@ export default function MindMapView({
         role="status"
         className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center"
       >
-        <p className="text-sm text-muted-foreground">{t("mindMapDisabled")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("settings.serviceNotConfigured")}
+        </p>
+      </div>
+    );
+  }
+
+  if (!wisemapping.enabled) {
+    return (
+      <div
+        role="status"
+        className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center"
+      >
+        <p className="text-sm text-muted-foreground">
+          {t("mindMapDisabledByWorkspace")}
+        </p>
       </div>
     );
   }

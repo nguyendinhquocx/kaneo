@@ -2485,6 +2485,17 @@
     "configError": "통합 구성을 읽을 수 없습니다",
     "calendarFrameTitle": "Mitra Calendar",
     "mindMapFrameTitle": "WiseMapping Mind Map",
-    "frameSlowHint": "내용이 보이지 않으면 \"로그인을 위해 새 탭에서 열기\"를 사용한 후 \"새로 고침\"을 눌어주세요."
+    "frameSlowHint": "내용이 보이지 않으면 \"로그인을 위해 새 탭에서 열기\"를 사용한 후 \"새로 고침\"을 눌어주세요.",
+    "settings": {
+      "sectionTitle": "연동",
+      "mitraLabel": "Mitra 캘린더",
+      "wisemappingLabel": "WiseMapping 마인드맵",
+      "serviceNotConfigured": "Kaneo 관리자가 이 서비스를 구성하지 않았습니다.",
+      "saving": "연동 설정 저장 중…",
+      "saveSuccess": "연동 설정을 저장했습니다.",
+      "saveError": "연동 설정을 저장하지 못했습니다. 다시 시도하세요."
+    },
+    "calendarDisabledByWorkspace": "이 워크스페이스에서 캘린더가 꺼져 있습니다. 워크스페이스 관리자는 설정 → 연동에서 다시 켤 수 있습니다.",
+    "mindMapDisabledByWorkspace": "이 워크스페이스에서 마인드맵이 꺼져 있습니다. 워크스페이스 관리자는 설정 → 연동에서 다시 켤 수 있습니다."
   }
 }

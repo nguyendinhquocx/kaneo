@@ -1,8 +1,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NavMain } from "./nav-main";
 
 const navigateMock = vi.hoisted(() => vi.fn());
+const configMock = vi.hoisted(() => vi.fn());
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -19,6 +20,11 @@ vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
 vi.mock("@/hooks/queries/invitation/use-pending-invitations", () => ({
   usePendingInvitations: () => ({ data: [] }),
 }));
+
+vi.mock(
+  "@/hooks/queries/embedded-integration/use-embedded-services-config",
+  () => ({ default: (...args: unknown[]) => configMock(...args) }),
+);
 
 vi.mock("@/components/ui/sidebar", () => ({
   SidebarGroup: ({ children }: { children: React.ReactNode }) => (
@@ -63,6 +69,13 @@ vi.mock("@/components/ui/collapsible", () => ({
 
 afterEach(cleanup);
 
+beforeEach(() => {
+  configMock.mockReturnValue({
+    data: { mitra: { enabled: true } },
+    isSuccess: true,
+  });
+});
+
 describe("NavMain workspace calendar entry", () => {
   it("links the workspace-level calendar without project paths", () => {
     render(<NavMain />);
@@ -80,5 +93,18 @@ describe("NavMain workspace calendar entry", () => {
     render(<NavMain />);
     const text = screen.getByText("navigation:sidebar.calendar");
     expect(text.closest("li")).not.toBeNull();
+  });
+
+  it("fails closed while service configuration is loading or disabled", () => {
+    configMock.mockReturnValue({ data: undefined, isLoading: true });
+    const { rerender } = render(<NavMain />);
+    expect(screen.queryByText("navigation:sidebar.calendar")).toBeNull();
+
+    configMock.mockReturnValue({
+      data: { mitra: { enabled: false } },
+      isSuccess: true,
+    });
+    rerender(<NavMain />);
+    expect(screen.queryByText("navigation:sidebar.calendar")).toBeNull();
   });
 });

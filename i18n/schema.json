@@ -10187,6 +10187,48 @@
 				},
 				"frameSlowHint": {
 					"type": "string"
+				},
+				"settings": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"sectionTitle": {
+							"type": "string"
+						},
+						"mitraLabel": {
+							"type": "string"
+						},
+						"wisemappingLabel": {
+							"type": "string"
+						},
+						"serviceNotConfigured": {
+							"type": "string"
+						},
+						"saving": {
+							"type": "string"
+						},
+						"saveSuccess": {
+							"type": "string"
+						},
+						"saveError": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"sectionTitle",
+						"mitraLabel",
+						"wisemappingLabel",
+						"serviceNotConfigured",
+						"saving",
+						"saveSuccess",
+						"saveError"
+					]
+				},
+				"calendarDisabledByWorkspace": {
+					"type": "string"
+				},
+				"mindMapDisabledByWorkspace": {
+					"type": "string"
 				}
 			},
 			"required": [
@@ -10214,7 +10256,10 @@
 				"configError",
 				"calendarFrameTitle",
 				"mindMapFrameTitle",
-				"frameSlowHint"
+				"frameSlowHint",
+				"settings",
+				"calendarDisabledByWorkspace",
+				"mindMapDisabledByWorkspace"
 			]
 		}
 	},

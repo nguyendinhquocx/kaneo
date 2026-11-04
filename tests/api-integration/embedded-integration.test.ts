@@ -105,17 +105,128 @@ describe("API integration: embedded services config", () => {
     );
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
-      mitra: { baseUrl: string; viewMode: string } | null;
-      wisemapping: { baseUrl: string; viewMode: string } | null;
+      mitra:
+        | { enabled: boolean; baseUrl: string; viewMode: string }
+        | { enabled: false }
+        | null;
+      wisemapping:
+        | { enabled: boolean; baseUrl: string; viewMode: string }
+        | { enabled: false }
+        | null;
     };
     expect(payload.mitra).toEqual({
+      enabled: true,
       baseUrl: "https://calendar.internal.example",
       viewMode: "embedded",
     });
     expect(payload.wisemapping).toEqual({
+      enabled: true,
       baseUrl: "https://maps.internal.example",
       viewMode: "open-only",
     });
+  });
+
+  it("defaults configured services to enabled when no workspace settings row exists", async () => {
+    const member = await createWorkspaceMember({ role: "member" });
+    setServiceEnv({
+      KANEO_MITRA_BASE_URL: "https://calendar.internal.example",
+      KANEO_MITRA_VIEW_MODE: "embedded",
+    });
+    mockAuthenticatedSessions(member.user, {});
+    const { app } = createApp();
+
+    const response = await app.request(
+      `/api/embedded-integration/workspace-config?workspaceId=${member.workspace.id}`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      mitra: {
+        enabled: true,
+        baseUrl: "https://calendar.internal.example",
+        viewMode: "embedded",
+      },
+      wisemapping: null,
+    });
+  });
+
+  it("hides the configured service URL while disabled, then returns it after enabling", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    setServiceEnv({
+      KANEO_MITRA_BASE_URL: "https://calendar.internal.example",
+      KANEO_MITRA_VIEW_MODE: "embedded",
+    });
+    mockAuthenticatedSessions(admin.user, {});
+    const { app } = createApp();
+    const path = `/api/embedded-integration/workspace-config/mitra?workspaceId=${admin.workspace.id}`;
+    const headers = { "content-type": "application/json" };
+
+    const disabled = await app.request(path, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(disabled.status).toBe(200);
+    const disabledBody = await disabled.json();
+    expect(disabledBody).toEqual({
+      service: "mitra",
+      config: { enabled: false },
+    });
+    expect(JSON.stringify(disabledBody)).not.toContain(
+      "calendar.internal.example",
+    );
+
+    const getDisabled = await app.request(
+      `/api/embedded-integration/workspace-config?workspaceId=${admin.workspace.id}`,
+    );
+    expect(getDisabled.status).toBe(200);
+    const disabledConfig = await getDisabled.json();
+    expect(disabledConfig).toMatchObject({ mitra: { enabled: false } });
+    expect(JSON.stringify(disabledConfig)).not.toContain(
+      "calendar.internal.example",
+    );
+
+    const enabled = await app.request(path, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(enabled.status).toBe(200);
+    expect(await enabled.json()).toEqual({
+      service: "mitra",
+      config: {
+        enabled: true,
+        baseUrl: "https://calendar.internal.example",
+        viewMode: "embedded",
+      },
+    });
+  });
+
+  it("keeps the environment as a hard cap even when the workspace toggle is on", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    setServiceEnv({
+      KANEO_MITRA_BASE_URL: "https://calendar.internal.example",
+      KANEO_MITRA_VIEW_MODE: "embedded",
+    });
+    mockAuthenticatedSessions(admin.user, {});
+    const { app } = createApp();
+    const togglePath = `/api/embedded-integration/workspace-config/mitra?workspaceId=${admin.workspace.id}`;
+
+    const enabled = await app.request(togglePath, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(enabled.status).toBe(200);
+    expect(await enabled.json()).toMatchObject({
+      config: { enabled: true, baseUrl: "https://calendar.internal.example" },
+    });
+
+    setServiceEnv({});
+    const response = await app.request(
+      `/api/embedded-integration/workspace-config?workspaceId=${admin.workspace.id}`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ mitra: null });
   });
 
   it.each([
@@ -388,6 +499,63 @@ describe("API integration: project mind map binding", () => {
       },
     );
     expect(link.status).toBe(403);
+  });
+
+  it("guards the workspace toggle by authentication, membership, permission and service name", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const member = await createWorkspaceMember({ role: "member" });
+    const outsider = await createWorkspaceMember({ role: "admin" });
+    await db.insert(schema.workspaceUserTable).values({
+      workspaceId: admin.workspace.id,
+      userId: member.user.id,
+      role: "member",
+      joinedAt: new Date(),
+    });
+    setServiceEnv({
+      KANEO_MITRA_BASE_URL: "https://calendar.internal.example",
+      KANEO_MITRA_VIEW_MODE: "embedded",
+    });
+    mockAnonymousSession();
+    const { app } = createApp();
+    const path = `/api/embedded-integration/workspace-config/mitra?workspaceId=${admin.workspace.id}`;
+    const contentHeaders = { "content-type": "application/json" };
+    const body = JSON.stringify({ enabled: false });
+
+    const unauthenticated = await app.request(path, {
+      method: "PUT",
+      headers: contentHeaders,
+      body,
+    });
+    expect(unauthenticated.status).toBe(401);
+
+    mockAuthenticatedSessions(admin.user, {
+      "member-token": member.user,
+      "outsider-token": outsider.user,
+    });
+
+    const memberResponse = await app.request(path, {
+      method: "PUT",
+      headers: { ...contentHeaders, authorization: "Bearer member-token" },
+      body,
+    });
+    expect(memberResponse.status).toBe(403);
+
+    const outsiderResponse = await app.request(path, {
+      method: "PUT",
+      headers: { ...contentHeaders, authorization: "Bearer outsider-token" },
+      body,
+    });
+    expect(outsiderResponse.status).toBe(403);
+
+    const invalidService = await app.request(
+      `/api/embedded-integration/workspace-config/unknown?workspaceId=${admin.workspace.id}`,
+      {
+        method: "PUT",
+        headers: contentHeaders,
+        body,
+      },
+    );
+    expect(invalidService.status).toBe(400);
   });
 
   it("blocks an authenticated outsider from the workspace services config", async () => {

@@ -2485,6 +2485,17 @@
     "configError": "La configuration de l'intégration n'a pas pu être lue",
     "calendarFrameTitle": "Mitra Calendar",
     "mindMapFrameTitle": "WiseMapping Mind Map",
-    "frameSlowHint": "Si rien ne s'affiche, utilisez \"Ouvrir dans un nouvel onglet pour se connecter\" puis \"Recharger\"."
+    "frameSlowHint": "Si rien ne s'affiche, utilisez \"Ouvrir dans un nouvel onglet pour se connecter\" puis \"Recharger\".",
+    "settings": {
+      "sectionTitle": "Intégrations",
+      "mitraLabel": "Calendrier Mitra",
+      "wisemappingLabel": "Mind Map WiseMapping",
+      "serviceNotConfigured": "Ces services n'ont pas été configurés par l'administrateur Kaneo.",
+      "saving": "Enregistrement des paramètres d'intégration…",
+      "saveSuccess": "Paramètre d'intégration enregistré.",
+      "saveError": "Impossible d'enregistrer le paramètre. Réessayez."
+    },
+    "calendarDisabledByWorkspace": "Le calendrier est désactivé pour cet espace de travail. Un gestionnaire peut le réactiver dans Paramètres → Intégrations.",
+    "mindMapDisabledByWorkspace": "Mind Map est désactivé pour cet espace de travail. Un gestionnaire peut le réactiver dans Paramètres → Intégrations."
   }
 }

@@ -171,6 +171,22 @@ export const workspaceTable = pgTable("workspace", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull(),
 });
 
+export const workspaceIntegrationSettingsTable = pgTable(
+  "workspace_integration_settings",
+  {
+    workspaceId: text("workspace_id")
+      .primaryKey()
+      .references(() => workspaceTable.id, { onDelete: "cascade" }),
+    mitraEnabled: boolean("mitra_enabled").notNull().default(true),
+    wisemappingEnabled: boolean("wisemapping_enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
 export const workspaceUserTable = pgTable(
   "workspace_member",
   {

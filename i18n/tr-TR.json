@@ -2485,6 +2485,17 @@
     "configError": "Entegrasyon yapılandırması okunamadı",
     "calendarFrameTitle": "Mitra Calendar",
     "mindMapFrameTitle": "WiseMapping Mind Map",
-    "frameSlowHint": "Hiçbir şey görünmüyorsa \"Giriş yapmak için yeni sekmede aç\"ı kullan, sonra \"Yeniden yükle\"."
+    "frameSlowHint": "Hiçbir şey görünmüyorsa \"Giriş yapmak için yeni sekmede aç\"ı kullan, sonra \"Yeniden yükle\".",
+    "settings": {
+      "sectionTitle": "Entegrasyonlar",
+      "mitraLabel": "Mitra Takvimi",
+      "wisemappingLabel": "WiseMapping Zihin Haritası",
+      "serviceNotConfigured": "Bu hizmetler Kaneo yöneticisi tarafından yapılandırılmadı.",
+      "saving": "Entegrasyon ayarları kaydediliyor…",
+      "saveSuccess": "Entegrasyon ayarı kaydedildi.",
+      "saveError": "Entegrasyon ayarı kaydedilemedi. Tekrar deneyin."
+    },
+    "calendarDisabledByWorkspace": "Takvim bu çalışma alanında kapalı. Çalışma alanı yöneticisi Ayarlar → Entegrasyonlar bölümünden yeniden açabilir.",
+    "mindMapDisabledByWorkspace": "Zihin haritası bu çalışma alanında kapalı. Çalışma alanı yöneticisi Ayarlar → Entegrasyonlar bölümünden yeniden açabilir."
   }
 }

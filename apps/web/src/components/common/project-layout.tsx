@@ -7,6 +7,7 @@ import {
   SquircleDashed,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { useTranslation } from "react-i18next";
 import MobileProjectNav from "@/components/common/header/mobile-project-nav";
 import ProjectCrumbSelect from "@/components/common/header/project-crumb-select";
 import WorkspaceCrumbSelect from "@/components/common/header/workspace-crumb-select";
@@ -22,6 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { shortcuts } from "@/constants/shortcuts";
+import useEmbeddedServicesConfig from "@/hooks/queries/embedded-integration/use-embedded-services-config";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import { useProjectWebSocket } from "@/hooks/use-project-websocket";
 import { cn } from "@/lib/cn";
@@ -45,7 +47,10 @@ export default function ProjectLayout({
 }: ProjectLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation("embedded");
   const { data: project } = useGetProject({ id: projectId, workspaceId });
+  const { data: embeddedServices } = useEmbeddedServicesConfig(workspaceId);
+  const showMindMap = embeddedServices?.wisemapping?.enabled === true;
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] =
     useState(false);
 
@@ -105,7 +110,7 @@ export default function ProjectLayout({
           ? "/dashboard/workspace/$workspaceId/project/$projectId/backlog"
           : resolvedView === "gantt"
             ? "/dashboard/workspace/$workspaceId/project/$projectId/gantt"
-            : resolvedView === "mindmap"
+            : resolvedView === "mindmap" && showMindMap
               ? "/dashboard/workspace/$workspaceId/project/$projectId/mindmap"
               : "/dashboard/workspace/$workspaceId/project/$projectId/board",
       params: {
@@ -163,6 +168,7 @@ export default function ProjectLayout({
                 onSelectGantt={handleNavigateToGantt}
                 onSelectDocs={handleNavigateToDocs}
                 onSelectMindMap={handleNavigateToMindMap}
+                showMindMap={showMindMap}
                 onSelectProject={handleProjectSwitch}
                 onAddProject={() => setIsCreateProjectModalOpen(true)}
               />
@@ -222,19 +228,23 @@ export default function ProjectLayout({
                   <FileText className="size-3.5" />
                   Docs
                 </Button>
-                <Button
-                  variant={resolvedView === "mindmap" ? "secondary" : "ghost"}
-                  aria-current={resolvedView === "mindmap" ? "true" : undefined}
-                  size="xs"
-                  onClick={handleNavigateToMindMap}
-                  className={cn(
-                    "h-6 gap-1.5 rounded-md px-2 text-xs",
-                    resolvedView !== "mindmap" && "text-muted-foreground",
-                  )}
-                >
-                  <Network className="size-3.5" />
-                  Mind Map
-                </Button>
+                {showMindMap && (
+                  <Button
+                    variant={resolvedView === "mindmap" ? "secondary" : "ghost"}
+                    aria-current={
+                      resolvedView === "mindmap" ? "true" : undefined
+                    }
+                    size="xs"
+                    onClick={handleNavigateToMindMap}
+                    className={cn(
+                      "h-6 gap-1.5 rounded-md px-2 text-xs",
+                      resolvedView !== "mindmap" && "text-muted-foreground",
+                    )}
+                  >
+                    <Network className="size-3.5" />
+                    {t("mindMapPageTitle")}
+                  </Button>
+                )}
               </div>
             )}
           </div>

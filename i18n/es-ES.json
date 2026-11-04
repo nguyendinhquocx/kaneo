@@ -2485,6 +2485,17 @@
     "configError": "No se pudo leer la configuración de integración",
     "calendarFrameTitle": "Mitra Calendar",
     "mindMapFrameTitle": "WiseMapping Mind Map",
-    "frameSlowHint": "Si no aparece nada, usa \"Abrir en nueva pestaña para iniciar sesión\" y luego \"Recargar\"."
+    "frameSlowHint": "Si no aparece nada, usa \"Abrir en nueva pestaña para iniciar sesión\" y luego \"Recargar\".",
+    "settings": {
+      "sectionTitle": "Integraciones",
+      "mitraLabel": "Calendario Mitra",
+      "wisemappingLabel": "Mind Map de WiseMapping",
+      "serviceNotConfigured": "El administrador de Kaneo no ha configurado estos servicios.",
+      "saving": "Guardando la configuración de integración…",
+      "saveSuccess": "Se guardó la configuración de integración.",
+      "saveError": "No se pudo guardar la configuración. Inténtalo de nuevo."
+    },
+    "calendarDisabledByWorkspace": "El calendario está desactivado para este espacio de trabajo. Un administrador puede activarlo en Configuración → Integraciones.",
+    "mindMapDisabledByWorkspace": "Mind Map está desactivado para este espacio de trabajo. Un administrador puede activarlo en Configuración → Integraciones."
   }
 }

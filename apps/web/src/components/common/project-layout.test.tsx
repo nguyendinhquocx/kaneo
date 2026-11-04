@@ -1,8 +1,15 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectLayout from "./project-layout";
 
 const locationPathname = vi.hoisted(() => vi.fn());
+const embeddedConfigMock = vi.hoisted(() => vi.fn());
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => (key === "mindMapPageTitle" ? "Mind Map" : key),
+  }),
+}));
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
@@ -65,11 +72,22 @@ vi.mock("@/hooks/queries/project/use-get-project", () => ({
   default: () => ({ data: { name: "P" } }),
 }));
 
+vi.mock(
+  "@/hooks/queries/embedded-integration/use-embedded-services-config",
+  () => ({ default: (...args: unknown[]) => embeddedConfigMock(...args) }),
+);
+
 vi.mock("@/hooks/use-project-websocket", () => ({
   useProjectWebSocket: () => {},
 }));
 
 afterEach(cleanup);
+
+beforeEach(() => {
+  embeddedConfigMock.mockReturnValue({
+    data: { wisemapping: { enabled: true } },
+  });
+});
 
 describe("ProjectLayout mind map view", () => {
   it("detects the mindmap route and keeps the view switcher visible", () => {
@@ -96,6 +114,24 @@ describe("ProjectLayout mind map view", () => {
     expect(switcher.className).toContain("hidden");
     expect(switcher.className).toContain("md:inline-flex");
     expect(switcher.className).not.toContain("sm:inline-flex");
+  });
+
+  it("hides the Mind Map switcher when the workspace toggle is off", () => {
+    locationPathname.mockReturnValue(
+      "/dashboard/workspace/ws-1/project/p-1/board",
+    );
+    embeddedConfigMock.mockReturnValue({
+      data: { wisemapping: { enabled: false } },
+    });
+
+    render(
+      <ProjectLayout projectId="p-1" workspaceId="ws-1">
+        <div>content</div>
+      </ProjectLayout>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Mind Map" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Docs" })).toBeInTheDocument();
   });
 
   it("defaults to the board view on non-view routes", () => {

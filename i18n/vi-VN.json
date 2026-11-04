@@ -2489,6 +2489,17 @@
     "configError": "Không đọc được cấu hình tích hợp",
     "calendarFrameTitle": "Mitra Calendar",
     "mindMapFrameTitle": "WiseMapping Mind Map",
-    "frameSlowHint": "Nếu nội dung không hiện, chọn \"Mở riêng để đăng nhập\" rồi \"Tải lại\"."
+    "frameSlowHint": "Nếu nội dung không hiện, chọn \"Mở riêng để đăng nhập\" rồi \"Tải lại\".",
+    "settings": {
+      "sectionTitle": "Tích hợp",
+      "mitraLabel": "Lịch Mitra",
+      "wisemappingLabel": "Mind Map WiseMapping",
+      "serviceNotConfigured": "Quản trị viên Kaneo chưa cấu hình các dịch vụ này.",
+      "saving": "Đang lưu cài đặt tích hợp…",
+      "saveSuccess": "Đã lưu cài đặt tích hợp.",
+      "saveError": "Không lưu được cài đặt tích hợp. Thử lại."
+    },
+    "calendarDisabledByWorkspace": "Workspace đã tắt Lịch. Người quản lý workspace có thể bật lại trong Cài đặt → Tích hợp.",
+    "mindMapDisabledByWorkspace": "Workspace đã tắt Mind Map. Người quản lý workspace có thể bật lại trong Cài đặt → Tích hợp."
   }
 }

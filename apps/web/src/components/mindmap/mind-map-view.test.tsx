@@ -76,12 +76,29 @@ describe("MindMapView", () => {
 
     render(<MindMapView projectId="p-1" workspaceId="ws-1" />);
 
-    expect(screen.getByText("embedded:mindMapDisabled")).toBeInTheDocument();
+    expect(
+      screen.getByText("embedded:settings.serviceNotConfigured"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("mindmap-embedded-frame")).toBeNull();
+  });
+
+  it("hides Mind Map when the workspace toggle is off", () => {
+    mockConfig({ enabled: false });
+    mockBinding(null);
+    canManageMock.mockReturnValue(true);
+
+    render(<MindMapView projectId="p-1" workspaceId="ws-1" />);
+
+    expect(
+      screen.getByText("embedded:mindMapDisabledByWorkspace"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("mindmap-link-form")).toBeNull();
     expect(screen.queryByTestId("mindmap-embedded-frame")).toBeNull();
   });
 
   it("shows only a plain notice for members when the map is unlinked", () => {
     mockConfig({
+      enabled: true,
       baseUrl: "https://maps.internal.example",
       viewMode: "embedded",
     });
@@ -97,6 +114,7 @@ describe("MindMapView", () => {
 
   it("offers the link form to managers when the map is unlinked", () => {
     mockConfig({
+      enabled: true,
       baseUrl: "https://maps.internal.example",
       viewMode: "embedded",
     });
@@ -118,6 +136,7 @@ describe("MindMapView", () => {
 
   it("embeds the linked map with the id encoded exactly once", () => {
     mockConfig({
+      enabled: true,
       baseUrl: "https://maps.internal.example",
       viewMode: "embedded",
     });
@@ -136,6 +155,7 @@ describe("MindMapView", () => {
 
   it("does not render a frame in open-only mode and links to the editor instead", () => {
     mockConfig({
+      enabled: true,
       baseUrl: "https://maps.internal.example",
       viewMode: "open-only",
     });

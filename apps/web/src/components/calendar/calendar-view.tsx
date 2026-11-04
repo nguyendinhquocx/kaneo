@@ -57,7 +57,22 @@ export default function CalendarView({ workspaceId }: CalendarViewProps) {
         role="status"
         className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center"
       >
-        <p className="text-sm text-muted-foreground">{t("calendarDisabled")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("settings.serviceNotConfigured")}
+        </p>
+      </div>
+    );
+  }
+
+  if (!mitra.enabled) {
+    return (
+      <div
+        role="status"
+        className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center"
+      >
+        <p className="text-sm text-muted-foreground">
+          {t("calendarDisabledByWorkspace")}
+        </p>
       </div>
     );
   }

@@ -8,26 +8,68 @@ import {
   getMindMapBinding,
   upsertMindMapBinding,
 } from "./controllers/mind-map";
+import {
+  getWorkspaceIntegrationSettings,
+  setWorkspaceIntegrationEnabled,
+} from "./controllers/workspace-settings";
 import { MAP_ID_MAX_LENGTH, validateMapId } from "./map-id";
 import { getEmbeddedServicesConfig } from "./service-config";
-import type { EmbeddedServiceConfig } from "./types";
+import type {
+  EmbeddedServiceConfig,
+  PublicEmbeddedServiceConfig,
+} from "./types";
 
-const embeddedServiceSchema = v.object({
+const enabledEmbeddedServiceSchema = v.object({
+  enabled: v.literal(true),
   baseUrl: v.string(),
   viewMode: v.picklist(["embedded", "open-only"]),
 });
+
+const disabledEmbeddedServiceSchema = v.object({
+  enabled: v.literal(false),
+});
+
+const embeddedServiceSchema = v.union([
+  enabledEmbeddedServiceSchema,
+  disabledEmbeddedServiceSchema,
+]);
 
 const servicesSchema = v.object({
   mitra: v.nullable(embeddedServiceSchema),
   wisemapping: v.nullable(embeddedServiceSchema),
 });
 
+const toggleResponseSchema = v.object({
+  service: v.string(),
+  config: v.nullable(embeddedServiceSchema),
+});
+
 const mindMapBindingSchema = v.object({
   mapId: v.nullable(v.string()),
 });
 
-function servicePayload(config: EmbeddedServiceConfig | null) {
-  return config ? { baseUrl: config.baseUrl, viewMode: config.viewMode } : null;
+function servicePayload(
+  config: EmbeddedServiceConfig | null,
+  enabled: boolean,
+): PublicEmbeddedServiceConfig | null {
+  if (!config) return null;
+  if (!enabled) return { enabled: false };
+  return { enabled: true, baseUrl: config.baseUrl, viewMode: config.viewMode };
+}
+
+async function getWorkspaceServicesPayload(workspaceId: string) {
+  const [config, settings] = await Promise.all([
+    Promise.resolve(getEmbeddedServicesConfig()),
+    getWorkspaceIntegrationSettings(workspaceId),
+  ]);
+
+  return {
+    mitra: servicePayload(config.mitra, settings.mitraEnabled),
+    wisemapping: servicePayload(
+      config.wisemapping,
+      settings.wisemappingEnabled,
+    ),
+  };
 }
 
 const embeddedIntegration = new Hono<{
@@ -59,11 +101,44 @@ const embeddedIntegration = new Hono<{
     }),
     workspaceAccess.fromQuery("workspaceId"),
     async (c) => {
-      const config = getEmbeddedServicesConfig();
-      return c.json({
-        mitra: servicePayload(config.mitra),
-        wisemapping: servicePayload(config.wisemapping),
-      });
+      return c.json(await getWorkspaceServicesPayload(c.get("workspaceId")));
+    },
+  )
+  .put(
+    "/workspace-config/:service",
+    describeRoute({
+      operationId: "setEmbeddedServiceEnabled",
+      tags: ["Integrations"],
+      description:
+        "Enable or hide one configured embedded service for a workspace. Requires manage_settings permission.",
+      responses: {
+        200: {
+          description: "Updated embedded service state",
+          content: {
+            "application/json": { schema: resolver(toggleResponseSchema) },
+          },
+        },
+      },
+    }),
+    validator(
+      "param",
+      v.object({ service: v.picklist(["mitra", "wisemapping"]) }),
+    ),
+    validator(
+      "query",
+      v.object({ workspaceId: v.pipe(v.string(), v.minLength(1)) }),
+    ),
+    validator("json", v.object({ enabled: v.boolean() })),
+    workspaceAccess.fromQuery("workspaceId"),
+    requireWorkspacePermission({ workspace: ["manage_settings"] }),
+    async (c) => {
+      const { service } = c.req.valid("param");
+      const { workspaceId } = c.req.valid("query");
+      const { enabled } = c.req.valid("json");
+
+      await setWorkspaceIntegrationEnabled({ workspaceId, service, enabled });
+      const payload = await getWorkspaceServicesPayload(workspaceId);
+      return c.json({ service, config: payload[service] });
     },
   )
   .get(

@@ -41,7 +41,9 @@ describe("CalendarView", () => {
 
     render(<CalendarView workspaceId="ws-1" />);
 
-    expect(screen.getByText("embedded:calendarDisabled")).toBeInTheDocument();
+    expect(
+      screen.getByText("embedded:settings.serviceNotConfigured"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("calendar-embedded-frame")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
   });
@@ -50,6 +52,7 @@ describe("CalendarView", () => {
     mockConfig({
       data: {
         mitra: {
+          enabled: true,
           baseUrl: "https://calendar.internal.example",
           viewMode: "embedded",
         },
@@ -74,10 +77,28 @@ describe("CalendarView", () => {
     expect(openLink).toHaveAttribute("rel", "noopener noreferrer");
   });
 
+  it("hides the calendar when the workspace toggle is off", () => {
+    mockConfig({
+      data: {
+        mitra: { enabled: false },
+        wisemapping: null,
+      },
+    });
+
+    render(<CalendarView workspaceId="ws-1" />);
+
+    expect(
+      screen.getByText("embedded:calendarDisabledByWorkspace"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("calendar-embedded-frame")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
   it("does not render a frame in open-only mode and links out instead", () => {
     mockConfig({
       data: {
         mitra: {
+          enabled: true,
           baseUrl: "https://calendar.internal.example",
           viewMode: "open-only",
         },

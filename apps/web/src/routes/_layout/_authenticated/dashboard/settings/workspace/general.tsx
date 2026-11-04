@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import PageTitle from "@/components/page-title";
 import useAuth from "@/components/providers/auth-provider/hooks/use-auth";
+import EmbeddedIntegrationsSettings from "@/components/settings/embedded-integrations-settings";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -124,8 +125,13 @@ function RouteComponent() {
     useDeleteWorkspace();
   const { mutateAsync: transferOwnership, isPending: isTransferring } =
     useTransferWorkspaceOwnership();
-  const { canManageWorkspace, canDeleteWorkspace, isOwner } =
-    useWorkspacePermission();
+  const {
+    canManageWorkspace,
+    canManageEmbeddedIntegrations,
+    canDeleteWorkspace,
+    isOwner,
+    isCheckingPermissions,
+  } = useWorkspacePermission();
   const canEdit = canManageWorkspace();
   const canDelete = canDeleteWorkspace();
   const workspaceDescription = getWorkspaceDescription(workspace);
@@ -402,6 +408,27 @@ function RouteComponent() {
             </Form>
           </div>
         </div>
+
+        {!isCheckingPermissions && canManageEmbeddedIntegrations() && (
+          <section
+            className="space-y-6"
+            aria-labelledby="workspace-integrations-title"
+          >
+            <div className="space-y-1">
+              <h2
+                id="workspace-integrations-title"
+                className="text-md font-medium"
+              >
+                {t("embedded:settings.sectionTitle")}
+              </h2>
+            </div>
+            <div className="space-y-4 rounded-md border border-border bg-sidebar p-4">
+              {workspace?.id && (
+                <EmbeddedIntegrationsSettings workspaceId={workspace.id} />
+              )}
+            </div>
+          </section>
+        )}
 
         {isOwner ? (
           <div className="space-y-6">

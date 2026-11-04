@@ -2,6 +2,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import MobileProjectNav from "./mobile-project-nav";
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => (key === "mindMapPageTitle" ? "Mind Map" : key),
+  }),
+}));
+
 vi.mock("@/hooks/queries/project/use-get-projects", () => ({
   default: () => ({
     data: [
@@ -25,6 +31,7 @@ describe("MobileProjectNav view picker", () => {
         onSelectGantt={vi.fn()}
         onSelectDocs={vi.fn()}
         onSelectMindMap={vi.fn()}
+        showMindMap
         onSelectProject={vi.fn()}
         onAddProject={vi.fn()}
       />,
@@ -51,6 +58,31 @@ describe("MobileProjectNav view picker", () => {
     }
   });
 
+  it("shows four views when Mind Map is disabled", () => {
+    render(
+      <MobileProjectNav
+        workspaceId="ws-1"
+        projectId="p-1"
+        activeView="board"
+        onSelectBoard={vi.fn()}
+        onSelectBacklog={vi.fn()}
+        onSelectGantt={vi.fn()}
+        onSelectDocs={vi.fn()}
+        onSelectMindMap={vi.fn()}
+        showMindMap={false}
+        onSelectProject={vi.fn()}
+        onAddProject={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByRole("button", { name: "Backlog" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Board" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gantt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Docs" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mind Map" })).toBeNull();
+  });
+
   it("routes Mind Map selection through the callback", () => {
     const onSelectMindMap = vi.fn();
     render(
@@ -63,6 +95,7 @@ describe("MobileProjectNav view picker", () => {
         onSelectGantt={vi.fn()}
         onSelectDocs={vi.fn()}
         onSelectMindMap={onSelectMindMap}
+        showMindMap
         onSelectProject={vi.fn()}
         onAddProject={vi.fn()}
       />,

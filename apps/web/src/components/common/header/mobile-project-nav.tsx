@@ -7,6 +7,7 @@ import {
   Plus,
   SquareKanban,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -26,6 +27,7 @@ type MobileProjectNavProps = {
   onSelectGantt: () => void;
   onSelectDocs: () => void;
   onSelectMindMap: () => void;
+  showMindMap: boolean;
   onSelectProject: (projectId: string) => void;
   onAddProject: () => void;
 };
@@ -47,9 +49,11 @@ export default function MobileProjectNav({
   onSelectGantt,
   onSelectDocs,
   onSelectMindMap,
+  showMindMap,
   onSelectProject,
   onAddProject,
 }: MobileProjectNavProps) {
+  const { t } = useTranslation("embedded");
   const { data: projects = [] } = useGetProjects({ workspaceId });
 
   const views: Array<{
@@ -73,7 +77,7 @@ export default function MobileProjectNav({
     },
     {
       key: "mindmap",
-      label: "Mind Map",
+      label: t("mindMapPageTitle"),
       icon: Network,
       onSelect: onSelectMindMap,
     },
@@ -100,26 +104,30 @@ export default function MobileProjectNav({
               View
             </p>
             <div className={VIEW_GRID_CLASSES}>
-              {views.map((view) => {
-                const Icon = view.icon;
-                return (
-                  <button
-                    key={view.key}
-                    type="button"
-                    aria-current={activeView === view.key ? "true" : undefined}
-                    onClick={view.onSelect}
-                    className={cn(
-                      VIEW_ITEM_CLASSES,
-                      activeView === view.key
-                        ? "border-border bg-secondary text-foreground"
-                        : "border-transparent text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    {Icon ? <Icon className="size-3.5" /> : null}
-                    {view.label}
-                  </button>
-                );
-              })}
+              {views
+                .filter((view) => view.key !== "mindmap" || showMindMap)
+                .map((view) => {
+                  const Icon = view.icon;
+                  return (
+                    <button
+                      key={view.key}
+                      type="button"
+                      aria-current={
+                        activeView === view.key ? "true" : undefined
+                      }
+                      onClick={view.onSelect}
+                      className={cn(
+                        VIEW_ITEM_CLASSES,
+                        activeView === view.key
+                          ? "border-border bg-secondary text-foreground"
+                          : "border-transparent text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      {Icon ? <Icon className="size-3.5" /> : null}
+                      {view.label}
+                    </button>
+                  );
+                })}
             </div>
           </div>
 
@@ -137,9 +145,7 @@ export default function MobileProjectNav({
                   <button
                     key={project.id}
                     type="button"
-                    aria-current={
-                      isCurrentProject ? "true" : undefined
-                    }
+                    aria-current={isCurrentProject ? "true" : undefined}
                     onClick={() => onSelectProject(project.id)}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors pointer-coarse:min-h-[44px]",
