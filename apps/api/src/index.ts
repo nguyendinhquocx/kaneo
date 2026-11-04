@@ -29,6 +29,7 @@ import { prepareDatabaseStartup } from "./database/prepare-database-startup";
 import { waitForDatabase } from "./database/wait-for-database";
 import discordIntegration from "./discord-integration";
 import document from "./document";
+import embeddedIntegration from "./embedded-integration";
 import { eventContext } from "./events";
 import execution from "./execution";
 import { getExecutionMetrics, seedExecutionFlags } from "./execution/gates";
@@ -539,6 +540,10 @@ export function createApp() {
     "/github-integration",
     githubIntegration,
   );
+  const embeddedIntegrationApi = api.route(
+    "/embedded-integration",
+    embeddedIntegration,
+  );
   const giteaIntegrationApi = api.route("/gitea-integration", giteaIntegration);
   const genericWebhookIntegrationApi = api.route(
     "/generic-webhook-integration",
@@ -716,6 +721,7 @@ export function createApp() {
     documentApi,
     externalLinkApi,
     executionApi,
+    embeddedIntegrationApi,
     genericWebhookIntegrationApi,
     githubIntegrationApi,
     giteaIntegrationApi,
@@ -838,6 +844,7 @@ const {
   discordIntegrationApi,
   documentApi,
   executionApi,
+  embeddedIntegrationApi,
   externalLinkApi,
   genericWebhookIntegrationApi,
   githubIntegrationApi,
@@ -886,6 +893,7 @@ export type AppType =
   | typeof notificationApi
   | typeof notificationPreferencesApi
   | typeof searchApi
+  | typeof embeddedIntegrationApi
   | typeof githubIntegrationApi
   | typeof giteaIntegrationApi
   | typeof genericWebhookIntegrationApi
