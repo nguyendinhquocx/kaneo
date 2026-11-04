@@ -101,6 +101,14 @@ describe("NavMain workspace calendar entry", () => {
     expect(screen.queryByText("navigation:sidebar.calendar")).toBeNull();
 
     configMock.mockReturnValue({
+      data: { mitra: { enabled: true } },
+      isError: true,
+      isSuccess: false,
+    });
+    rerender(<NavMain />);
+    expect(screen.queryByText("navigation:sidebar.calendar")).toBeNull();
+
+    configMock.mockReturnValue({
       data: { mitra: { enabled: false } },
       isSuccess: true,
     });

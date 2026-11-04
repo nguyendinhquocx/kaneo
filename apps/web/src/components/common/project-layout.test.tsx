@@ -86,6 +86,7 @@ afterEach(cleanup);
 beforeEach(() => {
   embeddedConfigMock.mockReturnValue({
     data: { wisemapping: { enabled: true } },
+    isSuccess: true,
   });
 });
 
@@ -122,6 +123,7 @@ describe("ProjectLayout mind map view", () => {
     );
     embeddedConfigMock.mockReturnValue({
       data: { wisemapping: { enabled: false } },
+      isSuccess: true,
     });
 
     render(
@@ -132,6 +134,25 @@ describe("ProjectLayout mind map view", () => {
 
     expect(screen.queryByRole("button", { name: "Mind Map" })).toBeNull();
     expect(screen.getByRole("button", { name: "Docs" })).toBeInTheDocument();
+  });
+
+  it("fails closed on a config refresh error even when stale config enables Mind Map", () => {
+    locationPathname.mockReturnValue(
+      "/dashboard/workspace/ws-1/project/p-1/board",
+    );
+    embeddedConfigMock.mockReturnValue({
+      data: { wisemapping: { enabled: true } },
+      isError: true,
+      isSuccess: false,
+    });
+
+    render(
+      <ProjectLayout projectId="p-1" workspaceId="ws-1">
+        <div>content</div>
+      </ProjectLayout>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Mind Map" })).toBeNull();
   });
 
   it("defaults to the board view on non-view routes", () => {

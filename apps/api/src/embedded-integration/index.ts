@@ -39,10 +39,7 @@ const servicesSchema = v.object({
   wisemapping: v.nullable(embeddedServiceSchema),
 });
 
-const toggleResponseSchema = v.object({
-  service: v.string(),
-  config: v.nullable(embeddedServiceSchema),
-});
+const toggleResponseSchema = v.nullable(embeddedServiceSchema);
 
 const mindMapBindingSchema = v.object({
   mapId: v.nullable(v.string()),
@@ -138,7 +135,7 @@ const embeddedIntegration = new Hono<{
 
       await setWorkspaceIntegrationEnabled({ workspaceId, service, enabled });
       const payload = await getWorkspaceServicesPayload(workspaceId);
-      return c.json({ service, config: payload[service] });
+      return c.json(payload[service]);
     },
   )
   .get(

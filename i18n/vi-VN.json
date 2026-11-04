@@ -2494,7 +2494,7 @@
       "sectionTitle": "Tích hợp",
       "mitraLabel": "Lịch Mitra",
       "wisemappingLabel": "Mind Map WiseMapping",
-      "serviceNotConfigured": "Quản trị viên Kaneo chưa cấu hình các dịch vụ này.",
+      "serviceNotConfigured": "Chưa được quản trị viên Kaneo cấu hình.",
       "saving": "Đang lưu cài đặt tích hợp…",
       "saveSuccess": "Đã lưu cài đặt tích hợp.",
       "saveError": "Không lưu được cài đặt tích hợp. Thử lại."

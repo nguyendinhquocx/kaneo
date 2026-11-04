@@ -2490,7 +2490,7 @@
       "sectionTitle": "Integrasi",
       "mitraLabel": "Kalender Mitra",
       "wisemappingLabel": "Mind Map WiseMapping",
-      "serviceNotConfigured": "Layanan ini belum dikonfigurasi oleh administrator Kaneo.",
+      "serviceNotConfigured": "Belum dikonfigurasi oleh administrator Kaneo.",
       "saving": "Menyimpan pengaturan integrasi…",
       "saveSuccess": "Pengaturan integrasi disimpan.",
       "saveError": "Pengaturan integrasi tidak dapat disimpan. Coba lagi."

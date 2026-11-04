@@ -2490,7 +2490,7 @@
       "sectionTitle": "Интеграции",
       "mitraLabel": "Mitra календар",
       "wisemappingLabel": "WiseMapping ментална мапа",
-      "serviceNotConfigured": "Овие услуги не се конфигурирани од Kaneo администраторот.",
+      "serviceNotConfigured": "Не е конфигурирано од Kaneo администраторот.",
       "saving": "Се зачувуваат поставките за интеграција…",
       "saveSuccess": "Поставката за интеграција е зачувана.",
       "saveError": "Поставката не можеше да се зачува. Обиди се повторно."

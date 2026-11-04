@@ -83,9 +83,9 @@ describe("EmbeddedIntegrationsSettings", () => {
 
     render(<EmbeddedIntegrationsSettings workspaceId="ws-1" />);
 
-    expect(
-      screen.getByText("settings.serviceNotConfigured"),
-    ).toBeInTheDocument();
+    expect(screen.getAllByText(/settings\.serviceNotConfigured/)).toHaveLength(
+      2,
+    );
     expect(screen.queryByRole("switch")).toBeNull();
   });
 });

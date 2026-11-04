@@ -2552,7 +2552,7 @@
       "sectionTitle": "Интеграции",
       "mitraLabel": "Календарь Mitra",
       "wisemappingLabel": "Интеллектуальная карта WiseMapping",
-      "serviceNotConfigured": "Эти сервисы не настроены администратором Kaneo.",
+      "serviceNotConfigured": "Не настроено администратором Kaneo.",
       "saving": "Сохранение настроек интеграции…",
       "saveSuccess": "Настройка интеграции сохранена.",
       "saveError": "Не удалось сохранить настройку. Попробуйте ещё раз."

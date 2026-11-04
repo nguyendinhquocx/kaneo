@@ -64,12 +64,18 @@ export default function EmbeddedIntegrationsSettings({
   }
 
   const { mitra, wisemapping } = configQuery.data;
-  const hasConfiguredService = Boolean(mitra || wisemapping);
 
   return (
     <div className="space-y-3">
-      {!hasConfiguredService && (
+      {!mitra && (
         <p className="text-sm text-muted-foreground">
+          <span className="font-medium">{t("settings.mitraLabel")}:</span>{" "}
+          {t("settings.serviceNotConfigured")}
+        </p>
+      )}
+      {!wisemapping && (
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium">{t("settings.wisemappingLabel")}:</span>{" "}
           {t("settings.serviceNotConfigured")}
         </p>
       )}

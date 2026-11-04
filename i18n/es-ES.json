@@ -2490,7 +2490,7 @@
       "sectionTitle": "Integraciones",
       "mitraLabel": "Calendario Mitra",
       "wisemappingLabel": "Mind Map de WiseMapping",
-      "serviceNotConfigured": "El administrador de Kaneo no ha configurado estos servicios.",
+      "serviceNotConfigured": "No está configurado por el administrador de Kaneo.",
       "saving": "Guardando la configuración de integración…",
       "saveSuccess": "Se guardó la configuración de integración.",
       "saveError": "No se pudo guardar la configuración. Inténtalo de nuevo."

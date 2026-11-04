@@ -2490,7 +2490,7 @@
       "sectionTitle": "Integraties",
       "mitraLabel": "Mitra-agenda",
       "wisemappingLabel": "WiseMapping-mindmap",
-      "serviceNotConfigured": "Deze diensten zijn niet geconfigureerd door de Kaneo-beheerder.",
+      "serviceNotConfigured": "Niet geconfigureerd door de Kaneo-beheerder.",
       "saving": "Integratie-instellingen opslaan…",
       "saveSuccess": "Integratie-instelling opgeslagen.",
       "saveError": "De instelling kon niet worden opgeslagen. Probeer het opnieuw."

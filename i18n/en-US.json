@@ -2494,7 +2494,7 @@
       "sectionTitle": "Integrations",
       "mitraLabel": "Mitra Calendar",
       "wisemappingLabel": "WiseMapping Mind Map",
-      "serviceNotConfigured": "These services have not been configured by the Kaneo administrator.",
+      "serviceNotConfigured": "Not configured by the Kaneo administrator.",
       "saving": "Saving integration settings…",
       "saveSuccess": "Integration setting saved.",
       "saveError": "Could not save integration setting. Try again."

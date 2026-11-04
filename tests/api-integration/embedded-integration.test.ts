@@ -167,10 +167,7 @@ describe("API integration: embedded services config", () => {
     });
     expect(disabled.status).toBe(200);
     const disabledBody = await disabled.json();
-    expect(disabledBody).toEqual({
-      service: "mitra",
-      config: { enabled: false },
-    });
+    expect(disabledBody).toEqual({ enabled: false });
     expect(JSON.stringify(disabledBody)).not.toContain(
       "calendar.internal.example",
     );
@@ -180,7 +177,7 @@ describe("API integration: embedded services config", () => {
     );
     expect(getDisabled.status).toBe(200);
     const disabledConfig = await getDisabled.json();
-    expect(disabledConfig).toMatchObject({ mitra: { enabled: false } });
+    expect(disabledConfig.mitra).toEqual({ enabled: false });
     expect(JSON.stringify(disabledConfig)).not.toContain(
       "calendar.internal.example",
     );
@@ -192,13 +189,87 @@ describe("API integration: embedded services config", () => {
     });
     expect(enabled.status).toBe(200);
     expect(await enabled.json()).toEqual({
-      service: "mitra",
-      config: {
-        enabled: true,
-        baseUrl: "https://calendar.internal.example",
-        viewMode: "embedded",
-      },
+      enabled: true,
+      baseUrl: "https://calendar.internal.example",
+      viewMode: "embedded",
     });
+  });
+
+  it("toggles WiseMapping independently and preserves project map bindings", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    setServiceEnv({
+      KANEO_MITRA_BASE_URL: "https://calendar.internal.example",
+      KANEO_MITRA_VIEW_MODE: "embedded",
+      KANEO_WISEMAPPING_BASE_URL: "https://maps.internal.example",
+      KANEO_WISEMAPPING_VIEW_MODE: "open-only",
+    });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    await db.insert(schema.integrationTable).values({
+      projectId: project.id,
+      type: "wisemapping",
+      config: JSON.stringify({ mapId: "keep-this-map" }),
+      isActive: true,
+    });
+    mockAuthenticatedSessions(admin.user, {});
+    const { app } = createApp();
+    const headers = { "content-type": "application/json" };
+    const toggleUrl = (service: "mitra" | "wisemapping") =>
+      `/api/embedded-integration/workspace-config/${service}?workspaceId=${admin.workspace.id}`;
+
+    const disableMitra = await app.request(toggleUrl("mitra"), {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(disableMitra.status).toBe(200);
+    expect(await disableMitra.json()).toEqual({ enabled: false });
+
+    const disableWiseMapping = await app.request(toggleUrl("wisemapping"), {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(disableWiseMapping.status).toBe(200);
+    expect(await disableWiseMapping.json()).toEqual({ enabled: false });
+
+    const disabled = await app.request(
+      `/api/embedded-integration/workspace-config?workspaceId=${admin.workspace.id}`,
+    );
+    expect(await disabled.json()).toEqual({
+      mitra: { enabled: false },
+      wisemapping: { enabled: false },
+    });
+
+    const enableMitra = await app.request(toggleUrl("mitra"), {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(enableMitra.status).toBe(200);
+    const afterMitra = await app.request(
+      `/api/embedded-integration/workspace-config?workspaceId=${admin.workspace.id}`,
+    );
+    expect(await afterMitra.json()).toMatchObject({
+      mitra: { enabled: true },
+      wisemapping: { enabled: false },
+    });
+
+    const enableWiseMapping = await app.request(toggleUrl("wisemapping"), {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(enableWiseMapping.status).toBe(200);
+    expect(await countWisemappingRows(project.id)).toBe(1);
+    const binding = await app.request(
+      `/api/embedded-integration/project/${project.id}/mind-map`,
+    );
+    expect(binding.status).toBe(200);
+    expect(((await binding.json()) as { mapId: string }).mapId).toBe(
+      "keep-this-map",
+    );
   });
 
   it("keeps the environment as a hard cap even when the workspace toggle is on", async () => {
@@ -218,7 +289,8 @@ describe("API integration: embedded services config", () => {
     });
     expect(enabled.status).toBe(200);
     expect(await enabled.json()).toMatchObject({
-      config: { enabled: true, baseUrl: "https://calendar.internal.example" },
+      enabled: true,
+      baseUrl: "https://calendar.internal.example",
     });
 
     setServiceEnv({});

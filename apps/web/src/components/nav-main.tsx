@@ -23,7 +23,8 @@ export function NavMain() {
   const { data: workspace } = useActiveWorkspace();
   const navigate = useNavigate();
   const { data: invitations = [] } = usePendingInvitations();
-  const { data: services } = useEmbeddedServicesConfig(workspace?.id);
+  const { data: services, isSuccess: servicesLoaded } =
+    useEmbeddedServicesConfig(workspace?.id);
 
   if (!workspace) return null;
 
@@ -46,7 +47,7 @@ export function NavMain() {
         window.location.pathname === `/dashboard/workspace/${workspace.id}`,
       badge: null,
     },
-    ...(services?.mitra?.enabled
+    ...(servicesLoaded && services?.mitra?.enabled
       ? [
           {
             title: t("navigation:sidebar.calendar"),

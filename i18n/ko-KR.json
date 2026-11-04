@@ -2490,7 +2490,7 @@
       "sectionTitle": "연동",
       "mitraLabel": "Mitra 캘린더",
       "wisemappingLabel": "WiseMapping 마인드맵",
-      "serviceNotConfigured": "Kaneo 관리자가 이 서비스를 구성하지 않았습니다.",
+      "serviceNotConfigured": "Kaneo 관리자가 구성하지 않았습니다.",
       "saving": "연동 설정 저장 중…",
       "saveSuccess": "연동 설정을 저장했습니다.",
       "saveError": "연동 설정을 저장하지 못했습니다. 다시 시도하세요."

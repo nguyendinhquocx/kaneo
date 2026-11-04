@@ -49,8 +49,10 @@ export default function ProjectLayout({
   const location = useLocation();
   const { t } = useTranslation("embedded");
   const { data: project } = useGetProject({ id: projectId, workspaceId });
-  const { data: embeddedServices } = useEmbeddedServicesConfig(workspaceId);
-  const showMindMap = embeddedServices?.wisemapping?.enabled === true;
+  const { data: embeddedServices, isSuccess: embeddedServicesLoaded } =
+    useEmbeddedServicesConfig(workspaceId);
+  const showMindMap =
+    embeddedServicesLoaded && embeddedServices?.wisemapping?.enabled === true;
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] =
     useState(false);
 

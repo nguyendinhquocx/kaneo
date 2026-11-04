@@ -2490,7 +2490,7 @@
       "sectionTitle": "Ενσωματώσεις",
       "mitraLabel": "Ημερολόγιο Mitra",
       "wisemappingLabel": "WiseMapping Mind Map",
-      "serviceNotConfigured": "Αυτές οι υπηρεσίες δεν έχουν ρυθμιστεί από τον διαχειριστή Kaneo.",
+      "serviceNotConfigured": "Δεν έχει ρυθμιστεί από τον διαχειριστή Kaneo.",
       "saving": "Αποθήκευση ρυθμίσεων ενσωμάτωσης…",
       "saveSuccess": "Η ρύθμιση ενσωμάτωσης αποθηκεύτηκε.",
       "saveError": "Δεν ήταν δυνατή η αποθήκευση. Δοκιμάστε ξανά."

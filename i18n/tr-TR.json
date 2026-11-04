@@ -2490,7 +2490,7 @@
       "sectionTitle": "Entegrasyonlar",
       "mitraLabel": "Mitra Takvimi",
       "wisemappingLabel": "WiseMapping Zihin Haritası",
-      "serviceNotConfigured": "Bu hizmetler Kaneo yöneticisi tarafından yapılandırılmadı.",
+      "serviceNotConfigured": "Kaneo yöneticisi tarafından yapılandırılmadı.",
       "saving": "Entegrasyon ayarları kaydediliyor…",
       "saveSuccess": "Entegrasyon ayarı kaydedildi.",
       "saveError": "Entegrasyon ayarı kaydedilemedi. Tekrar deneyin."
