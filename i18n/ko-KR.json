@@ -2462,11 +2462,13 @@
   },
   "embedded": {
     "calendarPageTitle": "캘린더",
+    "openCalendar": "캘린더 열기",
     "mindMapPageTitle": "마인드맵",
     "loading": "불러오는 중...",
     "retry": "다시 시도",
     "reload": "새로 고침",
     "openExternally": "새 탭에서 열기",
+    "openWiseMapping": "WiseMapping 열기",
     "openExternallyForLogin": "로그인을 위해 새 탭에서 열기",
     "embeddedNotice": "외부 서비스가 프레임에 표시됩니다",
     "calendarDisabled": "이 워크스페이스에 캘린더가 구성되어 있지 않습니다",

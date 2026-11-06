@@ -1,5 +1,4 @@
-import { ExternalLink, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import EmbeddedFrame from "@/components/embedded/embedded-frame";
 import { Button } from "@/components/ui/button";
@@ -8,11 +7,51 @@ import useEmbeddedServicesConfig from "@/hooks/queries/embedded-integration/use-
 
 type CalendarViewProps = {
   workspaceId: string;
+  frameKey?: number;
 };
 
-export default function CalendarView({ workspaceId }: CalendarViewProps) {
+type CalendarHeaderActionsProps = {
+  baseUrl: string;
+  showReload: boolean;
+  onReload: () => void;
+};
+
+export function CalendarHeaderActions({
+  baseUrl,
+  showReload,
+  onReload,
+}: CalendarHeaderActionsProps) {
   const { t } = useTranslation("embedded");
-  const [frameKey, setFrameKey] = useState(0);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button
+        variant="ghost"
+        size="xs"
+        className="pointer-coarse:min-h-11"
+        render={<a href={baseUrl} target="_blank" rel="noopener noreferrer" />}
+      >
+        {t("openCalendar")}
+      </Button>
+      {showReload && (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="pointer-coarse:min-h-11"
+          onClick={onReload}
+        >
+          {t("reload")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export default function CalendarView({
+  workspaceId,
+  frameKey = 0,
+}: CalendarViewProps) {
+  const { t } = useTranslation("embedded");
   const {
     data: config,
     isLoading,
@@ -83,46 +122,12 @@ export default function CalendarView({ workspaceId }: CalendarViewProps) {
         <p className="text-sm text-muted-foreground">
           {t("calendarOpenOnlyNotice")}
         </p>
-        <Button
-          className="pointer-coarse:min-h-11"
-          render={
-            <a href={mitra.baseUrl} target="_blank" rel="noopener noreferrer" />
-          }
-        >
-          <ExternalLink className="size-4" />
-          {t("openExternally")}
-        </Button>
       </div>
     );
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex items-center justify-end gap-1.5 border-b border-border/60 px-2 py-1.5">
-        <span className="mr-auto text-xs text-muted-foreground">
-          {t("embeddedNotice")}
-        </span>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="pointer-coarse:min-h-11"
-          render={
-            <a href={mitra.baseUrl} target="_blank" rel="noopener noreferrer" />
-          }
-        >
-          <ExternalLink className="size-3.5" />
-          {t("openExternallyForLogin")}
-        </Button>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="pointer-coarse:min-h-11"
-          onClick={() => setFrameKey((key) => key + 1)}
-        >
-          <RefreshCw className="size-3.5" />
-          {t("reload")}
-        </Button>
-      </div>
       <div className="min-h-0 flex-1">
         <EmbeddedFrame
           key={frameKey}

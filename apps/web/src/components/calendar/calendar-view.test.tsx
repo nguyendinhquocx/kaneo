@@ -1,6 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import CalendarView from "./calendar-view";
+import CalendarView, { CalendarHeaderActions } from "./calendar-view";
 
 const refetch = vi.fn();
 
@@ -48,7 +48,7 @@ describe("CalendarView", () => {
     expect(screen.queryByRole("link")).toBeNull();
   });
 
-  it("renders the embedded frame with an accessible title and login escape hatch", () => {
+  it("renders the embedded frame without a redundant notice or toolbar", () => {
     mockConfig({
       data: {
         mitra: {
@@ -66,15 +66,11 @@ describe("CalendarView", () => {
     expect(frame).toHaveAttribute("title", "embedded:calendarFrameTitle");
     expect(frame).toHaveAttribute("src", "https://calendar.internal.example");
 
-    const openLink = screen.getByRole("link", {
-      name: "embedded:openExternallyForLogin",
-    });
-    expect(openLink).toHaveAttribute(
-      "href",
-      "https://calendar.internal.example",
-    );
-    expect(openLink).toHaveAttribute("target", "_blank");
-    expect(openLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.queryByText("embedded:embeddedNotice")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "embedded:reload" }),
+    ).toBeNull();
   });
 
   it("hides the calendar when the workspace toggle is off", () => {
@@ -112,9 +108,53 @@ describe("CalendarView", () => {
       screen.getByText("embedded:calendarOpenOnlyNotice"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("calendar-embedded-frame")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+});
+
+describe("CalendarHeaderActions", () => {
+  it("provides text-only open and reload actions in the header", () => {
+    const onReload = vi.fn();
+    const { container } = render(
+      <CalendarHeaderActions
+        baseUrl="https://calendar.internal.example"
+        showReload
+        onReload={onReload}
+      />,
+    );
+
     const openLink = screen.getByRole("link", {
-      name: "embedded:openExternally",
+      name: "embedded:openCalendar",
     });
+    expect(openLink).toHaveAttribute(
+      "href",
+      "https://calendar.internal.example",
+    );
     expect(openLink).toHaveAttribute("target", "_blank");
+    expect(openLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(
+      screen.getByRole("button", { name: "embedded:reload" }),
+    ).toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "embedded:reload" }));
+    expect(onReload).toHaveBeenCalledOnce();
+  });
+
+  it("keeps reload hidden in open-only mode", () => {
+    render(
+      <CalendarHeaderActions
+        baseUrl="https://calendar.internal.example"
+        showReload={false}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "embedded:openCalendar" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "embedded:reload" }),
+    ).toBeNull();
   });
 });

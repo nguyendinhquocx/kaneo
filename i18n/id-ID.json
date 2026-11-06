@@ -2462,11 +2462,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Kalender",
+    "openCalendar": "Buka kalender",
     "mindMapPageTitle": "Mind Map",
     "loading": "Memuat...",
     "retry": "Coba lagi",
     "reload": "Muat ulang",
     "openExternally": "Buka di tab baru",
+    "openWiseMapping": "Buka WiseMapping",
     "openExternallyForLogin": "Buka di tab baru untuk masuk",
     "embeddedNotice": "Layanan eksternal ditampilkan dalam bingkai",
     "calendarDisabled": "Kalender belum dikonfigurasi untuk ruang kerja ini",

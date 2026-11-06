@@ -2468,11 +2468,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Календар",
+    "openCalendar": "Відкрити календар",
     "mindMapPageTitle": "Інтелектуальна карта",
     "loading": "Завантаження...",
     "retry": "Спробувати знову",
     "reload": "Перезавантажити",
     "openExternally": "Відкрити в новій вкладці",
+    "openWiseMapping": "Відкрити WiseMapping",
     "openExternallyForLogin": "Відкрити в новій вкладці для входу",
     "embeddedNotice": "Зовнішній сервіс показано у фреймі",
     "calendarDisabled": "Календар не налаштовано для цього робочого простору",

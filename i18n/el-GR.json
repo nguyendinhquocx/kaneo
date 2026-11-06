@@ -2462,11 +2462,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Ημερολόγιο",
+    "openCalendar": "Άνοιγμα ημερολογίου",
     "mindMapPageTitle": "Νοητική χάρτη",
     "loading": "Φόρτωση...",
     "retry": "Δοκιμή ξανά",
     "reload": "Επαναφόρτωση",
     "openExternally": "Άνοιγμα σε νέα καρτέλα",
+    "openWiseMapping": "Άνοιγμα WiseMapping",
     "openExternallyForLogin": "Άνοιγμα σε νέα καρτέλα για σύνδεση",
     "embeddedNotice": "Εξωτερική υπηρεσία εμφανίζεται σε πλαίσιο",
     "calendarDisabled": "Το ημερολόγιο δεν έχει ρυθμιστεί για αυτόν τον χώρο εργασίας",

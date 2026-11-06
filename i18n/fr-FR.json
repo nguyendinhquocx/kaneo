@@ -2462,11 +2462,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Calendrier",
+    "openCalendar": "Ouvrir le calendrier",
     "mindMapPageTitle": "Carte mentale",
     "loading": "Chargement...",
     "retry": "Réessayer",
     "reload": "Recharger",
     "openExternally": "Ouvrir dans un nouvel onglet",
+    "openWiseMapping": "Ouvrir WiseMapping",
     "openExternallyForLogin": "Ouvrir dans un nouvel onglet pour se connecter",
     "embeddedNotice": "Service externe affiché dans un cadre",
     "calendarDisabled": "Le calendrier n'est pas configuré pour cet espace de travail",

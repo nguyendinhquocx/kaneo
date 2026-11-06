@@ -2462,11 +2462,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Календар",
+    "openCalendar": "Отвори календар",
     "mindMapPageTitle": "Ментална мапа",
     "loading": "Се вчитува...",
     "retry": "Обиди повторно",
     "reload": "Превчитувај",
     "openExternally": "Отвори во нов таб",
+    "openWiseMapping": "Отвори WiseMapping",
     "openExternallyForLogin": "Отвори во нов таб за најава",
     "embeddedNotice": "Надворешна услуга е прикажана во рамка",
     "calendarDisabled": "Календарот не е конфигуриран за оваа работна област",

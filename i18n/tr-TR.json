@@ -2462,11 +2462,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Takvim",
+    "openCalendar": "Takvimi aç",
     "mindMapPageTitle": "Zihin Haritası",
     "loading": "Yükleniyor...",
     "retry": "Tekrar dene",
     "reload": "Yeniden yükle",
     "openExternally": "Yeni sekmede aç",
+    "openWiseMapping": "WiseMapping'i aç",
     "openExternallyForLogin": "Giriş yapmak için yeni sekmede aç",
     "embeddedNotice": "Harici hizmet bir çerçevede gösteriliyor",
     "calendarDisabled": "Bu çalışma alanı için takvim yapılandırılmamış",

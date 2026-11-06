@@ -2524,11 +2524,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Календарь",
+    "openCalendar": "Открыть календарь",
     "mindMapPageTitle": "Интеллектуальная карта",
     "loading": "Загрузка...",
     "retry": "Повторить",
     "reload": "Обновить",
     "openExternally": "Открыть в новой вкладке",
+    "openWiseMapping": "Открыть WiseMapping",
     "openExternallyForLogin": "Открыть в новой вкладке для входа",
     "embeddedNotice": "Внешний сервис показан во фрейме",
     "calendarDisabled": "Календарь не настроен для этого рабочего пространства",

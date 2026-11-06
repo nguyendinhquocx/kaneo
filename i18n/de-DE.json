@@ -2462,11 +2462,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Kalender",
+    "openCalendar": "Kalender öffnen",
     "mindMapPageTitle": "Mind Map",
     "loading": "Wird geladen...",
     "retry": "Erneut versuchen",
     "reload": "Neu laden",
     "openExternally": "In neuem Tab öffnen",
+    "openWiseMapping": "WiseMapping öffnen",
     "openExternallyForLogin": "Zum Anmelden in neuem Tab öffnen",
     "embeddedNotice": "Externer Dienst in einem Rahmen geöffnet",
     "calendarDisabled": "Der Kalender ist für diesen Workspace nicht konfiguriert",

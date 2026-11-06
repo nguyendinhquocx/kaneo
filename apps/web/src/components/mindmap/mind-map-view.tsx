@@ -12,7 +12,7 @@ import {
   useUnlinkMindMap,
 } from "@/hooks/queries/embedded-integration/use-mind-map-mutations";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
-import { buildWiseMappingEditorUrl } from "./map-url";
+import { buildWiseMappingEditorUrl, parseWiseMappingMapId } from "./map-url";
 
 type MindMapViewProps = {
   projectId: string;
@@ -135,7 +135,7 @@ export default function MindMapView({
       );
     }
     return canManage ? (
-      <MindMapLinkForm projectId={projectId} />
+      <MindMapLinkForm projectId={projectId} baseUrl={wisemapping.baseUrl} />
     ) : (
       <div
         role="status"
@@ -227,16 +227,27 @@ function UnlinkButton({ projectId }: { projectId: string }) {
   );
 }
 
-function MindMapLinkForm({ projectId }: { projectId: string }) {
+function MindMapLinkForm({
+  projectId,
+  baseUrl,
+}: {
+  projectId: string;
+  baseUrl: string;
+}) {
   const { t } = useTranslation("embedded");
   const [mapId, setMapId] = useState("");
+  const [inputInvalid, setInputInvalid] = useState(false);
   const link = useLinkMindMap(projectId);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const trimmed = mapId.trim();
-    if (!trimmed) return;
-    link.mutate(trimmed, {
+    const parsedMapId = parseWiseMappingMapId(mapId, baseUrl);
+    if (!parsedMapId) {
+      setInputInvalid(true);
+      return;
+    }
+    setInputInvalid(false);
+    link.mutate(parsedMapId, {
       onSuccess: () => setMapId(""),
     });
   };
@@ -248,17 +259,33 @@ function MindMapLinkForm({ projectId }: { projectId: string }) {
         className="w-full max-w-sm space-y-3 text-center"
         data-testid="mindmap-link-form"
       >
+        <Button
+          variant="link"
+          size="sm"
+          className="pointer-coarse:min-h-11"
+          render={
+            <a href={baseUrl} target="_blank" rel="noopener noreferrer" />
+          }
+        >
+          <ExternalLink className="size-4" />
+          {t("openWiseMapping")}
+        </Button>
         <p className="text-sm text-muted-foreground">
           {t("mindMapCreateThenLink")}
         </p>
         <Input
+          className="pointer-coarse:min-h-11"
           value={mapId}
-          onChange={(event) => setMapId(event.target.value)}
+          onChange={(event) => {
+            setMapId(event.target.value);
+            setInputInvalid(false);
+          }}
           placeholder={t("mapIdPlaceholder")}
           aria-label={t("mapIdLabel")}
+          aria-invalid={inputInvalid || undefined}
           name="mapId"
         />
-        {link.isError && (
+        {(inputInvalid || link.isError) && (
           <p role="alert" className="text-xs text-destructive">
             {t("mapIdInvalid")}
           </p>

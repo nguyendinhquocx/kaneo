@@ -2462,11 +2462,13 @@
   },
   "embedded": {
     "calendarPageTitle": "Agenda",
+    "openCalendar": "Agenda openen",
     "mindMapPageTitle": "Mindmap",
     "loading": "Laden...",
     "retry": "Opnieuw proberen",
     "reload": "Herladen",
     "openExternally": "Openen in nieuw tabblad",
+    "openWiseMapping": "WiseMapping openen",
     "openExternallyForLogin": "Openen in nieuw tabblad om in te loggen",
     "embeddedNotice": "Externe dienst weergegeven in een kader",
     "calendarDisabled": "De agenda is niet geconfigureerd voor deze werkruimte",
