@@ -71,8 +71,8 @@ function RouteComponent() {
     showPriority,
     setShowPriority,
     resetDisplayPreferences,
-    sidebarDefaultOpen,
-    setSidebarDefaultOpen,
+    sidebarOpen,
+    setSidebarOpen,
   } = useUserPreferencesStore();
 
   const themeLabels: Record<string, string> = {
@@ -267,10 +267,7 @@ function RouteComponent() {
                 {t("settings:preferencesPage.sidebarDefaultDescription")}
               </p>
             </div>
-            <Switch
-              checked={sidebarDefaultOpen}
-              onCheckedChange={setSidebarDefaultOpen}
-            />
+            <Switch checked={sidebarOpen} onCheckedChange={setSidebarOpen} />
           </div>
         </div>
       </div>

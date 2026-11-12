@@ -45,14 +45,15 @@ function LayoutContent({ children, className }: ContentProps) {
 }
 
 function Layout({ children, className }: LayoutProps) {
-  const { sidebarDefaultOpen } = useUserPreferencesStore();
+  const { sidebarOpen, setSidebarOpen } = useUserPreferencesStore();
 
   useUserPreferencesEffects();
 
   return (
     <div className="flex w-full bg-background">
       <SidebarProvider
-        defaultOpen={sidebarDefaultOpen}
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
         style={
           {
             "--sidebar-width": "calc(var(--spacing) * 60)",

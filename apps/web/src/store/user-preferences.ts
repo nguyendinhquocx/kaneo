@@ -31,8 +31,8 @@ type UserPreferencesStore = {
   togglePriority: () => void;
   resetDisplayPreferences: () => void;
 
-  sidebarDefaultOpen: boolean;
-  setSidebarDefaultOpen: (open: boolean) => void;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
 
   weekStartsOn: 0 | 1;
   setWeekStartsOn: (weekStartsOn: 0 | 1) => void;
@@ -103,8 +103,8 @@ export const useUserPreferencesStore = create<UserPreferencesStore>()(
           showPriority: true,
         }),
 
-      sidebarDefaultOpen: true,
-      setSidebarDefaultOpen: (open) => set({ sidebarDefaultOpen: open }),
+      sidebarOpen: true,
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
       weekStartsOn: 0,
       setWeekStartsOn: (weekStartsOn) => set({ weekStartsOn }),
@@ -112,6 +112,24 @@ export const useUserPreferencesStore = create<UserPreferencesStore>()(
     {
       name: "user-preferences",
       storage: createJSONStorage(() => localStorage),
+      // Migration: preferences saved before the sidebar state moved to its own
+      // persistent key only carry the old default; reuse it as current state.
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<UserPreferencesStore> & {
+          sidebarDefaultOpen?: unknown;
+        };
+        if (
+          typeof persisted?.sidebarOpen !== "boolean" &&
+          typeof persisted?.sidebarDefaultOpen === "boolean"
+        ) {
+          return {
+            ...currentState,
+            ...persisted,
+            sidebarOpen: persisted.sidebarDefaultOpen,
+          };
+        }
+        return { ...currentState, ...persisted };
+      },
     },
   ),
 );
