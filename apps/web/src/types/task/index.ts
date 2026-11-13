@@ -60,6 +60,10 @@ type Task = {
   // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: always present —
   // the API normalizes the full map and share mappings supply zero counts.
   workMarkerCounts: TaskMarkerCounts;
+  // SPEC-2026-11-10 T3: content CAS token for task-field writes. Present on
+  // every API task payload; optional here so optimistic/stale projections
+  // still typecheck (missing tokens fall back to 1 and surface as 409).
+  contentRevision?: number;
   columnId?: string | null;
   labels?: TaskLabel[];
   externalLinks?: TaskExternalLink[];

@@ -10,6 +10,40 @@ import {
   getShareCapability,
   invalidateShareQueries,
 } from "@/components/share/share-capability";
+import { collectExpectedContentRevisions } from "@/lib/task-content-revision";
+import type Task from "@/types/task";
+
+// SPEC-2026-11-10 T3: task-field bulk writes CAS every touched card. Read
+// each card's cached revision before dispatching; unknown ids fall back to 1
+// which only ever yields a recoverable 409.
+function cachedContentRevisions(
+  queryClientRef: ReturnType<typeof useQueryClient>,
+  taskIds: string[],
+): Record<string, number> {
+  return collectExpectedContentRevisions((taskId) => {
+    const task = queryClientRef.getQueryData<Task>(["task", taskId]);
+    if (task) return task;
+    const projects = queryClientRef.getQueriesData<
+      { columns?: Array<{ tasks?: Array<Task> }>; plannedTasks?: Task[]; archivedTasks?: Task[] } | Task[]
+    >({ queryKey: ["tasks"] });
+    for (const [, payload] of projects) {
+      if (!payload) continue;
+      if (Array.isArray(payload)) {
+        const hit = payload.find((candidate) => candidate.id === taskId);
+        if (hit) return hit;
+        continue;
+      }
+      const lanes = [
+        ...(payload.columns ?? []).flatMap((column) => column.tasks ?? []),
+        ...(payload.plannedTasks ?? []),
+        ...(payload.archivedTasks ?? []),
+      ];
+      const hit = lanes.find((candidate) => candidate.id === taskId);
+      if (hit) return hit;
+    }
+    return undefined;
+  }, taskIds);
+}
 
 type BulkValueInput = { taskIds: string[]; value?: string | null };
 
@@ -61,11 +95,15 @@ export function useBulkOperations() {
     mutationFn: async ({ taskIds, value }: BulkValueInput) => {
       const capability = getShareCapability();
       if (capability) {
+        const revisions = cachedContentRevisions(queryClientRef, taskIds);
         await Promise.all(
           taskIds.map((id) =>
-            updateShareFullTask(capability.token, id, {
-              status: value ?? undefined,
-            }),
+            updateShareFullTask(
+              capability.token,
+              id,
+              { status: value ?? undefined },
+              revisions[id],
+            ),
           ),
         );
         return;
@@ -74,6 +112,7 @@ export function useBulkOperations() {
         taskIds,
         operation: "updateStatus",
         value,
+        expectedContentRevisions: cachedContentRevisions(queryClientRef, taskIds),
       });
     },
     onSuccess: invalidateCommon,
@@ -83,11 +122,15 @@ export function useBulkOperations() {
     mutationFn: async ({ taskIds, value }: BulkValueInput) => {
       const capability = getShareCapability();
       if (capability) {
+        const revisions = cachedContentRevisions(queryClientRef, taskIds);
         await Promise.all(
           taskIds.map((id) =>
-            updateShareFullTask(capability.token, id, {
-              priority: value ?? undefined,
-            }),
+            updateShareFullTask(
+              capability.token,
+              id,
+              { priority: value ?? undefined },
+              revisions[id],
+            ),
           ),
         );
         return;
@@ -96,6 +139,7 @@ export function useBulkOperations() {
         taskIds,
         operation: "updatePriority",
         value,
+        expectedContentRevisions: cachedContentRevisions(queryClientRef, taskIds),
       });
     },
     onSuccess: invalidateCommon,
@@ -105,11 +149,15 @@ export function useBulkOperations() {
     mutationFn: async ({ taskIds, value }: BulkValueInput) => {
       const capability = getShareCapability();
       if (capability) {
+        const revisions = cachedContentRevisions(queryClientRef, taskIds);
         await Promise.all(
           taskIds.map((id) =>
-            updateShareFullTask(capability.token, id, {
-              dueDate: value ?? null,
-            }),
+            updateShareFullTask(
+              capability.token,
+              id,
+              { dueDate: value ?? null },
+              revisions[id],
+            ),
           ),
         );
         return;
@@ -118,6 +166,7 @@ export function useBulkOperations() {
         taskIds,
         operation: "updateDueDate",
         value,
+        expectedContentRevisions: cachedContentRevisions(queryClientRef, taskIds),
       });
     },
     onSuccess: invalidateCommon,
@@ -127,11 +176,15 @@ export function useBulkOperations() {
     mutationFn: async ({ taskIds, value }: BulkValueInput) => {
       const capability = getShareCapability();
       if (capability) {
+        const revisions = cachedContentRevisions(queryClientRef, taskIds);
         await Promise.all(
           taskIds.map((id) =>
-            updateShareFullTask(capability.token, id, {
-              assigneeId: value || null,
-            }),
+            updateShareFullTask(
+              capability.token,
+              id,
+              { assigneeId: value || null },
+              revisions[id],
+            ),
           ),
         );
         return;
@@ -140,6 +193,7 @@ export function useBulkOperations() {
         taskIds,
         operation: "updateAssignee",
         value,
+        expectedContentRevisions: cachedContentRevisions(queryClientRef, taskIds),
       });
     },
     onSuccess: invalidateCommon,

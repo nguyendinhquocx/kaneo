@@ -1,5 +1,6 @@
 import { client } from "@kaneo/libs";
 import type Task from "@/types/task";
+import { getExpectedContentRevision } from "@/lib/task-content-revision";
 import { normalizeTaskPriority } from "@/types/task";
 
 async function updateTask(taskId: string, task: Task) {
@@ -15,6 +16,7 @@ async function updateTask(taskId: string, task: Task) {
       dueDate: task.dueDate?.toString(),
       position: task.position ?? 0,
       projectId: task.projectId,
+      expectedContentRevision: getExpectedContentRevision(task),
     },
   });
 

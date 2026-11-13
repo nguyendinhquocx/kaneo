@@ -7,6 +7,7 @@ import {
   reorderSubtaskRelations,
   reorderTaskCardsBySiblingLane,
 } from "@/lib/subtask-order";
+import { getExpectedContentRevision } from "@/lib/task-content-revision";
 import type Task from "@/types/task";
 
 type RelationCache = {
@@ -26,7 +27,7 @@ type ReorderInput = {
 export function useReorderSubtasks() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ taskId, orderedTargetTaskIds }: ReorderInput) => {
+    mutationFn: async ({ taskId, orderedTargetTaskIds }: ReorderInput) => {
       const capability = getShareCapability();
       if (capability) {
         // Guest reorder sends task ids; the share route maps them onto
@@ -37,7 +38,19 @@ export function useReorderSubtasks() {
           orderedTargetTaskIds,
         ) as unknown as ReturnType<typeof reorderSubtasks>;
       }
-      return reorderSubtasks({ taskId, orderedTargetTaskIds });
+      // SPEC-2026-11-10 T3: subtask reorder is CAS-guarded on the parent.
+      const cachedParent = await queryClient
+        .fetchQuery({
+          queryKey: ["task", taskId],
+          queryFn: () => Promise.resolve(undefined),
+          staleTime: 0,
+        })
+        .catch(() => undefined);
+      return reorderSubtasks({
+        taskId,
+        orderedTargetTaskIds,
+        expectedParentContentRevision: getExpectedContentRevision(cachedParent),
+      });
     },
     onMutate: async ({ taskId, projectId, orderedTargetTaskIds }) => {
       const relationKey = ["task-relations", taskId];

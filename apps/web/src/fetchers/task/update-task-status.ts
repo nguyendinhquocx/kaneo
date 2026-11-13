@@ -1,13 +1,15 @@
 import { client } from "@kaneo/libs";
 import type Task from "@/types/task";
+import { getExpectedContentRevision } from "@/lib/task-content-revision";
 
-type UpdateTaskStatusPayload = Pick<Task, "status">;
+type UpdateTaskStatusPayload = Pick<Task, "status" | "contentRevision">;
 
 async function updateTaskStatus(taskId: string, task: UpdateTaskStatusPayload) {
   const response = await client.task.status[":id"].$put({
     param: { id: taskId },
     json: {
       status: task.status || "",
+      expectedContentRevision: getExpectedContentRevision(task),
     },
   });
 

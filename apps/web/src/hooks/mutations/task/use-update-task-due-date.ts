@@ -16,7 +16,9 @@ export function useUpdateTaskDueDate() {
       if (capability) {
         return updateShareFullTask(capability.token, task.id, {
           dueDate: task.dueDate?.toString() ?? null,
-        }) as unknown as Promise<Task>;
+          }, // SPEC-2026-11-10 T3: full-share writes carry the content CAS.
+          task.contentRevision ?? 1,
+) as unknown as Promise<Task>;
       }
       return updateTaskDueDate(task.id, task) as unknown as Promise<Task>;
     },

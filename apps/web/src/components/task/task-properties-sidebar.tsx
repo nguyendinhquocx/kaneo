@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DialogTrigger } from "@/components/ui/dialog";
 import { KbdSequence } from "@/components/ui/kbd";
 import {
   Tooltip,
@@ -38,6 +39,8 @@ import { generateLink } from "@/lib/generate-link";
 import { getTaskLinkPath } from "@/lib/task-link";
 import { toast } from "@/lib/toast";
 import { getShareCapability } from "@/components/share/share-capability";
+import ShareDialog from "@/components/share/share-dialog";
+import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import WorkMarkerPicker from "./work-marker-picker";
 import TaskAssigneePopover from "./task-assignee-popover";
 import TaskDueDatePopover from "./task-due-date-popover";
@@ -94,6 +97,12 @@ export default function TaskPropertiesSidebar({
   const { data: giteaIntegration } = useGetGiteaIntegration(projectId);
   const { data: workspaceProjects = [] } = useGetProjects({ workspaceId });
   const shareCapability = getShareCapability();
+  const { canManageShareLinks, isCheckingPermissions } = useWorkspacePermission();
+  // SPEC-2026-11-10 T3: the Copy slot upgrades into the task ShareDialog for
+  // actors that may mint share links; everyone else keeps the plain URL copy.
+  const canShareTask = Boolean(
+    !shareCapability && taskId && !isCheckingPermissions && canManageShareLinks(),
+  );
   const canMoveTask =
     !shareCapability &&
     Boolean(task) && workspaceProjects.some((p) => p.id !== task?.projectId);
@@ -160,29 +169,51 @@ export default function TaskPropertiesSidebar({
                 />
               )}
               <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        "text-foreground border-r-0",
-                        canMoveTask ? "rounded-none" : "rounded-r-none",
-                      )}
-                      aria-label={t("tasks:properties.copyTaskLink")}
-                      onClick={() => handleCopyTaskLink()}
-                    >
-                      <Copy className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <KbdSequence
-                      keys={["Ctrl", "Shift", "C"]}
-                      description={t("tasks:properties.copyTaskLink")}
-                      separator=""
+                {canShareTask && taskId ? (
+                  <ShareDialog
+                    resourceType="task"
+                    resourceId={taskId}
+                    projectId={projectId}
+                    canShare
+                  >
+                    <DialogTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={cn(
+                            "text-foreground border-r-0",
+                            canMoveTask ? "rounded-none" : "rounded-r-none",
+                          )}
+                          aria-label={t("share:manage")}
+                          title={t("share:manage")}
+                        >
+                          <Copy className="size-4" />
+                        </Button>
+                      }
                     />
-                  </TooltipContent>
-                </Tooltip>
+                  </ShareDialog>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "text-foreground border-r-0",
+                          canMoveTask ? "rounded-none" : "rounded-r-none",
+                        )}
+                        aria-label={t("tasks:properties.copyTaskLink")}
+                        onClick={() => handleCopyTaskLink()}
+                      >
+                        <Copy className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {t("tasks:properties.copyTaskLink")}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 {shareCapability ? null : (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -358,29 +389,51 @@ export default function TaskPropertiesSidebar({
                   />
                 )}
                 <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={cn(
-                          "text-foreground border-r-0",
-                          canMoveTask ? "rounded-none" : "rounded-r-none",
-                        )}
-                        aria-label={t("tasks:properties.copyTaskLink")}
-                        onClick={() => handleCopyTaskLink()}
-                      >
-                        <Copy className="size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <KbdSequence
-                        keys={["Ctrl", "Shift", "C"]}
-                        description={t("tasks:properties.copyTaskLink")}
-                        separator=""
+                  {canShareTask && taskId ? (
+                    <ShareDialog
+                      resourceType="task"
+                      resourceId={taskId}
+                      projectId={projectId}
+                      canShare
+                    >
+                      <DialogTrigger
+                        render={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={cn(
+                              "text-foreground border-r-0",
+                              canMoveTask ? "rounded-none" : "rounded-r-none",
+                            )}
+                            aria-label={t("share:manage")}
+                            title={t("share:manage")}
+                          >
+                            <Copy className="size-4" />
+                          </Button>
+                        }
                       />
-                    </TooltipContent>
-                  </Tooltip>
+                    </ShareDialog>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={cn(
+                            "text-foreground border-r-0",
+                            canMoveTask ? "rounded-none" : "rounded-r-none",
+                          )}
+                          aria-label={t("tasks:properties.copyTaskLink")}
+                          onClick={() => handleCopyTaskLink()}
+                        >
+                          <Copy className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t("tasks:properties.copyTaskLink")}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                   {shareCapability ? null : (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -558,29 +611,51 @@ export default function TaskPropertiesSidebar({
                     />
                   )}
                   <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className={cn(
-                            "text-foreground border-r-0",
-                            canMoveTask ? "rounded-none" : "rounded-r-none",
-                          )}
-                          aria-label={t("tasks:properties.copyTaskLink")}
-                          onClick={() => handleCopyTaskLink()}
-                        >
-                          <Copy className="size-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <KbdSequence
-                          keys={["Ctrl", "Shift", "C"]}
-                          description={t("tasks:properties.copyTaskLink")}
-                          separator=""
+                    {canShareTask && taskId ? (
+                      <ShareDialog
+                        resourceType="task"
+                        resourceId={taskId}
+                        projectId={projectId}
+                        canShare
+                      >
+                        <DialogTrigger
+                          render={
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "text-foreground border-r-0",
+                                canMoveTask ? "rounded-none" : "rounded-r-none",
+                              )}
+                              aria-label={t("share:manage")}
+                              title={t("share:manage")}
+                            >
+                              <Copy className="size-4" />
+                            </Button>
+                          }
                         />
-                      </TooltipContent>
-                    </Tooltip>
+                      </ShareDialog>
+                    ) : (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={cn(
+                              "text-foreground border-r-0",
+                              canMoveTask ? "rounded-none" : "rounded-r-none",
+                            )}
+                            aria-label={t("tasks:properties.copyTaskLink")}
+                            onClick={() => handleCopyTaskLink()}
+                          >
+                            <Copy className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {t("tasks:properties.copyTaskLink")}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                     {shareCapability ? null : (
                       <Tooltip>
                         <TooltipTrigger asChild>

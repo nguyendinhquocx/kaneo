@@ -5,6 +5,7 @@ const apiBase = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 export async function reorderSubtasks(input: {
   taskId: string;
   orderedTargetTaskIds: string[];
+  expectedParentContentRevision: number;
 }) {
   const response = await fetch(
     `${apiBase}/task-relation/subtasks/${encodeURIComponent(input.taskId)}/order`,
@@ -14,6 +15,7 @@ export async function reorderSubtasks(input: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         orderedTargetTaskIds: input.orderedTargetTaskIds,
+        expectedParentContentRevision: input.expectedParentContentRevision,
       }),
     },
   );

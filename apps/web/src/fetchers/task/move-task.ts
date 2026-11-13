@@ -4,16 +4,19 @@ async function moveTask({
   taskId,
   destinationProjectId,
   destinationStatus,
+  expectedContentRevision,
 }: {
   taskId: string;
   destinationProjectId: string;
   destinationStatus?: string;
+  expectedContentRevision: number;
 }) {
   const response = await client.task.move[":id"].$put({
     param: { id: taskId },
     json: {
       destinationProjectId,
       destinationStatus,
+      expectedContentRevision,
     },
   });
 

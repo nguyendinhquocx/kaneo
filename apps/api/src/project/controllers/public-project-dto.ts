@@ -20,6 +20,8 @@ export type PublicProjectTask = {
   dueDate: Date | null;
   position: number | null;
   createdAt: Date;
+  // SPEC-2026-11-10 T2: optimistic-concurrency token for public edit writes.
+  contentRevision: number;
   labels: Array<{ id: string; name: string; color: string | null }>;
 };
 
@@ -117,6 +119,7 @@ export async function buildPublicProjectPayload(
       dueDate: schema.taskTable.dueDate,
       position: schema.taskTable.position,
       createdAt: schema.taskTable.createdAt,
+      contentRevision: schema.taskTable.contentRevision,
     })
     .from(schema.taskTable)
     .where(eq(schema.taskTable.projectId, projectId))
@@ -161,6 +164,7 @@ export async function buildPublicProjectPayload(
     dueDate: task.dueDate,
     position: task.position,
     createdAt: task.createdAt,
+    contentRevision: task.contentRevision,
     labels: labelsByTask.get(task.id) ?? [],
   });
 

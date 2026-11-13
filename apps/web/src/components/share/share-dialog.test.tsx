@@ -35,6 +35,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => `share.${key}` }),
 }));
 vi.mock("@/lib/toast", () => ({ toast: { error: vi.fn() } }));
+// SPEC-2026-11-10 T3: task links also check the project execution manifest.
+vi.mock("@/hooks/queries/execution/use-get-execution-manifest", () => ({
+  default: () => ({ data: null }),
+}));
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: ReactNode }) => <>{children}</>,
   DialogTrigger: ({ render }: { render: ReactElement }) => render,

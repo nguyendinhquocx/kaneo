@@ -27,6 +27,8 @@ function mapShareTask(task: ShareFullTask): Task {
     assigneeName: null,
     // Public DTOs never carry markers: guests always see zero counts.
     workMarkerCounts: { ...ZERO_WORK_MARKER_COUNTS },
+    // SPEC-2026-11-10 T3: guest writers need the content CAS token.
+    contentRevision: task.contentRevision,
     projectId: task.projectId,
     labels: (task.labels ?? []).map((label) => ({
       id: label.id,

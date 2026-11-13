@@ -34,10 +34,20 @@ export function useMoveShareTask() {
       if (!capability) {
         throw new Error("A full-share capability is required to move a task.");
       }
-      return moveShareFullTask(capability.token, input.taskId, {
-        status: input.status,
-        position: input.position,
-      });
+      const movingTask = queryClient
+        .getQueryData<ProjectWithTasks>(["share-full", capability.token])
+        ?.columns.flatMap((column) => column.tasks)
+        .find((candidate) => candidate.id === input.taskId);
+      return moveShareFullTask(
+        capability.token,
+        input.taskId,
+        {
+          status: input.status,
+          position: input.position,
+        },
+        // SPEC-2026-11-10 T3: full-share moves CAS the moved card.
+        movingTask?.contentRevision ?? 1,
+      );
     },
     onMutate: async (input) => {
       const capability = getShareCapability();
@@ -139,15 +149,21 @@ export function useUpdateTask({ deferInvalidation = false }: { deferInvalidation
     mutationFn: (task: Task) => {
       const capability = getShareCapability();
       if (capability) {
-        return updateShareFullTask(capability.token, task.id, {
-          title: task.title,
-          description: task.description || null,
-          status: task.status,
-          priority: task.priority ?? undefined,
-          startDate: task.startDate?.toString() ?? null,
-          dueDate: task.dueDate?.toString() ?? null,
-          assigneeId: task.userId ?? null,
-        }) as unknown as Promise<Task>;
+        return updateShareFullTask(
+          capability.token,
+          task.id,
+          {
+            title: task.title,
+            description: task.description || null,
+            status: task.status,
+            priority: task.priority ?? undefined,
+            startDate: task.startDate?.toString() ?? null,
+            dueDate: task.dueDate?.toString() ?? null,
+            assigneeId: task.userId ?? null,
+          },
+          // SPEC-2026-11-10 T3: full-share writes carry the content CAS.
+          task.contentRevision ?? 1,
+        ) as unknown as Promise<Task>;
       }
       return updateTask(task.id, task) as unknown as Promise<Task>;
     },

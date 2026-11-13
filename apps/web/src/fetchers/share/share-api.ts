@@ -4,6 +4,7 @@ export type ShareResourceType =
   | "project"
   | "document"
   | "goal"
+  | "task"
   | "task_description"
   | "activity_comment";
 

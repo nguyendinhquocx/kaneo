@@ -2408,6 +2408,11 @@
       },
       "dragDisabled": "Tắt sắp xếp và bộ lọc để kéo task đến vị trí khác.",
       "moveFailed": "Không thể di chuyển task. Bảng đã được khôi phục; thử lại nhé."
+    },
+    "task": {
+      "editWarning": "Link sửa cho phép bất kỳ ai giữ URL đổi thẻ này và các subtask hiện có. Link là bearer secret — coi như mật khẩu.",
+      "subtreeNote": "Link chỉ áp dụng cho thẻ này và cây subtask hiện tại; task bị chuyển ra khỏi cây sẽ mất truy cập ngay.",
+      "manifestWarning": "Project này do execution quản lý: mô tả thẻ bị ẩn và chỉ đọc trên mọi share link."
     }
   },
   "goals": {

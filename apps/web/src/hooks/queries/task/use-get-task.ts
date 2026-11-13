@@ -32,6 +32,8 @@ function useGetTask(taskId: string) {
           assigneeName: null,
           // Guest payloads carry no marker data — map to zero counts.
           workMarkerCounts: { ...ZERO_WORK_MARKER_COUNTS },
+          // SPEC-2026-11-10 T3: guest writers need the content CAS token.
+          contentRevision: detail.contentRevision,
           projectId: detail.projectId,
           labels: detail.labels.map((label) => ({
             id: label.id,

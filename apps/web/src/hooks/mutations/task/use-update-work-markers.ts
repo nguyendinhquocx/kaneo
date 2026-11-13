@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import updateWorkMarkers from "@/fetchers/task/update-work-markers";
 import type Task from "@/types/task";
+import { getExpectedContentRevision } from "@/lib/task-content-revision";
 import type { TaskMarkerCounts } from "@/types/task";
 import type { ProjectBoardTask, ProjectWithTasks } from "@/types/project";
 
@@ -63,8 +64,19 @@ export function useUpdateWorkMarkers(taskId: string, projectId: string) {
     MarkerMutationContext
   >({
     mutationKey,
-    mutationFn: (workMarkerCounts) =>
-      updateWorkMarkers(taskId, workMarkerCounts),
+    mutationFn: async (workMarkerCounts) => {
+      // SPEC-2026-11-10 T3: markers are content edits — CAS the map.
+      const cached = await queryClient.fetchQuery({
+        queryKey: ["task", taskId],
+        queryFn: () => Promise.resolve(undefined as Task | undefined),
+        staleTime: 0,
+      }).catch(() => undefined);
+      return updateWorkMarkers(
+        taskId,
+        workMarkerCounts,
+        getExpectedContentRevision(cached),
+      );
+    },
     onMutate: async (workMarkerCounts) => {
       await Promise.all([
         queryClient.cancelQueries({

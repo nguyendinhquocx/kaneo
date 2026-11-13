@@ -1,5 +1,5 @@
 import { Check, Copy, Link2, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
@@ -25,6 +25,7 @@ import {
   useGetShareLinks,
   useRevokeShareLink,
 } from "@/hooks/mutations/share/use-share-links";
+import useGetExecutionManifest from "@/hooks/queries/execution/use-get-execution-manifest";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -33,6 +34,12 @@ type ShareDialogProps = {
   resourceId: string;
   canShare: boolean;
   canCreateFull?: boolean;
+  // Task links are scoped to one card plus its live subtask tree; the dialog
+  // needs the project to warn about execution-managed descriptions.
+  projectId?: string;
+  // When provided, the dialog renders this trigger instead of its default
+  // "Share" button (the sidebar Copy slot reuses it inline).
+  children?: ReactNode;
 };
 
 function formatDate(value: string | null) {
@@ -49,6 +56,8 @@ export default function ShareDialog({
   resourceId,
   canShare,
   canCreateFull = false,
+  projectId,
+  children,
 }: ShareDialogProps) {
   const { t } = useTranslation("share");
   const { data: links = [] } = useGetShareLinks(resourceType, resourceId);
@@ -62,7 +71,17 @@ export default function ShareDialog({
   const supportsEdit =
     resourceType === "project" ||
     resourceType === "document" ||
-    resourceType === "goal";
+    resourceType === "goal" ||
+    resourceType === "task";
+  // SPEC-2026-11-10 T3: task links never get a Full option — a card link is
+  // view or edit over exactly one subtree, never the whole project.
+  const isTaskLink = resourceType === "task";
+  const { data: manifest } = useGetExecutionManifest(
+    isTaskLink && projectId ? projectId : "",
+  );
+  const showTaskEditWarning =
+    isTaskLink && permission === "edit" && !manifest;
+  const showTaskManifestWarning = isTaskLink && Boolean(manifest);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const newLink = createLink.data;
 
@@ -137,18 +156,22 @@ export default function ShareDialog({
   return (
     <>
       <Dialog>
-        <DialogTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-11 min-h-11 gap-1.5 text-xs sm:h-7 sm:min-h-0"
-            >
-              <Link2 className="size-3.5" />
-              {t("manage")}
-            </Button>
-          }
-        />
+        {children ? (
+          children
+        ) : (
+          <DialogTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-11 min-h-11 gap-1.5 text-xs sm:h-7 sm:min-h-0"
+              >
+                <Link2 className="size-3.5" />
+                {t("manage")}
+              </Button>
+            }
+          />
+        )}
         <DialogContent className="w-[calc(100vw-2rem)] max-w-md">
           <DialogHeader>
             <DialogTitle>{t("title")}</DialogTitle>
@@ -199,6 +222,26 @@ export default function ShareDialog({
                 </Button>
               </div>
             </div>
+
+            {/* SPEC-2026-11-10 T3: the edit-link warning renders BEFORE the
+        create button can be used, covering both the bearer-secret risk and
+        the live-subtree scope of a task link. */}
+            {showTaskEditWarning ? (
+              <p
+                  role="note"
+                  className="rounded-lg border border-warning/40 bg-warning/10 p-2.5 text-[11px] leading-relaxed text-warning-foreground"
+                >
+                  {t("task.editWarning")} {t("task.subtreeNote")}
+              </p>
+            ) : null}
+            {showTaskManifestWarning ? (
+              <p
+                  role="note"
+                  className="rounded-lg border border-border/80 bg-muted/40 p-2.5 text-[11px] leading-relaxed text-muted-foreground"
+                >
+                  {t("task.manifestWarning")}
+              </p>
+            ) : null}
 
             {newLink ? (
               <div className="space-y-1.5 rounded-lg border border-border/80 bg-muted/40 p-2.5">

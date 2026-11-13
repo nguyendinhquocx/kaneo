@@ -3,11 +3,16 @@ import type { TaskMarkerCounts } from "@/types/task";
 
 // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: replaces the full
 // marker count map. Partial payloads are rejected server-side with 400.
-async function updateWorkMarkers(taskId: string, workMarkerCounts: TaskMarkerCounts) {
+async function updateWorkMarkers(
+  taskId: string,
+  workMarkerCounts: TaskMarkerCounts,
+  expectedContentRevision: number,
+) {
   const response = await client.task["work-markers"][":id"].$put({
     param: { id: taskId },
     json: {
       workMarkerCounts,
+      expectedContentRevision,
     },
   });
 

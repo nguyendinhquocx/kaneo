@@ -6,16 +6,51 @@ import { createContext, useContext, useEffect, useRef, type ReactNode } from "re
 // endpoints instead. A module-level ref keeps plain lib code (uploads) able
 // to read the mode without prop drilling; only one share surface is mounted
 // at a time, and the provider clears it on unmount.
+//
+// SPEC-2026-11-10 T3: the runtime is now discriminated — a project
+// capability (view/edit/full) and a task capability (view/edit over one
+// card + its live subtask tree) expose different surfaces and different
+// mutation matrices. A module-level ref keeps plain lib code (uploads) able
+// to read the mode without prop drilling; only one share surface is mounted
+// at a time, and the provider clears it on unmount.
 
-export type ShareCapabilityRuntime = {
-  token: string;
-  projectId: string;
-};
+export type ShareCapabilityRuntime =
+  | {
+      resourceType: "project";
+      permission: "view" | "edit" | "full";
+      token: string;
+      projectId: string;
+      rootTaskId?: undefined;
+    }
+  | {
+      resourceType: "task";
+      permission: "view" | "edit";
+      token: string;
+      projectId: string;
+      rootTaskId: string;
+    };
 
 let runtime: ShareCapabilityRuntime | null = null;
 
 export function getShareCapability(): ShareCapabilityRuntime | null {
   return runtime;
+}
+
+// True when a guest holds a task card capability (view or edit).
+export function isTaskShareCapability(
+  capability: ShareCapabilityRuntime | null,
+): capability is Extract<ShareCapabilityRuntime, { resourceType: "task" }> {
+  return capability?.resourceType === "task";
+}
+
+// True when a guest holds a FULL project capability — the only mode granted
+// owner-like project-work capabilities.
+export function isFullProjectCapability(
+  capability: ShareCapabilityRuntime | null,
+): capability is Extract<ShareCapabilityRuntime, { resourceType: "project" }> {
+  return (
+    capability?.resourceType === "project" && capability.permission === "full"
+  );
 }
 
 // The route only knows the token at mount; the real project id arrives with
@@ -37,6 +72,9 @@ export function invalidateShareQueries(
     queryClient.invalidateQueries({
       queryKey: ["share-full", capability.token],
     });
+    queryClient.invalidateQueries({
+      queryKey: ["share-task", capability.token],
+    });
   }
 }
 
@@ -51,8 +89,18 @@ export function useShareCapability(): ShareCapabilityRuntime | null {
 export function ShareCapabilityProvider({
   token,
   projectId,
+  resourceType = "project",
+  permission = resourceType === "task" ? "view" : "view",
+  rootTaskId,
   children,
-}: ShareCapabilityRuntime & { children: ReactNode }) {
+}: {
+  token: string;
+  projectId: string;
+  resourceType?: "project" | "task";
+  permission?: "view" | "edit" | "full";
+  rootTaskId?: string;
+  children: ReactNode;
+}) {
   const previous = useRef<ShareCapabilityRuntime | null>(null);
   const capturedPrevious = useRef(false);
 
@@ -63,7 +111,10 @@ export function ShareCapabilityProvider({
     previous.current = runtime;
     capturedPrevious.current = true;
   }
-  runtime = { token, projectId };
+  runtime =
+    resourceType === "task"
+      ? { resourceType, permission: permission === "edit" ? "edit" : "view", token, projectId, rootTaskId: rootTaskId ?? "" }
+      : { resourceType, permission, token, projectId };
 
   useEffect(() => {
     return () => {
@@ -71,10 +122,16 @@ export function ShareCapabilityProvider({
         runtime = previous.current;
       }
     };
-  }, [token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, resourceType, permission, rootTaskId]);
+
+  const value: ShareCapabilityRuntime =
+    resourceType === "task"
+      ? { resourceType, permission: permission === "edit" ? "edit" : "view", token, projectId, rootTaskId: rootTaskId ?? "" }
+      : { resourceType, permission, token, projectId };
 
   return (
-    <ShareCapabilityContext.Provider value={{ token, projectId }}>
+    <ShareCapabilityContext.Provider value={value}>
       {children}
     </ShareCapabilityContext.Provider>
   );

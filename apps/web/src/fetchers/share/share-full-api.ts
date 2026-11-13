@@ -22,6 +22,8 @@ export type ShareFullTask = {
   position: number | null;
   createdAt: string;
   assigneeId: string | null;
+  // SPEC-2026-11-10 T2: content CAS token for full-share guest writes.
+  contentRevision: number;
   labels: Array<{ id: string; name: string; color: string | null }>;
 };
 
@@ -182,10 +184,13 @@ export function updateShareFullTask(
     dueDate?: string | null;
     assigneeId?: string | null;
   },
+  // SPEC-2026-11-10 T2/T3: the full-write route rejects edits without the
+  // content CAS token read from the guest task DTO.
+  expectedContentRevision: number,
 ) {
   return request<ShareFullTask>(token, `/task/${taskId}`, {
     method: "PUT",
-    json: task,
+    json: { ...task, expectedContentRevision },
   });
 }
 
@@ -193,10 +198,11 @@ export function moveShareFullTask(
   token: string,
   taskId: string,
   body: { status: string; position: number },
+  expectedContentRevision: number,
 ) {
   return request<{ success: boolean }>(token, `/task/${taskId}/move`, {
     method: "POST",
-    json: body,
+    json: { ...body, expectedContentRevision },
   });
 }
 

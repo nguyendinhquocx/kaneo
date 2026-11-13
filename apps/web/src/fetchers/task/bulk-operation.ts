@@ -13,13 +13,15 @@ async function bulkOperation({
   taskIds,
   operation,
   value,
+  expectedContentRevisions,
 }: {
   taskIds: string[];
   operation: BulkOperationType;
   value?: string | null;
+  expectedContentRevisions?: Record<string, number>;
 }) {
   const response = await client.task.bulk.$patch({
-    json: { taskIds, operation, value },
+    json: { taskIds, operation, value, expectedContentRevisions },
   });
 
   if (!response.ok) {

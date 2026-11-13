@@ -29,6 +29,7 @@ import { Route as LayoutAuthenticatedOnboardingRouteImport } from './routes/_lay
 import { Route as LayoutAuthenticatedProfileSetupRouteImport } from './routes/_layout/_authenticated/profile-setup'
 import { Route as InvitationAcceptInviteIdRouteImport } from './routes/invitation/accept.$inviteId'
 import { Route as ShareResourceTypeTokenRouteImport } from './routes/share/$resourceType/$token'
+import { Route as ShareTaskTokenRouteImport } from './routes/share/task/$token'
 import { Route as LayoutAuthenticatedDashboardIndexRouteImport } from './routes/_layout/_authenticated/dashboard/index'
 import { Route as LayoutAuthenticatedDashboardInvitationsRouteImport } from './routes/_layout/_authenticated/dashboard/invitations'
 import { Route as LayoutAuthenticatedDashboardSettingsRouteImport } from './routes/_layout/_authenticated/dashboard/settings'
@@ -39,6 +40,7 @@ import { Route as LayoutAuthenticatedDashboardSettingsWorkspaceRouteImport } fro
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId'
 import { Route as LayoutAuthenticatedDashboardWorkspaceCreateRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/create'
 import { Route as ShareProjectTokenTaskTaskIdRouteImport } from './routes/share/project/$token/task/$taskId'
+import { Route as ShareTaskTokenTaskTaskIdRouteImport } from './routes/share/task/$token/task/$taskId'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountDeveloperRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account/developer'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountInformationRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account/information'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountNotificationsRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account/notifications'
@@ -166,6 +168,11 @@ const ShareResourceTypeTokenRoute = ShareResourceTypeTokenRouteImport.update({
   path: '/share/$resourceType/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShareTaskTokenRoute = ShareTaskTokenRouteImport.update({
+  id: '/share/task/$token',
+  path: '/share/task/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LayoutAuthenticatedDashboardIndexRoute =
   LayoutAuthenticatedDashboardIndexRouteImport.update({
     id: '/',
@@ -224,6 +231,12 @@ const ShareProjectTokenTaskTaskIdRoute =
     id: '/share/project/$token/task/$taskId',
     path: '/share/project/$token/task/$taskId',
     getParentRoute: () => rootRouteImport,
+  } as any)
+const ShareTaskTokenTaskTaskIdRoute =
+  ShareTaskTokenTaskTaskIdRouteImport.update({
+    id: '/task/$taskId',
+    path: '/task/$taskId',
+    getParentRoute: () => ShareTaskTokenRoute,
   } as any)
 const LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute =
   LayoutAuthenticatedDashboardSettingsAccountDeveloperRouteImport.update({
@@ -412,6 +425,7 @@ export interface FileRoutesByFullPath {
   '/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
   '/share/$resourceType/$token': typeof ShareResourceTypeTokenRoute
+  '/share/task/$token': typeof ShareTaskTokenRouteWithChildren
   '/dashboard/invitations': typeof LayoutAuthenticatedDashboardInvitationsRoute
   '/dashboard/settings': typeof LayoutAuthenticatedDashboardSettingsRouteWithChildren
   '/dashboard/': typeof LayoutAuthenticatedDashboardIndexRoute
@@ -422,6 +436,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/workspace/$workspaceId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteWithChildren
   '/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
   '/share/project/$token/task/$taskId': typeof ShareProjectTokenTaskTaskIdRoute
+  '/share/task/$token/task/$taskId': typeof ShareTaskTokenTaskTaskIdRoute
   '/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
   '/dashboard/settings/account/notifications': typeof LayoutAuthenticatedDashboardSettingsAccountNotificationsRoute
@@ -463,6 +478,7 @@ export interface FileRoutesByTo {
   '/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
   '/share/$resourceType/$token': typeof ShareResourceTypeTokenRoute
+  '/share/task/$token': typeof ShareTaskTokenRouteWithChildren
   '/dashboard/invitations': typeof LayoutAuthenticatedDashboardInvitationsRoute
   '/dashboard/settings': typeof LayoutAuthenticatedDashboardSettingsRouteWithChildren
   '/dashboard': typeof LayoutAuthenticatedDashboardIndexRoute
@@ -472,6 +488,7 @@ export interface FileRoutesByTo {
   '/dashboard/settings/workspace': typeof LayoutAuthenticatedDashboardSettingsWorkspaceRouteWithChildren
   '/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
   '/share/project/$token/task/$taskId': typeof ShareProjectTokenTaskTaskIdRoute
+  '/share/task/$token/task/$taskId': typeof ShareTaskTokenTaskTaskIdRoute
   '/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
   '/dashboard/settings/account/notifications': typeof LayoutAuthenticatedDashboardSettingsAccountNotificationsRoute
@@ -518,6 +535,7 @@ export interface FileRoutesById {
   '/_layout/_authenticated/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
   '/share/$resourceType/$token': typeof ShareResourceTypeTokenRoute
+  '/share/task/$token': typeof ShareTaskTokenRouteWithChildren
   '/_layout/_authenticated/dashboard/invitations': typeof LayoutAuthenticatedDashboardInvitationsRoute
   '/_layout/_authenticated/dashboard/settings': typeof LayoutAuthenticatedDashboardSettingsRouteWithChildren
   '/_layout/_authenticated/dashboard/': typeof LayoutAuthenticatedDashboardIndexRoute
@@ -528,6 +546,7 @@ export interface FileRoutesById {
   '/_layout/_authenticated/dashboard/workspace/$workspaceId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteWithChildren
   '/_layout/_authenticated/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
   '/share/project/$token/task/$taskId': typeof ShareProjectTokenTaskTaskIdRoute
+  '/share/task/$token/task/$taskId': typeof ShareTaskTokenTaskTaskIdRoute
   '/_layout/_authenticated/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/_layout/_authenticated/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
   '/_layout/_authenticated/dashboard/settings/account/notifications': typeof LayoutAuthenticatedDashboardSettingsAccountNotificationsRoute
@@ -573,6 +592,7 @@ export interface FileRouteTypes {
     | '/profile-setup'
     | '/invitation/accept/$inviteId'
     | '/share/$resourceType/$token'
+    | '/share/task/$token'
     | '/dashboard/invitations'
     | '/dashboard/settings'
     | '/dashboard/'
@@ -583,6 +603,7 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/$workspaceId'
     | '/dashboard/workspace/create'
     | '/share/project/$token/task/$taskId'
+    | '/share/task/$token/task/$taskId'
     | '/dashboard/settings/account/developer'
     | '/dashboard/settings/account/information'
     | '/dashboard/settings/account/notifications'
@@ -624,6 +645,7 @@ export interface FileRouteTypes {
     | '/profile-setup'
     | '/invitation/accept/$inviteId'
     | '/share/$resourceType/$token'
+    | '/share/task/$token'
     | '/dashboard/invitations'
     | '/dashboard/settings'
     | '/dashboard'
@@ -633,6 +655,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/workspace'
     | '/dashboard/workspace/create'
     | '/share/project/$token/task/$taskId'
+    | '/share/task/$token/task/$taskId'
     | '/dashboard/settings/account/developer'
     | '/dashboard/settings/account/information'
     | '/dashboard/settings/account/notifications'
@@ -678,6 +701,7 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/profile-setup'
     | '/invitation/accept/$inviteId'
     | '/share/$resourceType/$token'
+    | '/share/task/$token'
     | '/_layout/_authenticated/dashboard/invitations'
     | '/_layout/_authenticated/dashboard/settings'
     | '/_layout/_authenticated/dashboard/'
@@ -688,6 +712,7 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId'
     | '/_layout/_authenticated/dashboard/workspace/create'
     | '/share/project/$token/task/$taskId'
+    | '/share/task/$token/task/$taskId'
     | '/_layout/_authenticated/dashboard/settings/account/developer'
     | '/_layout/_authenticated/dashboard/settings/account/information'
     | '/_layout/_authenticated/dashboard/settings/account/notifications'
@@ -723,6 +748,7 @@ export interface RootRouteChildren {
   PublicProjectProjectIdRoute: typeof PublicProjectProjectIdRoute
   InvitationAcceptInviteIdRoute: typeof InvitationAcceptInviteIdRoute
   ShareResourceTypeTokenRoute: typeof ShareResourceTypeTokenRoute
+  ShareTaskTokenRoute: typeof ShareTaskTokenRouteWithChildren
   ShareProjectTokenIndexRoute: typeof ShareProjectTokenIndexRoute
   ShareProjectTokenTaskTaskIdRoute: typeof ShareProjectTokenTaskTaskIdRoute
 }
@@ -869,6 +895,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShareResourceTypeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/share/task/$token': {
+      id: '/share/task/$token'
+      path: '/share/task/$token'
+      fullPath: '/share/task/$token'
+      preLoaderRoute: typeof ShareTaskTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_layout/_authenticated/dashboard/': {
       id: '/_layout/_authenticated/dashboard/'
       path: '/'
@@ -938,6 +971,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/share/project/$token/task/$taskId'
       preLoaderRoute: typeof ShareProjectTokenTaskTaskIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/share/task/$token/task/$taskId': {
+      id: '/share/task/$token/task/$taskId'
+      path: '/task/$taskId'
+      fullPath: '/share/task/$token/task/$taskId'
+      preLoaderRoute: typeof ShareTaskTokenTaskTaskIdRouteImport
+      parentRoute: typeof ShareTaskTokenRoute
     }
     '/_layout/_authenticated/dashboard/settings/account/developer': {
       id: '/_layout/_authenticated/dashboard/settings/account/developer'
@@ -1326,6 +1366,18 @@ const DeviceRouteChildren: DeviceRouteChildren = {
 const DeviceRouteWithChildren =
   DeviceRoute._addFileChildren(DeviceRouteChildren)
 
+interface ShareTaskTokenRouteChildren {
+  ShareTaskTokenTaskTaskIdRoute: typeof ShareTaskTokenTaskTaskIdRoute
+}
+
+const ShareTaskTokenRouteChildren: ShareTaskTokenRouteChildren = {
+  ShareTaskTokenTaskTaskIdRoute: ShareTaskTokenTaskTaskIdRoute,
+}
+
+const ShareTaskTokenRouteWithChildren = ShareTaskTokenRoute._addFileChildren(
+  ShareTaskTokenRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LayoutRoute: LayoutRouteWithChildren,
@@ -1336,6 +1388,7 @@ const rootRouteChildren: RootRouteChildren = {
   PublicProjectProjectIdRoute: PublicProjectProjectIdRoute,
   InvitationAcceptInviteIdRoute: InvitationAcceptInviteIdRoute,
   ShareResourceTypeTokenRoute: ShareResourceTypeTokenRoute,
+  ShareTaskTokenRoute: ShareTaskTokenRouteWithChildren,
   ShareProjectTokenIndexRoute: ShareProjectTokenIndexRoute,
   ShareProjectTokenTaskTaskIdRoute: ShareProjectTokenTaskTaskIdRoute,
 }

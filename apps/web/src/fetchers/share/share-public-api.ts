@@ -139,19 +139,25 @@ export async function updateSharedProjectTask({
   token,
   taskId,
   task,
+  expectedContentRevision,
 }: {
   token: string;
   taskId: string;
   task: SharedTaskWrite;
+  // SPEC-2026-11-10 T2/T3: public edit writes are CAS-guarded.
+  expectedContentRevision: number;
 }): Promise<SharedTaskResult> {
   const response = await fetch(
     `${apiBase}/share/project/${token}/task/${taskId}`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(task),
+      body: JSON.stringify({ ...task, expectedContentRevision }),
     },
   );
+  if (response.status === 409) {
+    throw new ShareConflictError();
+  }
   if (!response.ok) {
     throw await parseError(response);
   }

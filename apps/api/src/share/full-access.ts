@@ -270,6 +270,7 @@ export async function buildFullProjectPayload(resourceId: string) {
       position: schema.taskTable.position,
       createdAt: schema.taskTable.createdAt,
       assigneeId: schema.taskTable.userId,
+      contentRevision: schema.taskTable.contentRevision,
     })
     .from(schema.taskTable)
     .where(eq(schema.taskTable.projectId, resourceId))
@@ -325,6 +326,9 @@ export async function buildFullProjectPayload(resourceId: string) {
     position: task.position,
     createdAt: task.createdAt,
     assigneeId: task.assigneeId,
+    // SPEC-2026-11-10 T2: the full board carries the content CAS token so
+    // guest field writes never fly blind.
+    contentRevision: task.contentRevision,
     labels: labelsByTask.get(task.id) ?? [],
   });
 

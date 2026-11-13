@@ -2404,6 +2404,11 @@
       },
       "dragDisabled": "Desactiva el orden y los filtros para reordenar las tareas.",
       "moveFailed": "No se pudo mover la tarea. Se restauró el orden anterior; vuelve a intentarlo."
+    },
+    "task": {
+      "editWarning": "An edit link lets anyone holding the URL change this card and its current subtasks. The link itself is a bearer secret — treat it like a password.",
+      "subtreeNote": "The link covers this card and its live subtask tree; tasks moved out of the tree lose access immediately.",
+      "manifestWarning": "This project is execution-managed: card descriptions are hidden and read-only on any share link."
     }
   },
   "goals": {

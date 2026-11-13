@@ -369,7 +369,11 @@ export async function buildTaskShareSubtreePayload(
   const [dto] = await buildTaskShareDtos(scope, [task]);
   if (!dto) throw notFound();
   const childEdges = await db
-    .select({ targetTaskId: schema.taskRelationTable.targetTaskId })
+    .select({
+      id: schema.taskRelationTable.id,
+      targetTaskId: schema.taskRelationTable.targetTaskId,
+      position: schema.taskRelationTable.position,
+    })
     .from(schema.taskRelationTable)
     .where(
       and(
@@ -422,6 +426,16 @@ export async function buildTaskShareSubtreePayload(
     task: dto,
     parent,
     subtasks: subtaskDtos,
+    // Edit links need the relation ids to drive the scoped reorder route;
+    // view links never receive them.
+    subtaskRelations:
+      link.permission === "edit"
+        ? childEdges.map((edge) => ({
+            relationId: edge.id,
+            targetTaskId: edge.targetTaskId,
+            position: edge.position,
+          }))
+        : undefined,
     commentsPage,
   };
 }
@@ -943,7 +957,9 @@ type TaskUploadOwnerType = "task_description" | "task_comment";
 
 function assertUploadOwnerInScope(
   scope: TaskShareScope,
-  ownerType: TaskUploadOwnerType,
+  // Surface is part of the contract signature; scope containment is what
+  // actually guards here.
+  _ownerType: TaskUploadOwnerType,
   ownerId: string,
 ) {
   if (!scope.tasks.some((candidate) => candidate.id === ownerId)) {

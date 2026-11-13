@@ -139,7 +139,11 @@ describe("useUpdateWorkMarkers optimistic projections", () => {
       >(["task-relations", parent.id]);
       expect(relations?.[0]?.targetTask.workMarkerCounts).toEqual(nextCounts);
     });
-    expect(saveMarkers).toHaveBeenCalledWith(child.id, nextCounts);
+    expect(saveMarkers).toHaveBeenCalledWith(
+      child.id,
+      nextCounts,
+      taskDetail.contentRevision ?? 1,
+    );
 
     await act(async () => {
       resolveSave?.();

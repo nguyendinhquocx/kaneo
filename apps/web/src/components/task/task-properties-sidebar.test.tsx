@@ -55,6 +55,10 @@ vi.mock("@/hooks/use-workspace-permission", () => ({
   useWorkspacePermission: () => ({
     canManageTasks: () => true,
     canAssignTasks: () => false,
+    // SPEC-2026-11-10 T3: share-link minting is off in this fixture — the
+    // Copy slot keeps its plain URL-copy behavior.
+    canManageShareLinks: () => false,
+    isCheckingPermissions: false,
   }),
 }));
 vi.mock("@/store/project", () => ({

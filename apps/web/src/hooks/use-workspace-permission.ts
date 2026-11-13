@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { getShareCapability } from "@/components/share/share-capability";
+import {
+  getShareCapability,
+  isFullProjectCapability,
+} from "@/components/share/share-capability";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUser } from "@/hooks/queries/workspace-users/use-active-workspace-user";
 import { authClient } from "@/lib/auth-client";
@@ -60,9 +63,13 @@ export function useWorkspacePermission() {
   // SPEC-2026-10-22: a full capability holder gets exactly the T1 matrix
   // capabilities — ordinary project work — and never workspace administration
   // or share-link management.
+  // SPEC-2026-11-10 T3: only a FULL project capability grants owner-like
+  // project-work capabilities. A task capability (view/edit) never unlocks
+  // generic task mutators or workspace data — its writes go through the
+  // scoped share-task endpoints only.
   const capability = getShareCapability();
   const capabilityMap = useMemo(() => {
-    if (!capability) return null;
+    if (!isFullProjectCapability(capability)) return null;
     const map = emptyCapabilityMap();
     map.createTasks = true;
     map.manageTasks = true;
@@ -136,7 +143,7 @@ export function useWorkspacePermission() {
       // Escape hatch for ad-hoc permission checks (uncached). Prefer adding
       // a capability above.
       hasPermission: async (permissions: Record<string, string[]>) => {
-        if (getShareCapability()) {
+        if (capabilityMap) {
           // Only the project-work capabilities above are granted to a
           // capability holder; everything else denies.
           return Object.entries(permissions).every(([resource, actions]) => {

@@ -16,7 +16,9 @@ export function useUpdateTaskStatus() {
       if (capability) {
         return updateShareFullTask(capability.token, task.id, {
           status: task.status,
-        }) as unknown as Promise<Task>;
+          }, // SPEC-2026-11-10 T3: full-share writes carry the content CAS.
+          task.contentRevision ?? 1,
+) as unknown as Promise<Task>;
       }
       return updateTaskStatus(task.id, task) as unknown as Promise<Task>;
     },

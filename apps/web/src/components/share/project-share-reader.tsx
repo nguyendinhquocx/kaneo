@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createSharedProjectTask,
   type SharedTaskWrite,
+  ShareConflictError,
   updateSharedProjectTask,
 } from "@/fetchers/share/share-public-api";
 import type {
@@ -504,10 +505,18 @@ function SharedTaskEditDialog({
         token,
         taskId: task.id,
         task: taskWrite,
+        // SPEC-2026-11-10 T3: public edit writes CAS the card; a stale
+        // token surfaces as a recoverable conflict in the same dialog.
+        expectedContentRevision: task.contentRevision ?? 1,
       });
       setSaved(true);
       onSaved();
     } catch (caught) {
+      if (caught instanceof ShareConflictError) {
+        setError(t("project.conflictRetry"));
+        onSaved();
+        return;
+      }
       setError(
         caught instanceof Error && caught.message !== "error"
           ? caught.message

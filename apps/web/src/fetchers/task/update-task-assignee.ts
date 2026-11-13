@@ -1,7 +1,8 @@
 import { client } from "@kaneo/libs";
 import type Task from "@/types/task";
+import { getExpectedContentRevision } from "@/lib/task-content-revision";
 
-type UpdateTaskAssigneePayload = Pick<Task, "userId">;
+type UpdateTaskAssigneePayload = Pick<Task, "userId" | "contentRevision">;
 
 async function updateTaskAssignee(
   taskId: string,
@@ -11,6 +12,7 @@ async function updateTaskAssignee(
     param: { id: taskId },
     json: {
       userId: task.userId || "",
+      expectedContentRevision: getExpectedContentRevision(task),
     },
   });
 

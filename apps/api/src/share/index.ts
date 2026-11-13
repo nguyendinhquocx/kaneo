@@ -1402,6 +1402,25 @@ app.post("/task/:token/task/:taskId/comments", async (c) => {
   return c.json(await taskShareCreateComment(link, taskId, body.content));
 });
 
+// SPEC-2026-11-10 T3: marker edits are part of the task-share edit matrix —
+// CAS the full map with contentRevision, never the execution taskRevision.
+app.patch("/task/:token/task/:taskId/work-markers", async (c) => {
+  const token = c.req.param("token");
+  const taskId = c.req.param("taskId");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({
+        workMarkerCounts: v.record(v.string(), v.number()),
+        expectedContentRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+      }),
+      raw,
+    ),
+  );
+  return c.json(await taskShareUpdateWorkMarkers(link, taskId, body));
+});
+
 app.post("/task/:token/asset/upload-ticket", async (c) => {
   const token = c.req.param("token");
   assertShareRateLimit(c, "write", hashShareToken(token));

@@ -5,12 +5,14 @@ import {
   getShareCapability,
   invalidateShareQueries,
 } from "@/components/share/share-capability";
+import type Task from "@/types/task";
+import { getExpectedContentRevision } from "@/lib/task-content-revision";
 
 function useCreateTaskRelation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: {
+    mutationFn: async (input: {
       sourceTaskId: string;
       targetTaskId: string;
       relationType: "subtask" | "blocks" | "related";
@@ -23,7 +25,20 @@ function useCreateTaskRelation() {
           relationType: input.relationType,
         }) as unknown as ReturnType<typeof createTaskRelation>;
       }
-      return createTaskRelation(input);
+      // SPEC-2026-11-10 T3: a subtask edge changes the parent card's
+      // subtask structure, so the create is CAS-guarded on the parent.
+      const expectedParentContentRevision =
+        input.relationType === "subtask"
+          ? await queryClient
+              .fetchQuery({
+                queryKey: ["task", input.sourceTaskId],
+                queryFn: () => Promise.resolve(undefined as Task | undefined),
+                staleTime: 0,
+              })
+              .catch(() => undefined)
+              .then(getExpectedContentRevision)
+          : undefined;
+      return createTaskRelation({ ...input, expectedParentContentRevision });
     },
     onSuccess: (_, variables) => {
       invalidateShareQueries(queryClient);

@@ -35,7 +35,6 @@ type BulkOperation =
 // revision instead of silently overwriting.
 async function casBulkFieldUpdate({
   tasks,
-  revisions,
   apply,
 }: {
   tasks: Array<{

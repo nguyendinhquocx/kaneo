@@ -1,11 +1,13 @@
 import { client } from "@kaneo/libs";
 import type Task from "@/types/task";
+import { getExpectedContentRevision } from "@/lib/task-content-revision";
 
 async function updateTaskDescription(taskId: string, task: Task) {
   const response = await client.task.description[":id"].$put({
     param: { id: taskId },
     json: {
       description: task.description || "",
+      expectedContentRevision: getExpectedContentRevision(task),
     },
   });
 

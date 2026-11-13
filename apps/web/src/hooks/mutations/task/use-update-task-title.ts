@@ -17,7 +17,9 @@ export function useUpdateTaskTitle() {
       if (capability) {
         return updateShareFullTask(capability.token, task.id, {
           title: task.title,
-        }) as unknown as Promise<Task>;
+          }, // SPEC-2026-11-10 T3: full-share writes carry the content CAS.
+          task.contentRevision ?? 1,
+) as unknown as Promise<Task>;
       }
       return updateTaskTitle(task.id, task) as unknown as Promise<Task>;
     },
