@@ -1931,6 +1931,86 @@ export const taskRelationTable = pgTable(
   ],
 );
 
+// SPEC-2026-11-10-kaneo-card-agent-collaboration T4: one exact Pi session
+// bound to one card. The partial unique index permits a single ACTIVE
+// binding per task; rebinding revokes the prior row and increments the
+// generation so every in-flight scoped call fails with a typed
+// stale-binding instead of targeting a replacement session.
+export const agentSessionBindingTable = pgTable(
+  "agent_session_binding",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => taskTable.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, { onDelete: "cascade" }),
+    agentPrincipalId: text("agent_principal_id")
+      .notNull()
+      .references(() => agentPrincipalTable.id, { onDelete: "cascade" }),
+    hostId: text("host_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    bindingGeneration: integer("binding_generation").notNull().default(1),
+    status: text("status").notNull().default("active"),
+    lastHeartbeatAt: timestamp("last_heartbeat_at", { mode: "date" }),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+    revokedReason: text("revoked_reason"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .notNull(),
+    revision: integer("revision").notNull().default(1),
+  },
+  (table) => [
+    uniqueIndex("agent_session_binding_active_task_unique").on(
+      table.taskId,
+    ).where(sql`status = 'active'`),
+    index("agent_session_binding_principal_idx").on(table.agentPrincipalId),
+    index("agent_session_binding_session_idx").on(table.sessionId),
+  ],
+);
+
+// SPEC-2026-11-10 T4/T5: durable comment delivery outbox for the bound
+// session. `(bindingId, clientActionKey)` is the idempotency key — duplicate
+// send clicks reuse the same receipt, explicit resends mint a new key.
+export const agentSessionDeliveryTable = pgTable(
+  "agent_session_delivery",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    bindingId: text("binding_id")
+      .notNull()
+      .references(() => agentSessionBindingTable.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+    clientActionKey: text("client_action_key").notNull(),
+    commentId: text("comment_id"),
+    commentUpdatedAt: timestamp("comment_updated_at", { mode: "date" }),
+    commentContentHash: text("comment_content_hash"),
+    state: text("state").notNull().default("queued"),
+    claimedAt: timestamp("claimed_at", { mode: "date" }),
+    claimedLeaseExpiresAt: timestamp("claimed_lease_expires_at", {
+      mode: "date",
+    }),
+    enqueuedAt: timestamp("enqueued_at", { mode: "date" }),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("agent_session_delivery_action_key_unique").on(
+      table.bindingId,
+      table.clientActionKey,
+    ),
+    index("agent_session_delivery_state_idx").on(table.bindingId, table.state),
+  ],
+);
+
 export const apikeyTable = pgTable(
   "apikey",
   {

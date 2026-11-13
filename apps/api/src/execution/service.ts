@@ -15,6 +15,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import { fenceBindingForRunClaim } from "../agent-session/card-tools";
 import db from "../database";
 import {
   activityTable,
@@ -1448,6 +1449,13 @@ export async function claimTaskRun(
       .from(taskTable)
       .where(eq(taskTable.id, taskId))
       .for("update");
+
+    // SPEC-2026-11-10 T4: a formal-run claim fences the ad-hoc session
+    // binding — a claimed delivery inside its lease blocks with
+    // ad-hoc-delivery-in-flight; otherwise queued/claimed deliveries go
+    // stale and the binding revokes with an incremented generation so the
+    // old session cannot act after the run starts.
+    await fenceBindingForRunClaim(tx, taskId);
 
     let taskContext: Awaited<ReturnType<typeof getTaskContext>>;
     try {

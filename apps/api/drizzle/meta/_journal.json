@@ -379,6 +379,13 @@
       "when": 1794489473968,
       "tag": "0053_productive_sharon_ventura",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1794582499780,
+      "tag": "0054_agent_session_binding",
+      "breakpoints": true
     }
   ]
 }

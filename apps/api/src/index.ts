@@ -44,6 +44,7 @@ import getInstanceStatus from "./instance/controllers/get-instance-status";
 import invitation from "./invitation";
 import label from "./label";
 import mcpRoutes, { mcpWellKnownRoutes } from "./mcp";
+import agentSessionRoutes from "./agent-session";
 import { migrateColumns } from "./migrations/column-migration";
 import notification from "./notification";
 import notificationPreferences from "./notification-preferences";
@@ -562,6 +563,7 @@ export function createApp() {
   const externalLinkApi = api.route("/external-link", externalLink);
   const goalApi = api.route("/goal", goal);
   const executionApi = api.route("/execution", execution);
+  api.route("/agent-session", agentSessionRoutes);
   const workflowRuleApi = api.route("/workflow-rule", workflowRule);
   const shareManageApi = api.route("/share-manage", shareManage);
   const contentAssetApi = api.route("/content-asset", contentAsset);
