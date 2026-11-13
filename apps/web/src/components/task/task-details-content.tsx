@@ -17,6 +17,7 @@ import { getShareCapability } from "@/components/share/share-capability";
 import type { ExternalLink } from "@/types/external-link";
 import TaskDescription from "./task-description";
 import TaskExecutionPanel from "./task-execution-panel";
+import TaskAgentBindingStatus from "./task-agent-binding-status";
 import TaskRelations from "./task-relations";
 import TaskSubtasks from "./task-subtasks";
 import TaskTitle from "./task-title";
@@ -94,6 +95,7 @@ export default function TaskDetailsContent({
           {project?.slug ?? ""}-{task?.number}
         </p>
         <TaskTitle taskId={taskId} />
+        {shareCapability ? null : <TaskAgentBindingStatus taskId={taskId} />}
         <TaskDescription taskId={taskId} />
       </div>
       {shareCapability ? null : (

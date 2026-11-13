@@ -1759,6 +1759,11 @@
           },
           "onlyYoutubeInline": "Chỉ URL YouTube mới có thể nhúng. Hãy dùng chế độ liên kết thay thế."
         }
+      },
+      "agentBinding": {
+        "online": "Pi đang kết nối",
+        "offline": "Pi ngoại tuyến",
+        "host": "Máy: {{host}}"
       }
     },
     "entity": {

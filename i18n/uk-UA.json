@@ -1761,6 +1761,11 @@
         "evidenceError": "Unable to load the latest run evidence.",
         "toggle": "Toggle execution state",
         "retry": "Retry"
+      },
+      "agentBinding": {
+        "online": "Pi підключений",
+        "offline": "Pi не в мережі",
+        "host": "Вузол: {{host}}"
       }
     },
     "entity": {

@@ -3,7 +3,7 @@
 // actions accept no target id, child/asset/comment ids only flow through
 // their named helper, and the API rechecks subtree membership per call.
 // Every write CASes on contentRevision and returns the fresh revision.
-import { and, asc, count, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import {
@@ -15,6 +15,7 @@ import {
   validateFullLinkUploadInput,
 } from "../storage/s3";
 import { assertTaskContentRevision } from "../task/content-revision";
+import { resolveTaskSubtreeScope } from "../share/task-share-access";
 import { normalizeWorkMarkerCounts } from "../task/work-marker-counts";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
 import { lockProjectTaskLanes } from "../task/lock-project-task-lanes";
@@ -23,7 +24,7 @@ import {
   assertValidTaskStatus,
   VIRTUAL_STATUSES,
 } from "../task/validate-task-fields";
-import { loadScopedBinding } from "./binding-service";
+import { loadScopedBinding, type AgentSessionBinding } from "./binding-service";
 
 const notFound = () => new HTTPException(404, { message: "Not found" });
 
@@ -73,6 +74,70 @@ function assertInScope(scope: BindingScope, taskId: string) {
   return task;
 }
 
+const staleBinding = () => new HTTPException(409, { message: "stale_binding" });
+
+// Lock the current subtree task rows in stable order, re-resolve scope under
+// those locks, then lock/recheck the binding. This shares lock order with the
+// formal-run claim (root task -> binding): a race either finishes before the
+// run claim or returns stale_binding after the claim/rebind commits.
+async function lockBindingScope(
+  tx: ShareTransaction,
+  ctx: BindingContext,
+  expectedBinding: AgentSessionBinding,
+  targetTaskId: string,
+): Promise<BindingScope> {
+  let initial: BindingScope;
+  try {
+    initial = await resolveTaskSubtreeScope(
+      expectedBinding.taskId,
+      expectedBinding.projectId,
+      tx,
+    );
+  } catch (error) {
+    if (error instanceof HTTPException && [403, 404, 409].includes(error.status)) {
+      throw staleBinding();
+    }
+    throw error;
+  }
+  await tx
+    .select({ id: schema.taskTable.id })
+    .from(schema.taskTable)
+    .where(inArray(schema.taskTable.id, initial.tasks.map((task) => task.id)))
+    .orderBy(asc(schema.taskTable.id))
+    .for("update");
+  let scope: BindingScope;
+  try {
+    scope = await resolveTaskSubtreeScope(
+      expectedBinding.taskId,
+      expectedBinding.projectId,
+      tx,
+    );
+  } catch (error) {
+    if (error instanceof HTTPException && [403, 404, 409].includes(error.status)) {
+      throw staleBinding();
+    }
+    throw error;
+  }
+  if (!scope.tasks.some((task) => task.id === targetTaskId)) throw staleBinding();
+  const [current] = await tx
+    .select()
+    .from(schema.agentSessionBindingTable)
+    .where(eq(schema.agentSessionBindingTable.id, expectedBinding.id))
+    .for("update")
+    .limit(1);
+  if (
+    !current ||
+    current.status !== "active" ||
+    current.sessionId !== ctx.sessionId ||
+    current.bindingGeneration !== ctx.generation ||
+    current.taskId !== expectedBinding.taskId ||
+    current.projectId !== expectedBinding.projectId
+  ) {
+    throw staleBinding();
+  }
+  return scope;
+}
+
 async function assertDescriptionAllowed(scope: BindingScope, hasDescription: boolean) {
   const [manifest] = await db
     .select({ id: schema.executionManifestTable.id })
@@ -95,6 +160,17 @@ export async function bindingCardGet(ctx: BindingContext) {
   const labelMap = new Map(columns.map((column) => [column.slug, column.name]));
   const root = scope.tasks.find((task) => task.id === scope.rootTaskId);
   if (!root) throw notFound();
+  const [project] = await db
+    .select({
+      id: schema.projectTable.id,
+      name: schema.projectTable.name,
+      slug: schema.projectTable.slug,
+      workspaceId: schema.projectTable.workspaceId,
+    })
+    .from(schema.projectTable)
+    .where(eq(schema.projectTable.id, scope.projectId))
+    .limit(1);
+  if (!project) throw notFound();
   const labels = await db
     .select({
       id: schema.labelTable.id,
@@ -109,8 +185,22 @@ export async function bindingCardGet(ctx: BindingContext) {
         scope.tasks.map((task) => task.id),
       ),
     );
-  const subtaskCount = scope.tasks.length - 1;
+  const directEdges = await db
+    .select({ targetTaskId: schema.taskRelationTable.targetTaskId })
+    .from(schema.taskRelationTable)
+    .where(
+      and(
+        eq(schema.taskRelationTable.sourceTaskId, root.id),
+        eq(schema.taskRelationTable.relationType, "subtask"),
+      ),
+    )
+    .orderBy(asc(schema.taskRelationTable.position));
+  const directSubtasks = directEdges
+    .map((edge) => scope.tasks.find((task) => task.id === edge.targetTaskId))
+    .filter((task): task is NonNullable<typeof task> => Boolean(task));
+  const subtaskCount = directSubtasks.length;
   return {
+    project,
     card: {
       id: root.id,
       number: root.number,
@@ -132,9 +222,7 @@ export async function bindingCardGet(ctx: BindingContext) {
       name: column.name,
       isFinal: column.isFinal,
     })),
-    subtasks: scope.tasks
-      .filter((task) => task.id !== scope.rootTaskId)
-      .map((task) => ({
+    subtasks: directSubtasks.map((task) => ({
         id: task.id,
         title: task.title,
         status: task.status,
@@ -180,7 +268,7 @@ export async function bindingCardUpdate(
     expectedContentRevision: number;
   },
 ) {
-  const { scope } = await loadScopedBinding(ctx);
+  const { binding, scope } = await loadScopedBinding(ctx);
   const task = assertInScope(scope, scope.rootTaskId);
   await assertDescriptionAllowed(scope, body.patch.description !== undefined);
 
@@ -224,6 +312,7 @@ export async function bindingCardUpdate(
     if (updates.status !== undefined) {
       await lockProjectTaskLanes(tx, [scope.projectId]);
     }
+    await lockBindingScope(tx, ctx, binding, task.id);
     const [locked] = await tx
       .select()
       .from(schema.taskTable)
@@ -261,24 +350,29 @@ export async function bindingCardUpdate(
   });
 }
 
-async function loadRelation(
+async function loadParentRelation(
   tx: ShareTransaction,
-  parentTaskId: string,
+  scope: BindingScope,
   childTaskId: string,
 ) {
+  const scopedTaskIds = scope.tasks.map((task) => task.id);
   const [relation] = await tx
     .select()
     .from(schema.taskRelationTable)
     .where(
       and(
-        eq(schema.taskRelationTable.sourceTaskId, parentTaskId),
+        inArray(schema.taskRelationTable.sourceTaskId, scopedTaskIds),
         eq(schema.taskRelationTable.targetTaskId, childTaskId),
         eq(schema.taskRelationTable.relationType, "subtask"),
       ),
     )
     .limit(1);
   if (!relation) throw notFound();
-  return relation;
+  const parent = scope.tasks.find(
+    (candidate) => candidate.id === relation.sourceTaskId,
+  );
+  if (!parent) throw notFound();
+  return { relation, parent };
 }
 
 export async function bindingCardCreateSubtask(
@@ -291,7 +385,7 @@ export async function bindingCardCreateSubtask(
     expectedParentContentRevision: number;
   },
 ) {
-  const { scope } = await loadScopedBinding(ctx);
+  const { binding, scope } = await loadScopedBinding(ctx);
   const parent = assertInScope(scope, scope.rootTaskId);
   await assertDescriptionAllowed(scope, body.description !== undefined);
   const status = body.status || "to-do";
@@ -306,6 +400,7 @@ export async function bindingCardCreateSubtask(
 
   return db.transaction(async (tx) => {
     await lockProjectTaskLanes(tx, [scope.projectId]);
+    await lockBindingScope(tx, ctx, binding, parent.id);
     const [lockedParent] = await tx
       .select()
       .from(schema.taskTable)
@@ -389,7 +484,7 @@ export async function bindingCardUpdateSubtask(
     expectedContentRevision: number;
   },
 ) {
-  const { scope } = await loadScopedBinding(ctx);
+  const { binding, scope } = await loadScopedBinding(ctx);
   const task = assertInScope(scope, subtaskId);
   if (task.id === scope.rootTaskId) {
     throw new HTTPException(400, {
@@ -438,6 +533,7 @@ export async function bindingCardUpdateSubtask(
     if (updates.status !== undefined) {
       await lockProjectTaskLanes(tx, [scope.projectId]);
     }
+    await lockBindingScope(tx, ctx, binding, task.id);
     const [locked] = await tx
       .select()
       .from(schema.taskTable)
@@ -475,23 +571,54 @@ export async function bindingCardUpdateSubtask(
   });
 }
 
+async function collectDescendantIds(
+  tx: ShareTransaction,
+  scope: BindingScope,
+  rootTaskId: string,
+) {
+  const allowed = new Set(scope.tasks.map((task) => task.id));
+  const result = new Set<string>([rootTaskId]);
+  let frontier = [rootTaskId];
+  while (frontier.length > 0) {
+    const edges = await tx
+      .select({ targetTaskId: schema.taskRelationTable.targetTaskId })
+      .from(schema.taskRelationTable)
+      .where(
+        and(
+          inArray(schema.taskRelationTable.sourceTaskId, frontier),
+          eq(schema.taskRelationTable.relationType, "subtask"),
+        ),
+      );
+    const next: string[] = [];
+    for (const edge of edges) {
+      if (!allowed.has(edge.targetTaskId)) throw notFound();
+      if (result.has(edge.targetTaskId)) throw notFound();
+      result.add(edge.targetTaskId);
+      next.push(edge.targetTaskId);
+    }
+    frontier = next;
+  }
+  return [...result];
+}
+
 export async function bindingCardDeleteSubtask(
   ctx: BindingContext,
   subtaskId: string,
   body: { expectedParentContentRevision: number },
 ) {
-  const { scope } = await loadScopedBinding(ctx);
+  const { binding, scope } = await loadScopedBinding(ctx);
   const task = assertInScope(scope, subtaskId);
   if (task.id === scope.rootTaskId) {
     throw new HTTPException(400, {
       message: "the bound root card cannot be deleted through the binding",
     });
   }
-  // Descendant-only: the target must NOT be an ancestor of the root — with a
-  // subtree scope this is implied, but re-verify the direct edge exists.
+  // Descendant-only: resolve the immediate parent inside the current bound
+  // tree, then CAS that parent before deleting the selected descendant and
+  // its own descendants atomically (no orphaned subtask rows).
   return db.transaction(async (tx) => {
-    const parent = assertInScope(scope, scope.rootTaskId);
-    await loadRelation(tx, parent.id, task.id);
+    const freshScope = await lockBindingScope(tx, ctx, binding, task.id);
+    const { parent } = await loadParentRelation(tx, freshScope, task.id);
     const [lockedParent] = await tx
       .select()
       .from(schema.taskTable)
@@ -504,7 +631,10 @@ export async function bindingCardDeleteSubtask(
       parent.id,
       body.expectedParentContentRevision,
     );
-    await tx.delete(schema.taskTable).where(eq(schema.taskTable.id, task.id));
+    const descendantIds = await collectDescendantIds(tx, freshScope, task.id);
+    await tx
+      .delete(schema.taskTable)
+      .where(inArray(schema.taskTable.id, descendantIds));
     const [updatedParent] = await tx
       .update(schema.taskTable)
       .set({ contentRevision: lockedParent.contentRevision + 1 })
@@ -513,6 +643,8 @@ export async function bindingCardDeleteSubtask(
     if (!updatedParent) throw notFound();
     return {
       deletedSubtaskId: task.id,
+      deletedDescendantCount: descendantIds.length,
+      parentTaskId: parent.id,
       parentContentRevision: updatedParent.contentRevision,
     };
   });
@@ -537,9 +669,21 @@ export async function bindingCardListComments(
     eq(schema.activityTable.type, "comment"),
   ];
   if (cursor) {
-    const cursorDate = new Date(cursor);
+    const separator = cursor.indexOf("|");
+    const cursorDate = new Date(separator >= 0 ? cursor.slice(0, separator) : cursor);
+    const cursorId = separator >= 0 ? cursor.slice(separator + 1) : "";
     if (!Number.isNaN(cursorDate.getTime())) {
-      conditions.push(eq(schema.activityTable.createdAt, cursorDate));
+      conditions.push(
+        cursorId
+          ? or(
+              lt(schema.activityTable.createdAt, cursorDate),
+              and(
+                eq(schema.activityTable.createdAt, cursorDate),
+                lt(schema.activityTable.id, cursorId),
+              ),
+            )!
+          : lt(schema.activityTable.createdAt, cursorDate),
+      );
     }
   }
   const rows = await db
@@ -556,7 +700,7 @@ export async function bindingCardListComments(
       eq(schema.activityTable.userId, schema.userTable.id),
     )
     .where(and(...conditions))
-    .orderBy(desc(schema.activityTable.createdAt))
+    .orderBy(desc(schema.activityTable.createdAt), desc(schema.activityTable.id))
     .limit(limit + 1);
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
@@ -568,7 +712,10 @@ export async function bindingCardListComments(
       createdAt: row.createdAt,
       authorName: row.authorName ?? row.externalUserName ?? "Unknown",
     })),
-    nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+    nextCursor:
+      hasMore && last
+        ? `${last.createdAt.toISOString()}|${last.id}`
+        : null,
   };
 }
 
@@ -578,32 +725,38 @@ export async function bindingCardCreateComment(
 ) {
   const { binding, scope } = await loadScopedBinding(ctx);
   assertInScope(scope, scope.rootTaskId);
-  const [comment] = await db
-    .insert(schema.activityTable)
-    .values({
-      taskId: scope.rootTaskId,
-      type: "comment",
-      userId: null,
-      content,
-      externalUserName: `Bound session ${binding.sessionId.slice(0, 8)}`,
-      externalSource: "agent-binding",
-    })
-    .returning();
-  if (!comment) throw new HTTPException(500, { message: "Failed to create comment" });
-  return {
-    id: comment.id,
-    content: comment.content ?? "",
-    createdAt: comment.createdAt,
-  };
+  return db.transaction(async (tx) => {
+    await lockBindingScope(tx, ctx, binding, scope.rootTaskId);
+    const [comment] = await tx
+      .insert(schema.activityTable)
+      .values({
+        taskId: scope.rootTaskId,
+        type: "comment",
+        userId: null,
+        content,
+        externalUserName: `Bound session ${binding.sessionId.slice(0, 8)}`,
+        externalSource: "agent-binding",
+      })
+      .returning();
+    if (!comment) {
+      throw new HTTPException(500, { message: "Failed to create comment" });
+    }
+    return {
+      id: comment.id,
+      content: comment.content ?? "",
+      createdAt: comment.createdAt,
+    };
+  });
 }
 
 export async function bindingCardUpdateWorkMarkers(
   ctx: BindingContext,
   body: { workMarkerCounts: unknown; expectedContentRevision: number },
 ) {
-  const { scope } = await loadScopedBinding(ctx);
+  const { binding, scope } = await loadScopedBinding(ctx);
   const task = assertInScope(scope, scope.rootTaskId);
   return db.transaction(async (tx) => {
+    await lockBindingScope(tx, ctx, binding, task.id);
     const [locked] = await tx
       .select()
       .from(schema.taskTable)
@@ -793,7 +946,7 @@ export async function bindingCardFinalizeUpload(
     size: number;
   },
 ) {
-  const { scope } = await loadScopedBinding(ctx);
+  const { binding, scope } = await loadScopedBinding(ctx);
   assertInScope(scope, input.ownerId);
   const [manifest] = await db
     .select({ id: schema.executionManifestTable.id })
@@ -875,43 +1028,82 @@ export async function bindingCardFinalizeUpload(
     }
   }
 
-  const [duplicateKey] = await db
-    .select({ id: schema.assetTable.id })
-    .from(schema.assetTable)
-    .where(eq(schema.assetTable.objectKey, normalizedKey))
-    .limit(1);
-  if (duplicateKey) {
-    throw new HTTPException(409, {
-      message: "This upload key has already been finalized.",
+  try {
+    const asset = await db.transaction(async (tx) => {
+      const freshScope = await lockBindingScope(tx, ctx, binding, input.ownerId);
+      if (!freshScope.tasks.some((candidate) => candidate.id === owner.taskId)) {
+        throw notFound();
+      }
+      if (freshScope.manifestProject && input.ownerType === "task_description") {
+        throw new HTTPException(403, {
+          message: "Descriptions are read-only in manifest projects.",
+        });
+      }
+      const [duplicateKey] = await tx
+        .select({ id: schema.assetTable.id })
+        .from(schema.assetTable)
+        .where(eq(schema.assetTable.objectKey, normalizedKey))
+        .limit(1);
+      if (duplicateKey) {
+        throw new HTTPException(409, {
+          message: "This upload key has already been finalized.",
+        });
+      }
+      const [usage] = await tx
+        .select({ fileCount: count() })
+        .from(schema.assetTable)
+        .where(
+          and(
+            eq(schema.assetTable.taskId, owner.taskId),
+            inArray(schema.assetTable.surface, ["description", "comment"]),
+          ),
+        );
+      if (Number(usage?.fileCount ?? 0) >= BINDING_MAX_FILES_PER_RESOURCE) {
+        throw new HTTPException(400, {
+          message: "This resource already has the maximum number of files.",
+        });
+      }
+      const [row] = await tx
+        .insert(schema.assetTable)
+        .values({
+          workspaceId: owner.workspaceId,
+          projectId: owner.projectId,
+          taskId: owner.taskId,
+          documentId: null,
+          goalCheckinId: null,
+          filename: input.filename,
+          mimeType: actualType,
+          size: actualLength,
+          kind: actualType.startsWith("image/") ? "image" : "attachment",
+          surface: owner.surface,
+          createdBy: null,
+          objectKey: normalizedKey,
+        })
+        .returning({ id: schema.assetTable.id });
+      if (!row) {
+        throw new HTTPException(500, { message: "Failed to persist asset" });
+      }
+      return row;
     });
-  }
-
-  const [row] = await db
-    .insert(schema.assetTable)
-    .values({
-      workspaceId: owner.workspaceId,
-      projectId: owner.projectId,
-      taskId: owner.taskId,
-      documentId: null,
-      goalCheckinId: null,
+    return {
+      id: asset.id,
       filename: input.filename,
       mimeType: actualType,
       size: actualLength,
-      kind: actualType.startsWith("image/") ? "image" : "attachment",
-      surface: owner.surface,
-      createdBy: null,
-      objectKey: normalizedKey,
-    })
-    .returning({ id: schema.assetTable.id });
-  if (!row) {
-    throw new HTTPException(500, { message: "Failed to persist asset" });
+    };
+  } catch (error) {
+    // Do not delete a key that another finalizer already committed. Other
+    // conflicts (notably stale_binding after a revoke/rebind) own only a
+    // staged object and must clean it up.
+    const committedDuplicate =
+      error instanceof HTTPException &&
+      error.status === 409 &&
+      error.message.includes("already been finalized");
+    if (!committedDuplicate) {
+      await deleteS3Object(normalizedKey).catch(() => {});
+    }
+    throw error;
   }
-  return {
-    id: row.id,
-    filename: input.filename,
-    mimeType: actualType,
-    size: actualLength,
-  };
 }
 
 // Asset reads re-check the asset's task is STILL in the current subtree.

@@ -78,6 +78,26 @@ export async function resolveTaskShareScope(
     .where(eq(schema.taskTable.id, link.resourceId))
     .limit(1);
   if (!root) throw notFound();
+  return resolveTaskSubtreeScope(root.id, root.projectId, executor);
+}
+
+// SPEC-2026-11-10 T4: shared subtree resolver. Both the task-share bearer
+// link and the agent-session card binding authorize over exactly this shape:
+// the root card plus its CURRENT same-project subtask descendant tree,
+// re-resolved per request, failing closed on cycles/depth/cross-project/
+// agent-controlled rows.
+export async function resolveTaskSubtreeScope(
+  rootTaskId: string,
+  expectedProjectId: string,
+  executor: ShareQueryExecutor = db,
+): Promise<TaskShareScope> {
+  const [root] = await executor
+    .select()
+    .from(schema.taskTable)
+    .where(eq(schema.taskTable.id, rootTaskId))
+    .limit(1);
+  if (!root) throw notFound();
+  if (root.projectId !== expectedProjectId) throw notFound();
 
   const projectId = root.projectId;
   const tasksById = new Map<string, typeof schema.taskTable.$inferSelect>([
@@ -100,13 +120,16 @@ export async function resolveTaskShareScope(
           eq(schema.taskRelationTable.relationType, "subtask"),
         ),
       );
-    const unseenChildIds = [
-      ...new Set(
-        childEdges
-          .map((edge) => edge.targetTaskId)
-          .filter((childId) => !tasksById.has(childId)),
-      ),
-    ];
+    const nextChildIds = new Set<string>();
+    for (const edge of childEdges) {
+      // An edge back to any visited task is a cycle. Multiple parents for a
+      // child also violate the tree contract, so reject duplicate targets.
+      if (tasksById.has(edge.targetTaskId) || nextChildIds.has(edge.targetTaskId)) {
+        throw notFound();
+      }
+      nextChildIds.add(edge.targetTaskId);
+    }
+    const unseenChildIds = [...nextChildIds];
     if (unseenChildIds.length === 0) {
       frontier = [];
       continue;

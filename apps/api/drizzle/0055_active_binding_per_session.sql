@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "agent_session_binding_active_session_unique" ON "agent_session_binding" USING btree ("session_id") WHERE status = 'active';

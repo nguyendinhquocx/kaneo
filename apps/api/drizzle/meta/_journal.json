@@ -386,6 +386,13 @@
       "when": 1794582499780,
       "tag": "0054_agent_session_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1794588398147,
+      "tag": "0055_active_binding_per_session",
+      "breakpoints": true
     }
   ]
 }

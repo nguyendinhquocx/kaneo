@@ -4,11 +4,14 @@
 // and the server re-proves ownership against the principal row.
 import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { describeRoute, validator } from "hono-openapi";
 import * as v from "valibot";
 import db, { schema } from "../database";
 import { authenticateApiRequest } from "../utils/authenticate-api-request";
+import { requireWorkspacePermission } from "../utils/require-workspace-permission";
+import { workspaceAccess } from "../utils/workspace-access-middleware";
 import {
   bindAgentSession,
   bindingTaskScope,
@@ -27,7 +30,10 @@ import {
   bindingCardUpdate,
   bindingCardUpdateSubtask,
   bindingCardUpdateWorkMarkers,
+  canBindingReadAsset,
 } from "./card-tools";
+import { getPrivateObject } from "../storage/s3";
+import { buildAssetResponse } from "../storage/asset-response";
 
 const app = new Hono();
 
@@ -36,9 +42,82 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+const requireTaskUpdate = requireWorkspacePermission({ task: ["update"] });
+
+async function requireBoundTaskUpdate(c: Context, next: Next) {
+  try {
+    return await requireTaskUpdate(c, next);
+  } catch (error) {
+    if (error instanceof HTTPException && error.status === 403) {
+      throw new HTTPException(409, { message: "stale_binding" });
+    }
+    throw error;
+  }
+}
+
+async function authorizeBindingWorkspace(c: Context, next: Next) {
+  const [binding] = await db
+    .select({ projectId: schema.agentSessionBindingTable.projectId })
+    .from(schema.agentSessionBindingTable)
+    .where(eq(schema.agentSessionBindingTable.id, c.req.param("bindingId") ?? ""))
+    .limit(1);
+  if (!binding) throw new HTTPException(409, { message: "stale_binding" });
+  const [project] = await db
+    .select({ workspaceId: schema.projectTable.workspaceId })
+    .from(schema.projectTable)
+    .where(eq(schema.projectTable.id, binding.projectId))
+    .limit(1);
+  if (!project) throw new HTTPException(404, { message: "Not found" });
+  c.set("workspaceId", project.workspaceId);
+  return requireBoundTaskUpdate(c, next);
+}
+
+async function authorizeBindTask(c: Context, next: Next) {
+  const body = (c.req as unknown as { valid: (target: string) => unknown }).valid(
+    "json",
+  ) as { taskId?: string };
+  const [task] = await db
+    .select({ projectId: schema.taskTable.projectId })
+    .from(schema.taskTable)
+    .where(eq(schema.taskTable.id, body.taskId ?? ""))
+    .limit(1);
+  if (!task) throw new HTTPException(404, { message: "Not found" });
+  const [project] = await db
+    .select({ workspaceId: schema.projectTable.workspaceId })
+    .from(schema.projectTable)
+    .where(eq(schema.projectTable.id, task.projectId))
+    .limit(1);
+  if (!project) throw new HTTPException(404, { message: "Not found" });
+  c.set("workspaceId", project.workspaceId);
+  return requireTaskUpdate(c, next);
+}
+
+async function authorizeCardBody(c: Context, next: Next) {
+  const body = (await c.req.raw.clone().json().catch(() => ({}))) as Record<string, unknown>;
+  const bindingId = typeof body.bindingId === "string" ? body.bindingId : "";
+  const [binding] = await db
+    .select({ projectId: schema.agentSessionBindingTable.projectId })
+    .from(schema.agentSessionBindingTable)
+    .where(eq(schema.agentSessionBindingTable.id, bindingId))
+    .limit(1);
+  if (!binding) throw new HTTPException(409, { message: "stale_binding" });
+  const [project] = await db
+    .select({ workspaceId: schema.projectTable.workspaceId })
+    .from(schema.projectTable)
+    .where(eq(schema.projectTable.id, binding.projectId))
+    .limit(1);
+  if (!project) throw new HTTPException(404, { message: "Not found" });
+  c.set("workspaceId", project.workspaceId);
+  return requireBoundTaskUpdate(c, next);
+}
+
+app.use("/bindings/:bindingId", authorizeBindingWorkspace);
+app.use("/bindings/:bindingId/*", authorizeBindingWorkspace);
+app.use("/card/*", authorizeCardBody);
+
 const bindingCtxEntries = {
   bindingId: v.pipe(v.string(), v.minLength(1)),
-  sessionId: v.pipe(v.string(), v.minLength(1)),
+  sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
   generation: v.pipe(v.number(), v.integer(), v.minValue(1)),
 };
 
@@ -50,12 +129,56 @@ const queryGeneration = v.pipe(
 );
 
 const bindingQueryCtxSchema = v.object({
-  sessionId: v.pipe(v.string(), v.minLength(1)),
-  generation: v.optional(queryGeneration),
+  sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  generation: queryGeneration,
 });
 
 const getUserId = (c: { get: (key: string) => unknown }) =>
   (c.get("userId") as string) ?? "";
+
+// Owner-only compact status. The workspace-access guard blocks guest
+// capability routes; the response intentionally omits principal IDs, session
+// IDs and raw metadata not needed by the UI.
+app.get(
+  "/tasks/:taskId/binding-status",
+  describeRoute({
+    operationId: "getTaskAgentBindingStatus",
+    tags: ["Agent Sessions"],
+  }),
+  validator("param", v.object({ taskId: v.pipe(v.string(), v.minLength(1)) })),
+  workspaceAccess.fromTask("taskId"),
+  async (c) => {
+    const { taskId } = c.req.valid("param");
+    const [binding] = await db
+      .select({
+        hostId: schema.agentSessionBindingTable.hostId,
+        boundProjectId: schema.agentSessionBindingTable.projectId,
+        currentProjectId: schema.taskTable.projectId,
+        status: schema.agentSessionBindingTable.status,
+        lastHeartbeatAt: schema.agentSessionBindingTable.lastHeartbeatAt,
+      })
+      .from(schema.agentSessionBindingTable)
+      .innerJoin(
+        schema.taskTable,
+        eq(schema.agentSessionBindingTable.taskId, schema.taskTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentSessionBindingTable.taskId, taskId),
+          eq(schema.agentSessionBindingTable.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (!binding || binding.boundProjectId !== binding.currentProjectId) {
+      return c.json({ bound: false, online: false });
+    }
+    const online = Boolean(
+      binding.lastHeartbeatAt &&
+        Date.now() - binding.lastHeartbeatAt.getTime() <= 90_000,
+    );
+    return c.json({ bound: true, online, hostId: binding.hostId });
+  },
+);
 
 app.post(
   "/bindings",
@@ -69,9 +192,10 @@ app.post(
     v.object({
       taskId: v.pipe(v.string(), v.minLength(1)),
       agentPrincipalId: v.pipe(v.string(), v.minLength(1)),
-      sessionId: v.pipe(v.string(), v.minLength(1)),
+      sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
     }),
   ),
+  authorizeBindTask,
   async (c) => {
     const body = c.req.valid("json");
     const binding = await bindAgentSession({
@@ -131,7 +255,7 @@ app.post(
   validator(
     "json",
     v.object({
-      sessionId: v.pipe(v.string(), v.minLength(1)),
+      sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
       generation: v.pipe(v.number(), v.integer(), v.minValue(1)),
     }),
   ),
@@ -514,5 +638,42 @@ app.onError((error, c) => {
   }
   throw error;
 });
+
+app.get(
+  "/bindings/:bindingId/card/assets/:assetId",
+  describeRoute({ operationId: "kaneoCardGetAsset", tags: ["Agent Card"] }),
+  validator("query", bindingQueryCtxSchema),
+  async (c) => {
+    const query = c.req.valid("query");
+    const assetId = c.req.param("assetId");
+    const { scope } = await bindingTaskScope({
+      userId: getUserId(c),
+      bindingId: c.req.param("bindingId") ?? "",
+      sessionId: query.sessionId,
+      generation: query.generation ?? 1,
+    });
+    const [asset] = await db
+      .select({
+        id: schema.assetTable.id,
+        objectKey: schema.assetTable.objectKey,
+        filename: schema.assetTable.filename,
+        mimeType: schema.assetTable.mimeType,
+        taskId: schema.assetTable.taskId,
+        surface: schema.assetTable.surface,
+      })
+      .from(schema.assetTable)
+      .where(eq(schema.assetTable.id, assetId))
+      .limit(1);
+    if (!asset || !(await canBindingReadAsset(scope, asset))) {
+      throw new HTTPException(404, { message: "Not found" });
+    }
+    try {
+      const object = await getPrivateObject(asset.objectKey);
+      return buildAssetResponse(asset, object, "private, no-store");
+    } catch {
+      throw new HTTPException(404, { message: "Not found" });
+    }
+  },
+);
 
 export default app;

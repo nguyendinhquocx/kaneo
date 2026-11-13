@@ -1770,6 +1770,11 @@
           },
           "onlyYoutubeInline": "Only YouTube URLs can be embedded. Use link mode instead."
         }
+      },
+      "agentBinding": {
+        "online": "Pi connected",
+        "offline": "Pi offline",
+        "host": "Host: {{host}}"
       }
     },
     "entity": {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../apps/api/src/index";
-import { mockAuthenticatedSession } from "./helpers/auth";
+import { mockAnonymousSession, mockAuthenticatedSession, mockAuthenticatedSessions } from "./helpers/auth";
 import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
@@ -35,6 +35,9 @@ async function bindCard(app: ReturnType<typeof createApp>["app"], taskId: string
       taskId,
       agentPrincipalId: principal.id,
       sessionId: "pi-session-a",
+      // The server must ignore client host metadata and derive it from the
+      // active owned principal row.
+      hostId: "attacker-controlled-host",
     }),
   });
   if (response.status !== 200) {
@@ -50,6 +53,43 @@ async function bindCard(app: ReturnType<typeof createApp>["app"], taskId: string
 describe("API integration: agent session card binding (SPEC T4)", () => {
   beforeEach(async () => {
     await resetTestDatabase();
+  });
+
+  it("requires effective task:update permission, not membership alone", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const [task] = await db
+      .insert(schema.taskTable)
+      .values({
+        projectId: project.id,
+        title: "Permission-gated card",
+        status: "to-do",
+        number: null,
+      })
+      .returning();
+    const viewer = await createWorkspaceMember({ role: "viewer" });
+    await db.insert(schema.workspaceUserTable).values({
+      workspaceId: admin.workspace.id,
+      userId: viewer.user.id,
+      role: "viewer",
+      joinedAt: new Date(),
+    });
+    const principal = await seedPrincipal(viewer.user.id);
+
+    mockAuthenticatedSession(viewer.user);
+    const { app } = createApp();
+    const response = await app.request("/api/agent-session/bindings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        taskId: task.id,
+        agentPrincipalId: principal.id,
+        sessionId: "pi-viewer-session",
+      }),
+    });
+    expect(response.status).toBe(403);
   });
 
   it("binds, shows, heartbeats, and unbinds one session to one card", async () => {
@@ -73,6 +113,15 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     );
     expect(show.status).toBe(200);
 
+    const inbox = await app.request(
+      `/api/agent-session/bindings/${bound.bindingId}/inbox?sessionId=pi-session-a&generation=1`,
+    );
+    expect(inbox.status).toBe(200);
+    const otherSessionInbox = await app.request(
+      `/api/agent-session/bindings/${bound.bindingId}/inbox?sessionId=pi-session-b&generation=1`,
+    );
+    expect(otherSessionInbox.status).toBe(409);
+
     const heartbeat = await app.request(
       `/api/agent-session/bindings/${bound.bindingId}/heartbeat`,
       {
@@ -86,6 +135,25 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
         `heartbeat ${heartbeat.status}: ${await heartbeat.text()}`,
       );
     }
+
+    const ownerStatus = await app.request(
+      `/api/agent-session/tasks/${task.id}/binding-status`,
+    );
+    expect(ownerStatus.status).toBe(200);
+    const ownerStatusPayload = (await ownerStatus.json()) as Record<string, unknown>;
+    expect(ownerStatusPayload).toEqual({
+      bound: true,
+      online: true,
+      hostId: "test-host",
+    });
+
+    mockAnonymousSession();
+    const { app: guestApp } = createApp();
+    const guestStatus = await guestApp.request(
+      `/api/agent-session/tasks/${task.id}/binding-status`,
+    );
+    expect(guestStatus.status).toBe(401);
+    mockAuthenticatedSession(admin.user);
 
     const unbind = await app.request(
       `/api/agent-session/bindings/${bound.bindingId}?sessionId=pi-session-a&generation=1`,
@@ -131,6 +199,82 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
         `old session ${oldSession.status}: ${await oldSession.text()}`,
       );
     }
+  });
+
+  it("task deletion turns every later scoped call into typed stale-binding", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const [task] = await db
+      .insert(schema.taskTable)
+      .values({
+        projectId: project.id,
+        title: "Deleted bound card",
+        status: "to-do",
+        number: null,
+      })
+      .returning();
+
+    mockAuthenticatedSession(admin.user);
+    const { app } = createApp();
+    const binding = await bindCard(app, task.id, admin.user.id);
+    await db.delete(schema.taskTable).where(eq(schema.taskTable.id, task.id));
+
+    const response = await app.request("/api/agent-session/card/get", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        bindingId: binding.bindingId,
+        sessionId: "pi-session-a",
+        generation: binding.bindingGeneration,
+      }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "stale_binding" });
+  });
+
+  it("one exact Pi session cannot remain bound to two cards", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const [firstTask, secondTask] = await db
+      .insert(schema.taskTable)
+      .values([
+        { projectId: project.id, title: "First bound card", status: "to-do", number: null },
+        { projectId: project.id, title: "Second bound card", status: "to-do", number: null },
+      ])
+      .returning();
+
+    mockAuthenticatedSession(admin.user);
+    const { app } = createApp();
+    const first = await bindCard(app, firstTask.id, admin.user.id);
+    const secondPrincipal = await seedPrincipal(admin.user.id);
+    const response = await app.request("/api/agent-session/bindings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        taskId: secondTask.id,
+        agentPrincipalId: secondPrincipal.id,
+        sessionId: "pi-session-a",
+      }),
+    });
+    expect(response.status).toBe(200);
+    const second = (await response.json()) as { bindingId: string };
+    expect(second.bindingId).not.toBe(first.bindingId);
+
+    const oldBinding = await app.request(
+      `/api/agent-session/bindings/${first.bindingId}?sessionId=pi-session-a&generation=1`,
+    );
+    expect(oldBinding.status).toBe(409);
+    const activeBindings = await db
+      .select()
+      .from(schema.agentSessionBindingTable)
+      .where(eq(schema.agentSessionBindingTable.status, "active"));
+    expect(activeBindings).toHaveLength(1);
+    expect(activeBindings[0]?.taskId).toBe(secondTask.id);
+    expect(activeBindings[0]?.sessionId).toBe("pi-session-a");
   });
 
   it("card reads are root-only and updates CAS on contentRevision", async () => {
@@ -187,6 +331,113 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     expect(okWrite.status).toBe(200);
     const written = (await okWrite.json()) as { contentRevision: number };
     expect(written.contentRevision).toBe(2);
+  });
+
+  it("card tools create/update descendants, comments, markers, and preserve content CAS", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const [root] = await db
+      .insert(schema.taskTable)
+      .values({
+        projectId: project.id,
+        title: "Tool matrix root",
+        status: "to-do",
+        number: null,
+      })
+      .returning();
+
+    mockAuthenticatedSession(admin.user);
+    const { app } = createApp();
+    const binding = await bindCard(app, root.id, admin.user.id);
+    const ctx = {
+      bindingId: binding.bindingId,
+      sessionId: "pi-session-a",
+      generation: binding.bindingGeneration,
+    };
+
+    const created = await app.request("/api/agent-session/card/subtasks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...ctx,
+        title: "Created through card tool",
+        expectedParentContentRevision: 1,
+      }),
+    });
+    expect(created.status).toBe(200);
+    const createBody = (await created.json()) as {
+      subtask: { id: string; contentRevision: number };
+      parentContentRevision: number;
+    };
+    expect(createBody.subtask.contentRevision).toBe(1);
+    expect(createBody.parentContentRevision).toBe(2);
+
+    const updated = await app.request(
+      `/api/agent-session/card/subtasks/${createBody.subtask.id}/update`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...ctx,
+          patch: { title: "Updated through card tool" },
+          expectedContentRevision: 1,
+        }),
+      },
+    );
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+      title: "Updated through card tool",
+      contentRevision: 2,
+    });
+
+    const comment = await app.request(
+      "/api/agent-session/card/comments/create",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...ctx, content: "Bound-session comment" }),
+      },
+    );
+    expect(comment.status).toBe(200);
+    const commentBody = (await comment.json()) as { id: string };
+
+    const comments = await app.request("/api/agent-session/card/comments", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...ctx, limit: 10 }),
+    });
+    expect(comments.status).toBe(200);
+    expect(await comments.json()).toMatchObject({
+      items: [expect.objectContaining({ id: commentBody.id, content: "Bound-session comment" })],
+      nextCursor: null,
+    });
+
+    const markers = await app.request("/api/agent-session/card/work-markers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...ctx,
+        workMarkerCounts: {
+          redCross: 1,
+          boxedRedCross: 0,
+          redCircle: 0,
+          greenCheck: 0,
+        },
+        expectedContentRevision: 2,
+      }),
+    });
+    expect(markers.status).toBe(200);
+    expect(await markers.json()).toMatchObject({
+      workMarkerCounts: {
+        redCross: 1,
+        boxedRedCross: 0,
+        redCircle: 0,
+        greenCheck: 0,
+      },
+      contentRevision: 3,
+    });
   });
 
   it("subtask delete only accepts descendants of the bound root", async () => {
@@ -298,7 +549,8 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     const bound = await bindCard(app, task.id, admin.user.id);
 
     // A queued formal run is "live" for new binds.
-    await db.insert(schema.taskRunTable).values({
+    const principalAdmin = await seedPrincipal(admin.user.id);
+    const liveRun = await db.insert(schema.taskRunTable).values({
       taskId: task.id,
       manifestVersion: 1,
       protocolVersion: 1,
@@ -313,8 +565,8 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       requestHash: "live-run-hash",
       leaseTokenHash: "live-lease-hash",
       leaseExpiresAt: new Date(Date.now() + 3_600_000),
-      agentPrincipalId: (await seedPrincipal(admin.user.id)).id,
-    });
+      agentPrincipalId: principalAdmin.id,
+    }).returning({ id: schema.taskRunTable.id });
     const livePrincipal = await seedPrincipal(admin.user.id);
     const bindDuringRun = await app.request("/api/agent-session/bindings", {
       method: "POST",
@@ -327,40 +579,49 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     });
     expect(bindDuringRun.status).toBe(409);
 
-    // Claiming the run revokes the binding with an incremented generation.
-    const principalAdmin = await seedPrincipal(admin.user.id);
-    const claim = await app.request(`/api/execution/task/${task.id}/claim`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": "test",
-        "idempotency-key": "claim-fence-1",
-        "x-agent-principal-id": principalAdmin.id,
-        "x-host-id": "test-host",
-      },
-      body: JSON.stringify({ scope: [] }),
+    // Remove the synthetic queued row, then use the REAL formal-run claim
+    // endpoint. Its transaction must revoke the active ad-hoc binding.
+    await db
+      .delete(schema.taskRunTable)
+      .where(eq(schema.taskRunTable.id, liveRun[0]!.id));
+    await db.insert(schema.executionManifestTable).values({
+      projectId: project.id,
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+      verificationProfile: "binding-claim-test",
+      allowedAgentIds: [principalAdmin.id],
     });
-    // The claim endpoint needs an API-key actor; assert either the fence
-    // outcome (binding revoked) or an auth-shaped failure that a real worker
-    // would not hit — the revocation check below is the acceptance point.
-    if (claim.status === 200) {
-      const stale = await app.request(
-        `/api/agent-session/bindings/${bound.bindingId}?sessionId=pi-session-a&generation=1`,
-      );
-      expect(stale.status).toBe(409);
-    } else {
-      // Auth or scope guard failed for a cookie session — verify the fence
-      // behavior at the service level instead.
-      const { fenceBindingForRunClaim } = await import(
-        "../../apps/api/src/agent-session/card-tools"
-      );
-      await db.transaction(async (tx) => {
-        await fenceBindingForRunClaim(tx, task.id);
-      });
-      const stale = await app.request(
-        `/api/agent-session/bindings/${bound.bindingId}?sessionId=pi-session-a&generation=1`,
-      );
-      expect(stale.status).toBe(409);
+    await db.insert(schema.githubIntegrationTable).values({
+      projectId: project.id,
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+      isActive: true,
+    });
+
+    mockAuthenticatedSessions(admin.user, {
+      "claim-binding-token": admin.user,
+    });
+    const claim = await app.request(
+      `/api/execution/task/${task.id}/runs/claim`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer claim-binding-token",
+          "content-type": "application/json",
+          "idempotency-key": "claim-fence-1",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: principalAdmin.id,
+          scope: ["README.md"],
+        }),
+      },
+    );
+    if (claim.status !== 201) {
+      throw new Error(`formal claim ${claim.status}: ${await claim.text()}`);
     }
+    const stale = await app.request(
+      `/api/agent-session/bindings/${bound.bindingId}?sessionId=pi-session-a&generation=1`,
+    );
+    expect(stale.status).toBe(409);
   });
 });

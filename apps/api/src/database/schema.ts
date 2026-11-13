@@ -1968,6 +1968,9 @@ export const agentSessionBindingTable = pgTable(
     uniqueIndex("agent_session_binding_active_task_unique").on(
       table.taskId,
     ).where(sql`status = 'active'`),
+    uniqueIndex("agent_session_binding_active_session_unique").on(
+      table.sessionId,
+    ).where(sql`status = 'active'`),
     index("agent_session_binding_principal_idx").on(table.agentPrincipalId),
     index("agent_session_binding_session_idx").on(table.sessionId),
   ],

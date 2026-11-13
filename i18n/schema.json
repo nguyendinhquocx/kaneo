@@ -7244,6 +7244,26 @@
                 "languages",
                 "embed"
               ]
+            },
+            "agentBinding": {
+              "type": "object",
+              "properties": {
+                "online": {
+                  "type": "string"
+                },
+                "offline": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "online",
+                "offline",
+                "host"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
