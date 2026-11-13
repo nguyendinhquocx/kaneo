@@ -188,6 +188,7 @@ export async function lockTasksForStatusMutation(
       projectId: taskTable.projectId,
       status: taskTable.status,
       position: taskTable.position,
+      contentRevision: taskTable.contentRevision,
     })
     .from(taskTable)
     .where(inArray(taskTable.id, uniqueIds))

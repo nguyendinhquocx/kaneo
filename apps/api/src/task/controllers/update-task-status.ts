@@ -5,16 +5,19 @@ import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { assertFinalTaskStatusGate } from "../../execution/finalization-gate";
 import { lockProjectTaskLanes } from "../lock-project-task-lanes";
+import { assertTaskContentRevision } from "../content-revision";
 import { assertValidTaskStatus } from "../validate-task-fields";
 
 async function updateTaskStatus({
   id,
   status,
   currentUserId,
+  expectedContentRevision,
 }: {
   id: string;
   status: string;
   currentUserId: string;
+  expectedContentRevision: number;
 }) {
   const [snapshot] = await db
     .select({ projectId: taskTable.projectId })
@@ -39,6 +42,8 @@ async function updateTaskStatus({
         message: "Task not found",
       });
     }
+
+    await assertTaskContentRevision(tx, id, expectedContentRevision);
 
     // Keep status validation in the same transaction as the locked task read.
     // The final-column flag can change concurrently with a status request.
@@ -82,7 +87,12 @@ async function updateTaskStatus({
 
     const [updatedTask] = await tx
       .update(taskTable)
-      .set({ status, columnId: column?.id ?? null, position: nextPosition })
+      .set({
+        status,
+        columnId: column?.id ?? null,
+        position: nextPosition,
+        contentRevision: existingTask.contentRevision + 1,
+      })
       .where(eq(taskTable.id, id))
       .returning();
 

@@ -16,6 +16,7 @@ export const SHARE_RESOURCE_TYPES = [
   "project",
   "document",
   "goal",
+  "task",
   "task_description",
   "activity_comment",
 ] as const;

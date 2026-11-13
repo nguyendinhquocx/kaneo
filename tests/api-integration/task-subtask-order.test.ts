@@ -8,6 +8,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  getTaskContentRevision,
 } from "./helpers/fixtures";
 
 async function insertTask(
@@ -96,6 +97,7 @@ describe("API integration: subtask order", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           orderedTargetTaskIds: [second.id, first.id, third.id],
+          expectedParentContentRevision: await getTaskContentRevision(parent.id),
         }),
       },
     );
@@ -151,7 +153,10 @@ describe("API integration: subtask order", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ orderedTargetTaskIds: [child.id, child.id] }),
+        body: JSON.stringify({
+          orderedTargetTaskIds: [child.id, child.id],
+          expectedParentContentRevision: await getTaskContentRevision(parent.id),
+        }),
       },
     );
     expect(duplicate.status).toBe(400);
@@ -161,7 +166,10 @@ describe("API integration: subtask order", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ orderedTargetTaskIds: ["not-a-child"] }),
+        body: JSON.stringify({
+          orderedTargetTaskIds: ["not-a-child"],
+          expectedParentContentRevision: await getTaskContentRevision(parent.id),
+        }),
       },
     );
     expect(stale.status).toBe(409);
@@ -277,7 +285,10 @@ describe("API integration: work markers, project default and subtask projection"
     const put = await app.request(`/api/task/work-markers/${task.id}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ workMarkerCounts: counts }),
+      body: JSON.stringify({
+        workMarkerCounts: counts,
+        expectedContentRevision: await getTaskContentRevision(task.id),
+      }),
     });
     expect(put.status).toBe(200);
     const updated = (await put.json()) as {
@@ -326,7 +337,10 @@ describe("API integration: work markers, project default and subtask projection"
       const response = await app.request(`/api/task/work-markers/${task.id}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ workMarkerCounts }),
+        body: JSON.stringify({
+          workMarkerCounts,
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       });
       expect(response.status).toBe(400);
     }
@@ -359,6 +373,7 @@ describe("API integration: work markers, project default and subtask projection"
           redCircle: 0,
           greenCheck: 0,
         },
+        expectedContentRevision: await getTaskContentRevision(task.id),
       }),
     });
     expect(response.status).toBe(403);
@@ -627,6 +642,7 @@ describe("API integration: work markers, project default and subtask projection"
           redCircle: 3,
           greenCheck: 4,
         },
+        expectedContentRevision: await getTaskContentRevision(task.id),
       }),
     });
     expect(response.status).toBe(200);

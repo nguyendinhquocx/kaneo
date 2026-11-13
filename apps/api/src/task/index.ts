@@ -60,6 +60,17 @@ const workMarkerCountsSchema = v.strictObject({
   greenCheck: workMarkerCountSchema,
 });
 
+// SPEC-2026-11-10-kaneo-card-agent-collaboration T2: every task-field write
+// carries the contentRevision the client last read. Stale writes fail with
+// 409 + current revision instead of last-write-wins.
+const contentRevisionField = v.pipe(
+  v.number(),
+  v.integer("expectedContentRevision must be an integer"),
+  v.minValue(1, "expectedContentRevision must be a positive integer"),
+);
+
+export { contentRevisionField };
+
 const task = new Hono<{
   Variables: {
     userId: string;
@@ -153,6 +164,9 @@ const task = new Hono<{
           "updateDueDate",
         ] as const),
         value: v.optional(v.nullable(v.string())),
+        expectedContentRevisions: v.optional(
+          v.record(v.string(), contentRevisionField),
+        ),
       }),
     ),
     workspaceAccess.fromTaskIds(),
@@ -167,7 +181,8 @@ const task = new Hono<{
       return requireWorkspacePermission(requiredPermission)(c, next);
     },
     async (c) => {
-      const { taskIds, operation, value } = c.req.valid("json");
+      const { taskIds, operation, value, expectedContentRevisions } =
+        c.req.valid("json");
       // SPEC-kaneo-phase-cards-full-run-server-v0-1: bulk write guard.
       await assertBulkTaskIdsGuard(db, {
         taskIds,
@@ -194,6 +209,7 @@ const task = new Hono<{
         operation,
         value,
         userId,
+        expectedContentRevisions,
       });
 
       return c.json(result);
@@ -319,6 +335,7 @@ const task = new Hono<{
       v.object({
         destinationProjectId: v.string(),
         destinationStatus: v.optional(v.string()),
+        expectedContentRevision: contentRevisionField,
       }),
     ),
     workspaceAccess.fromTask(),
@@ -326,7 +343,8 @@ const task = new Hono<{
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { destinationProjectId, destinationStatus } = c.req.valid("json");
+      const { destinationProjectId, destinationStatus, expectedContentRevision } =
+        c.req.valid("json");
       const currentUserId = c.get("userId");
 
       const result = await moveTask({
@@ -334,6 +352,7 @@ const task = new Hono<{
         destinationProjectId,
         destinationStatus,
         currentUserId,
+        expectedContentRevision,
       });
 
       return c.json(result);
@@ -367,6 +386,7 @@ const task = new Hono<{
         projectId: v.string(),
         position: v.number(),
         userId: v.optional(v.string()),
+        expectedContentRevision: contentRevisionField,
       }),
     ),
     workspaceAccess.fromTask(),
@@ -389,6 +409,7 @@ const task = new Hono<{
         projectId,
         position,
         userId,
+        expectedContentRevision,
       } = c.req.valid("json");
 
       const currentUserId = c.get("userId");
@@ -404,6 +425,7 @@ const task = new Hono<{
         description,
         priority,
         position,
+        expectedContentRevision,
         userId,
         currentUserId,
       );
@@ -533,16 +555,24 @@ const task = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
-    validator("json", v.object({ status: v.string() })),
+    validator(
+      "json",
+      v.object({ status: v.string(), expectedContentRevision: contentRevisionField }),
+    ),
     workspaceAccess.fromTask(),
     phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { status } = c.req.valid("json");
+      const { status, expectedContentRevision } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const task = await updateTaskStatus({ id, status, currentUserId });
+      const task = await updateTaskStatus({
+        id,
+        status,
+        currentUserId,
+        expectedContentRevision,
+      });
 
       return c.json(task);
     },
@@ -563,16 +593,27 @@ const task = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
-    validator("json", v.object({ priority: v.picklist(VALID_PRIORITIES) })),
+    validator(
+      "json",
+      v.object({
+        priority: v.picklist(VALID_PRIORITIES),
+        expectedContentRevision: contentRevisionField,
+      }),
+    ),
     workspaceAccess.fromTask(),
     phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { priority } = c.req.valid("json");
+      const { priority, expectedContentRevision } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const task = await updateTaskPriority({ id, priority, currentUserId });
+      const task = await updateTaskPriority({
+        id,
+        priority,
+        currentUserId,
+        expectedContentRevision,
+      });
 
       return c.json(task);
     },
@@ -596,16 +637,23 @@ const task = new Hono<{
     validator("param", v.object({ id: v.string() })),
     validator(
       "json",
-      v.object({ workMarkerCounts: workMarkerCountsSchema }),
+      v.object({
+        workMarkerCounts: workMarkerCountsSchema,
+        expectedContentRevision: contentRevisionField,
+      }),
     ),
     workspaceAccess.fromTask(),
     phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { workMarkerCounts } = c.req.valid("json");
+      const { workMarkerCounts, expectedContentRevision } = c.req.valid("json");
 
-      const task = await updateWorkMarkers({ id, workMarkerCounts });
+      const task = await updateWorkMarkers({
+        id,
+        workMarkerCounts,
+        expectedContentRevision,
+      });
 
       return c.json({ ...task, workMarkerCounts: normalizeWorkMarkerCounts(task.workMarkerCounts) });
     },
@@ -626,16 +674,27 @@ const task = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
-    validator("json", v.object({ userId: v.nullable(v.string()) })),
+    validator(
+      "json",
+      v.object({
+        userId: v.nullable(v.string()),
+        expectedContentRevision: contentRevisionField,
+      }),
+    ),
     workspaceAccess.fromTask(),
     phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["assign"] }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { userId } = c.req.valid("json");
+      const { userId, expectedContentRevision } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const task = await updateTaskAssignee({ id, userId, currentUserId });
+      const task = await updateTaskAssignee({
+        id,
+        userId,
+        currentUserId,
+        expectedContentRevision,
+      });
 
       return c.json(task);
     },
@@ -656,19 +715,26 @@ const task = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
-    validator("json", v.object({ dueDate: v.optional(v.string()) })),
+    validator(
+      "json",
+      v.object({
+        dueDate: v.optional(v.string()),
+        expectedContentRevision: contentRevisionField,
+      }),
+    ),
     workspaceAccess.fromTask(),
     phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { dueDate = null } = c.req.valid("json");
+      const { dueDate = null, expectedContentRevision } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
       const task = await updateTaskDueDate({
         id,
         dueDate: dueDate ? new Date(dueDate) : null,
         currentUserId,
+        expectedContentRevision,
       });
 
       return c.json(task);
@@ -691,16 +757,24 @@ const task = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
-    validator("json", v.object({ title: v.string() })),
+    validator(
+      "json",
+      v.object({ title: v.string(), expectedContentRevision: contentRevisionField }),
+    ),
     workspaceAccess.fromTask(),
     phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { title } = c.req.valid("json");
+      const { title, expectedContentRevision } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const task = await updateTaskTitle({ id, title, currentUserId });
+      const task = await updateTaskTitle({
+        id,
+        title,
+        currentUserId,
+        expectedContentRevision,
+      });
 
       return c.json(task);
     },
@@ -949,19 +1023,26 @@ const task = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
-    validator("json", v.object({ description: v.string() })),
+    validator(
+      "json",
+      v.object({
+        description: v.string(),
+        expectedContentRevision: contentRevisionField,
+      }),
+    ),
     workspaceAccess.fromTask(),
     phaseCardTaskGuard("param", "id"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { description } = c.req.valid("json");
+      const { description, expectedContentRevision } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
       const task = await updateTaskDescription({
         id,
         description,
         currentUserId,
+        expectedContentRevision,
       });
 
       return c.json(task);

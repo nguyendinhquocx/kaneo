@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import { isProjectAgentControlled } from "../project/controllers/public-project-dto";
 import { deleteOrphanedAssets } from "../storage/cleanup-assets";
+import { assertTaskContentRevision } from "../task/content-revision";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
 import { lockProjectTaskLanes } from "../task/lock-project-task-lanes";
 import {
@@ -119,6 +120,8 @@ export async function publicCreateTask(
     number: created.number,
     status: created.status,
     priority: created.priority,
+    // Content CAS token for subsequent edits through edit links.
+    contentRevision: created.contentRevision,
   };
 }
 
@@ -132,6 +135,7 @@ export async function publicUpdateTask(
     priority?: string;
     startDate?: string | null;
     dueDate?: string | null;
+    expectedContentRevision: number;
   },
 ) {
   if (await isProjectAgentControlled(link.resourceId)) {
@@ -191,6 +195,21 @@ export async function publicUpdateTask(
   }
 
   const [updated] = await db.transaction(async (tx) => {
+    const [lockedTask] = await tx
+      .select()
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.id, taskId),
+          eq(schema.taskTable.projectId, link.resourceId),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    if (!lockedTask) {
+      throw new HTTPException(404, { message: "Not found" });
+    }
+    await assertTaskContentRevision(tx, taskId, body.expectedContentRevision);
     if (updates.status !== undefined) {
       await lockProjectTaskLanes(tx, [link.resourceId]);
       const [targetColumn] = await tx
@@ -222,7 +241,10 @@ export async function publicUpdateTask(
     }
     const [row] = await tx
       .update(schema.taskTable)
-      .set(updates)
+      .set({
+        ...updates,
+        contentRevision: lockedTask.contentRevision + 1,
+      })
       .where(
         and(
           eq(schema.taskTable.id, taskId),
@@ -251,6 +273,9 @@ export async function publicUpdateTask(
     number: updated.number,
     status: updated.status,
     priority: updated.priority,
+    // Optimistic concurrency token for the next edit; stale writes now
+    // return 409 instead of last-write-wins.
+    contentRevision: updated.contentRevision,
   };
 }
 

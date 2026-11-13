@@ -9,6 +9,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  getTaskContentRevision,
 } from "./helpers/fixtures";
 
 // SPEC-2026-10-22 full-project-share-link: capability authorization matrix.
@@ -740,7 +741,11 @@ describe("API integration: full project share capability", () => {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: targetStatus, position: 0 }),
+        body: JSON.stringify({
+          status: targetStatus,
+          position: 0,
+          expectedContentRevision: await getTaskContentRevision(createdTask.id),
+        }),
       },
     );
     expect(moved.status).toBe(200);
@@ -825,11 +830,15 @@ describe("API integration: full project share capability", () => {
     mockAnonymousSession();
     ({ app } = createApp());
 
-    const move = (taskId: string, status: string, position: number) =>
+    const move = async (taskId: string, status: string, position: number) =>
       app.request(`/api/share/project/${link.token}/task/${taskId}/move`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status, position }),
+        body: JSON.stringify({
+          status,
+          position,
+          expectedContentRevision: await getTaskContentRevision(taskId),
+        }),
       });
 
     const malformedJson = await app.request(
@@ -976,7 +985,11 @@ describe("API integration: full project share capability", () => {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ status: "in-progress", position: 0 }),
+          body: JSON.stringify({
+            status: "in-progress",
+            position: 0,
+            expectedContentRevision: await getTaskContentRevision(guestTask.id),
+          }),
         },
       );
       await barrier.firstLocked;
@@ -986,7 +999,10 @@ describe("API integration: full project share capability", () => {
       const ownerMove = app.request(`/api/task/status/${ownerTask.id}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "in-progress" }),
+        body: JSON.stringify({
+          status: "in-progress",
+          expectedContentRevision: await getTaskContentRevision(ownerTask.id),
+        }),
       });
       await barrier.secondAttempted;
       barrier.release();
@@ -1050,7 +1066,10 @@ describe("API integration: full project share capability", () => {
         {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ orderedTargetTaskIds: [child.id] }),
+          body: JSON.stringify({
+            orderedTargetTaskIds: [child.id],
+            expectedParentContentRevision: await getTaskContentRevision(parent.id),
+          }),
         },
       );
       await barrier.firstLocked;
@@ -1062,7 +1081,11 @@ describe("API integration: full project share capability", () => {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ status: "in-progress", position: 0 }),
+          body: JSON.stringify({
+            status: "in-progress",
+            position: 0,
+            expectedContentRevision: await getTaskContentRevision(child.id),
+          }),
         },
       );
       await barrier.secondAttempted;
@@ -1140,7 +1163,11 @@ describe("API integration: full project share capability", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ assigneeId: null, status: "to-do" }),
+        body: JSON.stringify({
+          assigneeId: null,
+          status: "to-do",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(updated.status).toBe(200);
@@ -1226,13 +1253,16 @@ describe("API integration: full project share capability", () => {
       }
     };
 
-    const update = await addRunAfterPrecheck(updateTask.id, () =>
+    const update = await addRunAfterPrecheck(updateTask.id, async () =>
       app.request(
         `/api/share/project/${link.token}/task/${updateTask.id}`,
         {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ priority: "high" }),
+          body: JSON.stringify({
+            priority: "high",
+            expectedContentRevision: await getTaskContentRevision(updateTask.id),
+          }),
         },
       ),
     );
@@ -1342,7 +1372,10 @@ describe("API integration: full project share capability", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ description: "must remain unchanged" }),
+        body: JSON.stringify({
+          description: "must remain unchanged",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     const create = app.request(`/api/share/project/${link.token}/task`, {
@@ -1431,7 +1464,10 @@ describe("API integration: full project share capability", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ description: "trying to write" }),
+        body: JSON.stringify({
+          description: "trying to write",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(deniedWrite.status).toBe(403);
@@ -1481,7 +1517,10 @@ describe("API integration: full project share capability", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ priority: "urgent" }),
+        body: JSON.stringify({
+          priority: "urgent",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(structural.status).toBe(200);
@@ -1517,7 +1556,10 @@ describe("API integration: full project share capability", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ priority: "low" }),
+        body: JSON.stringify({
+          priority: "low",
+          expectedContentRevision: await getTaskContentRevision(controlled.id),
+        }),
       },
     );
     expect(denied.status).toBe(403);
@@ -1541,7 +1583,10 @@ describe("API integration: full project share capability", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "Normal task renamed" }),
+        body: JSON.stringify({
+          title: "Normal task renamed",
+          expectedContentRevision: await getTaskContentRevision(ordinary.id),
+        }),
       },
     );
     expect(ok.status).toBe(200);
@@ -2055,6 +2100,7 @@ describe("API integration: full project share capability", () => {
         body: JSON.stringify({
           targetTaskId: ordinaryTask.id,
           relationType: "subtask",
+          expectedParentContentRevision: await getTaskContentRevision(taskA.id),
         }),
       },
     );
@@ -2209,13 +2255,16 @@ describe("API integration: full project share capability", () => {
       .where(eq(schema.taskRelationTable.id, relationToDelete.id));
     expect(remainingRelation?.id).toBe(relationToDelete.id);
 
-    const reorderResponse = await moveDuringPrecheck(2, child.id, () =>
+    const reorderResponse = await moveDuringPrecheck(2, child.id, async () =>
       app.request(
         `/api/share/project/${link.token}/task/${parent.id}/subtasks/reorder`,
         {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ orderedTargetTaskIds: [child.id] }),
+          body: JSON.stringify({
+            orderedTargetTaskIds: [child.id],
+            expectedParentContentRevision: await getTaskContentRevision(parent.id),
+          }),
         },
       ),
     );
@@ -2298,7 +2347,10 @@ describe("API integration: full project share capability", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ assigneeId: custom.user.id }),
+        body: JSON.stringify({
+          assigneeId: custom.user.id,
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(assignment.status).toBe(400);
@@ -2530,6 +2582,7 @@ describe("API integration: full project share capability", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           description: `![upload](${asset.url})`,
+          expectedContentRevision: await getTaskContentRevision(task.id),
         }),
       },
     );
@@ -2880,7 +2933,12 @@ describe("API integration: T4 security matrix", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "hijack" }),
+        body: JSON.stringify({
+          title: "hijack",
+          // A syntactically valid request (CAS token present) must still fail
+          // closed at the scope layer, never 400 on the guard itself.
+          expectedContentRevision: 1,
+        }),
       },
     );
     expect(taskWrite.status).toBe(404);

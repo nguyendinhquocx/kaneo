@@ -1,9 +1,10 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
   assetTable,
   executionScheduleTable,
+  shareLinkTable,
   taskRelationTable,
   taskRunTable,
   taskTable,
@@ -143,6 +144,18 @@ async function deleteTask(
     }
 
     const deletionIds = [...taskIds].sort();
+    // Task-scoped capability links anchored to any deleted card die with the
+    // same transaction that deletes the cards.
+    await tx
+      .update(shareLinkTable)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(shareLinkTable.resourceType, "task"),
+          inArray(shareLinkTable.resourceId, deletionIds),
+          isNull(shareLinkTable.revokedAt),
+        ),
+      );
     await assertBulkTaskIdsGuard(tx, {
       taskIds: deletionIds,
       actorIsAgent,

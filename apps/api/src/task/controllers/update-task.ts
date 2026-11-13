@@ -11,6 +11,7 @@ import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import { assertValidTaskStatus } from "../validate-task-fields";
+import { assertTaskContentRevision } from "../content-revision";
 
 async function updateTask(
   id: string,
@@ -23,6 +24,7 @@ async function updateTask(
   description: string,
   priority: string,
   position: number,
+  expectedContentRevision: number,
   userId?: string,
   currentUserId?: string,
 ) {
@@ -61,6 +63,9 @@ async function updateTask(
       throw new HTTPException(404, { message: "Task not found" });
     }
 
+    if (expectedContentRevision !== undefined) {
+      await assertTaskContentRevision(tx, id, expectedContentRevision);
+    }
     if (projectId !== lockedTask.projectId) {
       throw new HTTPException(400, {
         message: "Use the task move endpoint to move tasks between projects",
@@ -114,6 +119,8 @@ async function updateTask(
         priority,
         position,
         userId: userId || null,
+        // Ordinary content edit: advance the CAS token, never taskRevision.
+        contentRevision: lockedTask.contentRevision + 1,
       })
       .where(eq(taskTable.id, id))
       .returning();

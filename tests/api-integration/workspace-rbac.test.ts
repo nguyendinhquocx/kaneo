@@ -8,6 +8,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  getTaskContentRevision,
 } from "./helpers/fixtures";
 
 type CreateTaskBody = {
@@ -348,6 +349,7 @@ describe("API integration: workspace RBAC enforcement", () => {
           status: "to-do",
           projectId: project.id,
           position: 1,
+          expectedContentRevision: await getTaskContentRevision(task.id),
         }),
       });
       expect(response.status).toBe(200);
@@ -373,6 +375,7 @@ describe("API integration: workspace RBAC enforcement", () => {
           status: "to-do",
           projectId: project.id,
           position: 1,
+          expectedContentRevision: await getTaskContentRevision(task.id),
         }),
       });
       expect(response.status).toBe(403);
@@ -393,7 +396,10 @@ describe("API integration: workspace RBAC enforcement", () => {
       const response = await app.request(`/api/task/assignee/${task.id}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userId: member.user.id }),
+        body: JSON.stringify({
+          userId: member.user.id,
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       });
       expect(response.status).toBe(403);
     });
@@ -411,7 +417,10 @@ describe("API integration: workspace RBAC enforcement", () => {
       const response = await app.request(`/api/task/assignee/${task.id}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userId: member.user.id }),
+        body: JSON.stringify({
+          userId: member.user.id,
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       });
       expect(response.status).toBe(200);
     });
@@ -432,7 +441,10 @@ describe("API integration: workspace RBAC enforcement", () => {
       const response = await app.request(`/api/task/assignee/${task.id}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userId: foreignMember.user.id }),
+        body: JSON.stringify({
+          userId: foreignMember.user.id,
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       });
       expect(response.status).toBe(400);
 

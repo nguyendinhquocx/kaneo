@@ -19,6 +19,8 @@ async function getTask(taskId: string) {
       createdAt: taskTable.createdAt,
       userId: taskTable.userId,
       workMarkerCounts: taskTable.workMarkerCounts,
+      // Optimistic concurrency token for card-field writes.
+      contentRevision: taskTable.contentRevision,
       assigneeName: userTable.name,
       assigneeId: userTable.id,
       projectId: taskTable.projectId,

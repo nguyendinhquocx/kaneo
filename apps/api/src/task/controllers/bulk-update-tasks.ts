@@ -1,10 +1,11 @@
-import { and, eq, inArray, max } from "drizzle-orm";
+import { and, eq, inArray, isNull, max, type SQL } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
   columnTable,
   labelTable,
   projectTable,
+  shareLinkTable,
   taskTable,
   userTable,
   workspaceUserTable,
@@ -15,6 +16,7 @@ import {
   lockTasksForStatusMutation,
 } from "../../execution/finalization-gate";
 import { assertUserWorkspacePermission } from "../../utils/require-workspace-permission";
+import { contentRevisionConflict, parseExpectedContentRevision } from "../content-revision";
 import { lockProjectTaskLanes } from "../lock-project-task-lanes";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
 import { assertValidPriority, VIRTUAL_STATUSES } from "../validate-task-fields";
@@ -28,17 +30,78 @@ type BulkOperation =
   | "removeLabel"
   | "updateDueDate";
 
+// Per-task CAS field update for bulk writes. A zero-row update means the card
+// changed between the client's read and this write: fail with the current
+// revision instead of silently overwriting.
+async function casBulkFieldUpdate({
+  tasks,
+  revisions,
+  apply,
+}: {
+  tasks: Array<{
+    id: string;
+    projectId: string;
+    contentRevision: number;
+  }>;
+  revisions: Map<string, number>;
+  apply: (
+    task: { id: string; projectId: string; contentRevision: number },
+    nextContentRevision: number,
+  ) => { set: Record<string, unknown>; where: SQL | undefined };
+}): Promise<number> {
+  let updated = 0;
+  for (const task of tasks) {
+    const { set, where } = apply(task, task.contentRevision + 1);
+    const [row] = await db
+      .update(taskTable)
+      .set(set as never)
+      .where(where)
+      .returning({ id: taskTable.id });
+    if (!row) {
+      throw contentRevisionConflict(task.contentRevision);
+    }
+    updated++;
+  }
+  return updated;
+}
+
 async function bulkUpdateTasks({
   taskIds,
   operation,
   value,
   userId,
+  expectedContentRevisions,
 }: {
   taskIds: string[];
   operation: BulkOperation;
   value?: string | null;
   userId: string;
+  expectedContentRevisions?: Record<string, number>;
 }) {
+  // Task-field bulk writes are CAS-guarded per task: the client sends the
+  // revision it read for every card it wants to change. Label and delete
+  // operations are not content-field edits and stay outside the CAS.
+  const needsContentCas =
+    operation === "updateStatus" ||
+    operation === "updatePriority" ||
+    operation === "updateAssignee" ||
+    operation === "updateDueDate";
+  const revisions = new Map<string, number>();
+  if (needsContentCas) {
+    if (
+      !expectedContentRevisions ||
+      typeof expectedContentRevisions !== "object"
+    ) {
+      throw new HTTPException(400, {
+        message:
+          "expectedContentRevisions (taskId -> revision) is required for this bulk operation",
+      });
+    }
+    for (const taskId of taskIds) {
+      const raw = (expectedContentRevisions as Record<string, unknown>)[taskId];
+      revisions.set(taskId, parseExpectedContentRevision(raw));
+    }
+  }
   const tasks = await db
     .select({
       id: taskTable.id,
@@ -46,6 +109,7 @@ async function bulkUpdateTasks({
       projectId: taskTable.projectId,
       userId: taskTable.userId,
       dueDate: taskTable.dueDate,
+      contentRevision: taskTable.contentRevision,
       workspaceId: projectTable.workspaceId,
     })
     .from(taskTable)
@@ -178,19 +242,28 @@ async function bulkUpdateTasks({
 
           const [updated] = await tx
             .update(taskTable)
-            .set({ status: value, columnId: column?.id ?? null, position })
-            .where(eq(taskTable.id, task.id))
+            .set({
+              status: value,
+              columnId: column?.id ?? null,
+              position,
+              contentRevision: task.contentRevision + 1,
+            })
+            .where(
+              and(
+                eq(taskTable.id, task.id),
+                eq(taskTable.contentRevision, revisions.get(task.id) ?? -1),
+              ),
+            )
             .returning();
           if (!updated) {
-            throw new HTTPException(500, {
-              message: "Failed to update task status",
-            });
+            throw contentRevisionConflict(task.contentRevision);
           }
           updatedRows.push({
             id: updated.id,
             projectId: updated.projectId,
             status: updated.status,
             position: updated.position,
+            contentRevision: updated.contentRevision,
           });
         }
         return updatedRows;
@@ -224,12 +297,17 @@ async function bulkUpdateTasks({
       }
       assertValidPriority(value);
 
-      const result = await db
-        .update(taskTable)
-        .set({ priority: value })
-        .where(inArray(taskTable.id, foundIds));
-
-      updatedCount = result.rowCount ?? foundIds.length;
+      updatedCount = await casBulkFieldUpdate({
+        tasks,
+        revisions,
+        apply: (task, nextContentRevision) => ({
+          set: { priority: value as string, contentRevision: nextContentRevision },
+          where: and(
+            eq(taskTable.id, task.id),
+            eq(taskTable.contentRevision, revisions.get(task.id) ?? -1),
+          ),
+        }),
+      });
 
       for (const task of tasks) {
         await publishEvent("task.priority_changed", {
@@ -255,12 +333,17 @@ async function bulkUpdateTasks({
           )[0]?.name
         : undefined;
 
-      const result = await db
-        .update(taskTable)
-        .set({ userId: value || null })
-        .where(inArray(taskTable.id, foundIds));
-
-      updatedCount = result.rowCount ?? foundIds.length;
+      updatedCount = await casBulkFieldUpdate({
+        tasks,
+        revisions,
+        apply: (task, nextContentRevision) => ({
+          set: { userId: (value || null) as string | null, contentRevision: nextContentRevision },
+          where: and(
+            eq(taskTable.id, task.id),
+            eq(taskTable.contentRevision, revisions.get(task.id) ?? -1),
+          ),
+        }),
+      });
 
       for (const task of tasks) {
         const eventType = value ? "task.assignee_changed" : "task.unassigned";
@@ -279,11 +362,29 @@ async function bulkUpdateTasks({
     }
 
     case "delete": {
-      const result = await db
-        .delete(taskTable)
-        .where(inArray(taskTable.id, foundIds));
+      // Deleting cards kills their task-scoped share links in the same
+      // transaction, mirroring the single-delete route.
+      const deletedCount = await db.transaction(async (tx) => {
+        const result = await tx
+          .delete(taskTable)
+          .where(inArray(taskTable.id, foundIds))
+          .returning({ id: taskTable.id });
+        if (result.length > 0) {
+          await tx
+            .update(shareLinkTable)
+            .set({ revokedAt: new Date() })
+            .where(
+              and(
+                eq(shareLinkTable.resourceType, "task"),
+                inArray(shareLinkTable.resourceId, result.map((row) => row.id)),
+                isNull(shareLinkTable.revokedAt),
+              ),
+            );
+        }
+        return result.length;
+      });
 
-      updatedCount = result.rowCount ?? foundIds.length;
+      updatedCount = deletedCount;
 
       for (const task of tasks) {
         await publishEvent("task.deleted", {
@@ -380,12 +481,17 @@ async function bulkUpdateTasks({
         }
       }
 
-      const result = await db
-        .update(taskTable)
-        .set({ dueDate: parsedDate })
-        .where(inArray(taskTable.id, foundIds));
-
-      updatedCount = result.rowCount ?? foundIds.length;
+      updatedCount = await casBulkFieldUpdate({
+        tasks,
+        revisions,
+        apply: (task, nextContentRevision) => ({
+          set: { dueDate: parsedDate, contentRevision: nextContentRevision },
+          where: and(
+            eq(taskTable.id, task.id),
+            eq(taskTable.contentRevision, revisions.get(task.id) ?? -1),
+          ),
+        }),
+      });
 
       for (const task of tasks) {
         await publishEvent("task.due_date_changed", {

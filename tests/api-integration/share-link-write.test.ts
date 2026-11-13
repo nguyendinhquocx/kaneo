@@ -8,6 +8,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  getTaskContentRevision,
 } from "./helpers/fixtures";
 
 const storageMocks = vi.hoisted(() => ({
@@ -148,7 +149,11 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "Renamed", status: "in-progress" }),
+        body: JSON.stringify({
+          title: "Renamed",
+          status: "in-progress",
+          expectedContentRevision: await getTaskContentRevision(createdTask.id),
+        }),
       },
     );
     expect(updated.status).toBe(200);
@@ -218,7 +223,10 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "Nope" }),
+        body: JSON.stringify({
+          title: "Nope",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(refusedUpdate.status).toBe(403);
@@ -380,7 +388,10 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ description: "Task attachment removed" }),
+        body: JSON.stringify({
+          description: "Task attachment removed",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     const documentSave = await app.request(
@@ -590,7 +601,10 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "Hijack" }),
+        body: JSON.stringify({
+          title: "Hijack",
+          expectedContentRevision: 1,
+        }),
       },
     );
     expect(response.status).toBe(404);
@@ -630,7 +644,10 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "Nope" }),
+        body: JSON.stringify({
+          title: "Nope",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(response.status).toBe(403);
@@ -696,7 +713,10 @@ describe("API integration: anonymous share writes (adversarial)", () => {
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "planned" }),
+        body: JSON.stringify({
+          status: "planned",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(updated.status).toBe(400);

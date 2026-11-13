@@ -13,6 +13,7 @@ import {
   isImageContentType,
   validateFullLinkUploadInput,
 } from "../storage/s3";
+import { assertTaskContentRevision } from "../task/content-revision";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
 import { lockProjectTaskLanes } from "../task/lock-project-task-lanes";
 import {
@@ -102,6 +103,8 @@ export type FullTaskWriteBody = {
   assigneeId?: string | null;
   position?: number;
   labels?: Array<{ name: string; color: string }>;
+  // Legacy full-link task writes participate in the content CAS.
+  expectedContentRevision?: number;
 };
 
 function toFullTaskMutationDto(
@@ -122,6 +125,8 @@ function toFullTaskMutationDto(
     createdAt: task.createdAt,
     assigneeId: task.userId,
     labels,
+    // Legacy edit/full writes now carry the content CAS token.
+    contentRevision: task.contentRevision,
   };
 }
 
@@ -264,7 +269,7 @@ export async function fullCreateTask(
 export async function fullMoveTask(
   link: ResolvedShareLink,
   taskId: string,
-  body: { status: string; position: number },
+  body: { status: string; position: number; expectedContentRevision: number },
 ) {
   const project = await getFullLinkProject(link.resourceId);
   const task = await loadProjectTask(taskId, project.id);
@@ -300,6 +305,7 @@ export async function fullMoveTask(
         id: schema.taskTable.id,
         status: schema.taskTable.status,
         position: schema.taskTable.position,
+        contentRevision: schema.taskTable.contentRevision,
       })
       .from(schema.taskTable)
       .where(
@@ -329,6 +335,7 @@ export async function fullMoveTask(
       });
     const movingTask = ordinaryTasks.find((row) => row.id === task.id);
     if (!movingTask) throw guestDenied();
+    await assertTaskContentRevision(tx, task.id, body.expectedContentRevision);
 
     const sourceTasks = ordinaryTasks.filter(
       (row) => row.status === task.status && row.id !== task.id,
@@ -360,12 +367,17 @@ export async function fullMoveTask(
     }
 
     for (const [position, row] of destinationTasks.entries()) {
+      const isMovingTask = row.id === task.id;
       await tx
         .update(schema.taskTable)
         .set({
           status: body.status,
           columnId: targetColumn.id,
           position,
+          // Only the moved card changes content meaning here.
+          ...(isMovingTask
+            ? { contentRevision: movingTask.contentRevision + 1 }
+            : {}),
         })
         .where(
           and(
@@ -377,7 +389,11 @@ export async function fullMoveTask(
 
     await audit(tx, link, "task.move");
     const [updatedTask] = await tx
-      .select({ id: schema.taskTable.id, projectId: schema.taskTable.projectId })
+      .select({
+        id: schema.taskTable.id,
+        projectId: schema.taskTable.projectId,
+        contentRevision: schema.taskTable.contentRevision,
+      })
       .from(schema.taskTable)
       .where(eq(schema.taskTable.id, task.id))
       .limit(1);
@@ -390,7 +406,7 @@ export async function fullMoveTask(
     projectId: moved.projectId,
     status: body.status,
   });
-  return { success: true };
+  return { success: true, contentRevision: moved.contentRevision };
 }
 
 export async function fullUpdateTask(
@@ -460,6 +476,12 @@ export async function fullUpdateTask(
       await assertGuestAssigneeAllowed(body.assigneeId, project.workspaceId, tx);
     }
     await lockOrdinaryProjectTasks(tx, project.id, [task.id]);
+    if (body.expectedContentRevision === undefined) {
+      throw new HTTPException(400, {
+        message: "expectedContentRevision is required for task updates",
+      });
+    }
+    await assertTaskContentRevision(tx, task.id, body.expectedContentRevision);
     if (updates.status !== undefined) {
       const [currentLaneState] = await tx
         .select({
@@ -512,9 +534,19 @@ export async function fullUpdateTask(
         updates.position = (maxPositionResult?.maxPosition ?? 0) + 1;
       }
     }
+    const lockedTask = (
+      await tx
+        .select()
+        .from(schema.taskTable)
+        .where(eq(schema.taskTable.id, task.id))
+        .limit(1)
+    )[0];
     const [row] = await tx
       .update(schema.taskTable)
-      .set(updates)
+      .set({
+        ...updates,
+        contentRevision: (lockedTask?.contentRevision ?? 1) + 1,
+      })
       .where(
         and(
           eq(schema.taskTable.id, task.id),

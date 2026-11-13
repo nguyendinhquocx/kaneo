@@ -4,15 +4,18 @@ import db from "../../database";
 import { projectTable, taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { assertTaskAssigneeInWorkspace } from "../validate-task-assignee";
+import { assertTaskContentRevision } from "../content-revision";
 
 async function updateTaskAssignee({
   id,
   userId,
   currentUserId,
+  expectedContentRevision,
 }: {
   id: string;
   userId: string | null;
   currentUserId: string;
+  expectedContentRevision: number;
 }) {
   const { existingTask, updatedTask } = await db.transaction(async (tx) => {
     const [existingTask] = await tx
@@ -25,6 +28,8 @@ async function updateTaskAssignee({
     if (!existingTask) {
       throw new HTTPException(404, { message: "Task not found" });
     }
+
+    await assertTaskContentRevision(tx, id, expectedContentRevision);
 
     const [project] = await tx
       .select({ workspaceId: projectTable.workspaceId })
@@ -49,7 +54,10 @@ async function updateTaskAssignee({
 
     const [updatedTask] = await tx
       .update(taskTable)
-      .set({ userId: nextAssigneeId })
+      .set({
+        userId: nextAssigneeId,
+        contentRevision: existingTask.contentRevision + 1,
+      })
       .where(eq(taskTable.id, id))
       .returning();
 

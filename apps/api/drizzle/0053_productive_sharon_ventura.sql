@@ -1,0 +1,1 @@
+ALTER TABLE "task" ADD COLUMN "content_revision" integer DEFAULT 1 NOT NULL;

@@ -114,7 +114,14 @@ export async function updateTaskStatus(
 
     const [after] = await tx
       .update(taskTable)
-      .set({ status: newStatus, columnId, position })
+      .set({
+        status: newStatus,
+        columnId,
+        position,
+        // Webhook status writes are ordinary content edits: advance the
+        // content CAS token so stale clients conflict instead of overwriting.
+        contentRevision: task.contentRevision + 1,
+      })
       .where(eq(taskTable.id, taskId))
       .returning();
 

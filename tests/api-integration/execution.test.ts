@@ -16,6 +16,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  getTaskContentRevision,
 } from "./helpers/fixtures";
 
 type RunResponse = {
@@ -714,7 +715,10 @@ describe("API integration: execution Task 1", () => {
           "content-type": "application/json",
           Authorization: parentAuthorization,
         },
-        body: JSON.stringify({ status: "done" }),
+        body: JSON.stringify({
+          status: "done",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(directFinalization.status).toBe(409);
@@ -1144,7 +1148,10 @@ describe("API integration: execution Task 1", () => {
           "content-type": "application/json",
           Authorization: parentAuthorization,
         },
-        body: JSON.stringify({ status: "custom-final" }),
+        body: JSON.stringify({
+          status: "custom-final",
+          expectedContentRevision: await getTaskContentRevision(task.id),
+        }),
       },
     );
     expect(directCustomFinalization.status).toBe(409);
@@ -1163,6 +1170,7 @@ describe("API integration: execution Task 1", () => {
         priority: task.priority ?? "medium",
         position: task.position ?? 1,
         userId: task.userId ?? member.user.id,
+        expectedContentRevision: await getTaskContentRevision(task.id),
       }),
     });
     expect(directFinalization.status).toBe(409);
@@ -1177,6 +1185,9 @@ describe("API integration: execution Task 1", () => {
         taskIds: [task.id],
         operation: "updateStatus",
         value: "done",
+        expectedContentRevisions: {
+          [task.id]: await getTaskContentRevision(task.id),
+        },
       }),
     });
     expect(bulkFinalization.status).toBe(409);
@@ -1190,6 +1201,7 @@ describe("API integration: execution Task 1", () => {
       body: JSON.stringify({
         destinationProjectId: destination.project.id,
         destinationStatus: "done",
+        expectedContentRevision: await getTaskContentRevision(task.id),
       }),
     });
     expect(moveFinalization.status).toBe(409);

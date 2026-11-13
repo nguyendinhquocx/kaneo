@@ -1,10 +1,11 @@
-import { and, asc, eq, max } from "drizzle-orm";
+import { and, asc, eq, isNull, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
   assetTable,
   columnTable,
   projectTable,
+  shareLinkTable,
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
@@ -13,6 +14,7 @@ import {
   assertTaskMoveExecutionGate,
 } from "../../execution/finalization-gate";
 import { lockProjectTaskLanes } from "../lock-project-task-lanes";
+import { assertTaskContentRevision } from "../content-revision";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -96,11 +98,13 @@ async function moveTask({
   destinationProjectId,
   destinationStatus,
   currentUserId,
+  expectedContentRevision,
 }: {
   taskId: string;
   destinationProjectId: string;
   destinationStatus?: string;
   currentUserId: string;
+  expectedContentRevision: number;
 }) {
   const [sourceSnapshot] = await db
     .select({ projectId: taskTable.projectId })
@@ -129,6 +133,21 @@ async function moveTask({
           message: "Task project changed; refresh and retry the move",
         });
       }
+
+      // Cross-project move is an ordinary content edit: CAS + bump. Any
+      // task-scoped share link anchored to this card dies with the move —
+      // the same transaction that relocates the card revokes its capability.
+      await assertTaskContentRevision(tx, taskId, expectedContentRevision);
+      await tx
+        .update(shareLinkTable)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(shareLinkTable.resourceType, "task"),
+            eq(shareLinkTable.resourceId, taskId),
+            isNull(shareLinkTable.revokedAt),
+          ),
+        );
 
       if (isSameProjectMove(lockedTask.projectId, destinationProjectId)) {
         throw new HTTPException(400, {
@@ -190,6 +209,7 @@ async function moveTask({
           columnId: resolvedColumn.id,
           number: nextTaskNumber,
           position: nextPosition,
+          contentRevision: lockedTask.contentRevision + 1,
         })
         .where(eq(taskTable.id, taskId))
         .returning();

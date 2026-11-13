@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../../database";
+import { assertTaskContentRevision } from "../../task/content-revision";
 import { lockProjectTaskLanes } from "../../task/lock-project-task-lanes";
 import getTaskRelations from "./get-task-relations";
 
@@ -8,12 +9,14 @@ type ReorderSubtasksInput = {
   parentTaskId: string;
   orderedTargetTaskIds: string[];
   workspaceId: string;
+  expectedParentContentRevision: number;
 };
 
 export async function reorderSubtasks({
   parentTaskId,
   orderedTargetTaskIds,
   workspaceId,
+  expectedParentContentRevision,
 }: ReorderSubtasksInput) {
   if (new Set(orderedTargetTaskIds).size !== orderedTargetTaskIds.length) {
     throw new HTTPException(400, { message: "Duplicate subtask IDs" });
@@ -86,6 +89,14 @@ export async function reorderSubtasks({
     if (!parent || parent.projectId !== parentSnapshot.projectId) {
       throw new HTTPException(404, { message: "Task not found" });
     }
+
+    // Reordering changes the parent card's subtask order: CAS + bump in the
+    // same transaction, so a stale client reloads instead of overwriting.
+    await assertTaskContentRevision(
+      tx,
+      parentTaskId,
+      expectedParentContentRevision,
+    );
 
     const relations = await tx
       .select({
@@ -228,6 +239,14 @@ export async function reorderSubtasks({
           .where(eq(schema.taskTable.id, taskId));
       }
     }
+
+    // Bump the parent once after all sibling/lane positions are rewritten.
+    await tx
+      .update(schema.taskTable)
+      .set({
+        contentRevision: sql`${schema.taskTable.contentRevision} + 1`,
+      })
+      .where(eq(schema.taskTable.id, parentTaskId));
   });
 
   return getTaskRelations(parentTaskId, workspaceId);

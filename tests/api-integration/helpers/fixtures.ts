@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import db, { schema } from "../../../apps/api/src/database";
 import { DEFAULT_PROJECT_COLUMNS } from "../../../apps/api/src/project/controllers/create-project";
 
@@ -108,4 +109,20 @@ export async function createProjectFixture({
       done,
     },
   };
+}
+
+// SPEC-2026-11-10-kaneo-card-agent-collaboration T2: every task-field,
+// marker, and subtask-order write carries the contentRevision the client
+// last read. Integration tests read the current token straight from the DB
+// before each mutation, mirroring what the web/MCP clients do.
+export async function getTaskContentRevision(taskId: string): Promise<number> {
+  const [row] = await db
+    .select({ contentRevision: schema.taskTable.contentRevision })
+    .from(schema.taskTable)
+    .where(eq(schema.taskTable.id, taskId))
+    .limit(1);
+  if (!row) {
+    throw new Error(`Task ${taskId} not found for contentRevision lookup`);
+  }
+  return row.contentRevision;
 }

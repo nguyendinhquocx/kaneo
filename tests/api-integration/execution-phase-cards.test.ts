@@ -15,6 +15,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  getTaskContentRevision,
 } from "./helpers/fixtures";
 
 const WORKER_SCOPES = [
@@ -1298,7 +1299,10 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
         "content-type": "application/json",
         Authorization: "Bearer worker-owner-token",
       },
-      body: JSON.stringify({ status: "done" }),
+      body: JSON.stringify({
+        status: "done",
+        expectedContentRevision: await getTaskContentRevision(childId),
+      }),
     });
     expect(statusChild.status).toBe(409);
 
@@ -1324,6 +1328,7 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
         sourceTaskId: fullId,
         targetTaskId: childId,
         relationType: "subtask",
+        expectedParentContentRevision: await getTaskContentRevision(fullId),
       }),
     });
     expect(relation.status).toBe(409);
@@ -1361,6 +1366,9 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
         taskIds: [childId],
         operation: "updatePriority",
         value: "high",
+        expectedContentRevisions: {
+          [childId]: await getTaskContentRevision(childId),
+        },
       }),
     });
     expect(bulk.status).toBe(409);
@@ -1373,7 +1381,10 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
         "content-type": "application/json",
         "x-api-key": agentKey,
       },
-      body: JSON.stringify({ status: "in-progress" }),
+      body: JSON.stringify({
+        status: "in-progress",
+        expectedContentRevision: await getTaskContentRevision(fullId),
+      }),
     });
     expect(agentStatus.status).toBe(409);
     expect(await agentStatus.text()).toContain("use_phase_progress");
@@ -1848,6 +1859,7 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
       projectId: full?.projectId,
       position: full?.position,
       status: full?.status,
+      expectedContentRevision: full?.contentRevision,
     };
 
     const titleChange = await putTask(
@@ -1873,7 +1885,10 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
           "content-type": "application/json",
           Authorization: "Bearer parent-token",
         },
-        body: JSON.stringify({ description: "hijacked via PATCH surface" }),
+        body: JSON.stringify({
+          description: "hijacked via PATCH surface",
+          expectedContentRevision: full?.contentRevision,
+        }),
       },
     );
     expect(patchDescription.status).toBe(409);
@@ -1903,6 +1918,7 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
     const plainTask = (await plain.json()) as {
       id: string;
       position: number;
+      contentRevision: number;
     };
     const plainEdit = await fixture.app.request(`/api/task/${plainTask.id}`, {
       method: "PUT",
@@ -1918,6 +1934,7 @@ describe("API integration: FULL-run phase cards (SPEC-kaneo-phase-cards-full-run
         status: "to-do",
         projectId: fixture.project.id,
         position: plainTask.position ?? 0,
+        expectedContentRevision: plainTask.contentRevision,
       }),
     });
     expect(plainEdit.status).toBe(200);

@@ -12,6 +12,20 @@ import { contentReferencesAsset } from "../storage/cleanup-assets";
 import { getPrivateObject } from "../storage/s3";
 import { rewriteContentAssetRefs } from "./agent-content";
 import {
+  buildTaskShareRootPayload,
+  buildTaskShareSubtreePayload,
+  canTaskShareReadAsset,
+  taskShareAttachLabel,
+  taskShareCreateComment,
+  taskShareCreateSubtask,
+  taskShareCreateUploadTicket,
+  taskShareDetachLabel,
+  taskShareFinalizeUpload,
+  taskShareReorderSubtask,
+  taskShareUpdateTask,
+  taskShareUpdateWorkMarkers,
+} from "./task-share-access";
+import {
   createShareAssetTicket,
   verifyShareAssetTicket,
 } from "./asset-ticket";
@@ -450,6 +464,12 @@ async function canShareReadAsset(
     );
   }
 
+  if (link.resourceType === "task") {
+    // SPEC-2026-11-10: a task link covers assets attached to cards that are
+    // STILL inside its dynamic subtree; everything else fails closed.
+    return canTaskShareReadAsset(link, asset);
+  }
+
   if (link.resourceType === "document") {
     if (asset.documentId !== link.resourceId || asset.surface !== "document") {
       return false;
@@ -776,6 +796,8 @@ const taskUpdateSchema = v.object({
   priority: v.optional(v.string()),
   startDate: v.optional(v.nullable(v.string())),
   dueDate: v.optional(v.nullable(v.string())),
+  // Legacy edit-link task writes participate in the content CAS.
+  expectedContentRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
 });
 
 app.post("/project/:token/task", async (c) => {
@@ -818,6 +840,7 @@ app.post("/project/:token/task/:taskId/move", async (c) => {
       // Destination index, not a database position. The server reindexes
       // the affected ordinary tasks atomically using integer positions.
       position: v.pipe(v.number(), v.integer(), v.minValue(0)),
+      expectedContentRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
     }),
     rawBody,
   );
@@ -875,6 +898,8 @@ const fullTaskUpdateSchema = v.strictObject({
   assigneeId: v.optional(v.nullable(v.string())),
   // Lane order is owned exclusively by the POST move endpoint (integer index);
   // arbitrary position writes here would bypass lane reindexing.
+  // Legacy full-link task writes participate in the content CAS.
+  expectedContentRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
 });
 
 const documentUpdateSchema = v.object({
@@ -1222,6 +1247,202 @@ app.post("/project/:token/asset/finalize", async (c) => {
     ...asset,
     // One-asset/one-hour ticket for immediate editor preview; never echo the
     // parent project bearer token into resource content.
+    url: `${origin}/api/share/asset-ticket/${ticket}`,
+  });
+});
+
+// --- SPEC-2026-11-10: task capability routes -------------------------------
+// One card + its dynamic same-project subtask tree. All scopes are resolved
+// per request inside task-share-access; failures keep the generic 404 shape.
+
+function rewriteTaskShareContent(content: string | null, origin: string, token: string) {
+  return content
+    ? rewriteContentAssetRefs(content, origin, "task", token)
+    : content;
+}
+
+app.get("/task/:token", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "view");
+  const origin = shareOrigin(new URL(c.req.url).origin);
+  const payload = await buildTaskShareRootPayload(link);
+  return c.json({
+    ...payload,
+    root: {
+      ...payload.root,
+      description: rewriteTaskShareContent(payload.root.description, origin, token),
+    },
+    subtasks: payload.subtasks.map((task) => ({
+      ...task,
+      description: rewriteTaskShareContent(task.description, origin, token),
+    })),
+    commentsPage: {
+      ...payload.commentsPage,
+      items: payload.commentsPage.items.map((comment) => ({
+        ...comment,
+        content: rewriteTaskShareContent(comment.content, origin, token),
+      })),
+    },
+  });
+});
+
+app.get("/task/:token/task/:taskId", async (c) => {
+  const token = c.req.param("token");
+  const taskId = c.req.param("taskId");
+  assertShareRateLimit(c, "read", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "view");
+  const origin = shareOrigin(new URL(c.req.url).origin);
+  const payload = await buildTaskShareSubtreePayload(link, taskId);
+  const rewriteTask = <T extends { description: string | null }>(task: T): T => ({
+    ...task,
+    description: rewriteTaskShareContent(task.description, origin, token),
+  });
+  return c.json({
+    ...payload,
+    task: payload.task ? rewriteTask(payload.task) : payload.task,
+    subtasks: payload.subtasks.map(rewriteTask),
+    commentsPage: {
+      ...payload.commentsPage,
+      items: payload.commentsPage.items.map((comment) => ({
+        ...comment,
+        content: rewriteTaskShareContent(comment.content, origin, token),
+      })),
+    },
+  });
+});
+
+const taskSharePatchSchema = v.object({
+  patch: v.object({
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    status: v.optional(v.string()),
+    priority: v.optional(v.string()),
+    startDate: v.optional(v.nullable(v.string())),
+    dueDate: v.optional(v.nullable(v.string())),
+  }),
+  expectedContentRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+});
+
+app.patch("/task/:token/task/:taskId", async (c) => {
+  const token = c.req.param("token");
+  const taskId = c.req.param("taskId");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  const body = await c.req.json().then((raw) => v.parse(taskSharePatchSchema, raw));
+  return c.json(await taskShareUpdateTask(link, taskId, body));
+});
+
+const taskShareCreateSubtaskSchema = v.object({
+  expectedParentContentRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  title: v.string(),
+  description: v.optional(v.string()),
+  status: v.optional(v.string()),
+  priority: v.optional(v.string()),
+  startDate: v.optional(v.string()),
+  dueDate: v.optional(v.string()),
+});
+
+app.post("/task/:token/task/:parentTaskId/subtasks", async (c) => {
+  const token = c.req.param("token");
+  const parentTaskId = c.req.param("parentTaskId");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  const body = await c.req
+    .json()
+    .then((raw) => v.parse(taskShareCreateSubtaskSchema, raw));
+  return c.json(await taskShareCreateSubtask(link, parentTaskId, body));
+});
+
+app.put("/task/:token/subtask-relations/:relationId/position", async (c) => {
+  const token = c.req.param("token");
+  const relationId = c.req.param("relationId");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({
+        position: v.pipe(v.number(), v.integer(), v.minValue(0)),
+        expectedParentContentRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+      }),
+      raw,
+    ),
+  );
+  return c.json(await taskShareReorderSubtask(link, relationId, body));
+});
+
+app.post("/task/:token/task/:taskId/labels", async (c) => {
+  const token = c.req.param("token");
+  const taskId = c.req.param("taskId");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  const body = await c.req
+    .json()
+    .then((raw) => v.parse(v.object({ labelId: v.string() }), raw));
+  return c.json(await taskShareAttachLabel(link, taskId, body.labelId));
+});
+
+app.delete("/task/:token/task/:taskId/labels/:labelId", async (c) => {
+  const token = c.req.param("token");
+  const taskId = c.req.param("taskId");
+  const labelId = c.req.param("labelId");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  return c.json(await taskShareDetachLabel(link, taskId, labelId));
+});
+
+app.post("/task/:token/task/:taskId/comments", async (c) => {
+  const token = c.req.param("token");
+  const taskId = c.req.param("taskId");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  const body = await c.req
+    .json()
+    .then((raw) => v.parse(v.object({ content: v.string() }), raw));
+  return c.json(await taskShareCreateComment(link, taskId, body.content));
+});
+
+app.post("/task/:token/asset/upload-ticket", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({
+        ownerType: v.picklist(["task_description", "task_comment"]),
+        ownerId: v.string(),
+        filename: v.string(),
+        contentType: v.string(),
+        size: v.number(),
+      }),
+      raw,
+    ),
+  );
+  return c.json(await taskShareCreateUploadTicket(link, body));
+});
+
+app.post("/task/:token/asset/finalize", async (c) => {
+  const token = c.req.param("token");
+  assertShareRateLimit(c, "write", hashShareToken(token));
+  const link = await resolveShareLink(token, "task", "edit");
+  const body = await c.req.json().then((raw) =>
+    v.parse(
+      v.object({
+        ownerType: v.picklist(["task_description", "task_comment"]),
+        ownerId: v.string(),
+        key: v.string(),
+        filename: v.string(),
+        contentType: v.string(),
+        size: v.number(),
+      }),
+      raw,
+    ),
+  );
+  const asset = await taskShareFinalizeUpload(link, body);
+  const origin = shareOrigin(new URL(c.req.url).origin);
+  const ticket = createShareAssetTicket(link.id, asset.id);
+  return c.json({
+    ...asset,
     url: `${origin}/api/share/asset-ticket/${ticket}`,
   });
 });

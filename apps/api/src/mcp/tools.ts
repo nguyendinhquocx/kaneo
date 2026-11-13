@@ -425,6 +425,8 @@ export function registerMcpTools(
         startDate: nullableOptionalIsoDateTimeSchema,
         dueDate: nullableOptionalIsoDateTimeSchema,
         userId: nullableOptionalNonEmptyString,
+        // Content CAS token: omit to use the freshly fetched card's revision.
+        expectedContentRevision: z.number().int().min(1).optional(),
       }),
     },
     async (args) => {
@@ -435,6 +437,17 @@ export function registerMcpTools(
           { method: "GET" },
         )) as Record<string, unknown>;
         const body = buildFullTaskUpdateBody(existing, patch);
+        const expectedContentRevision =
+          patch.expectedContentRevision ??
+          (typeof existing.contentRevision === "number"
+            ? existing.contentRevision
+            : undefined);
+        if (expectedContentRevision === undefined) {
+          throw new Error(
+            "Cannot update task: missing contentRevision on existing task.",
+          );
+        }
+        body.expectedContentRevision = expectedContentRevision;
         return client.json(`/api/task/${encodeURIComponent(taskId)}`, {
           method: "PUT",
           body: JSON.stringify(body),
@@ -452,6 +465,7 @@ export function registerMcpTools(
         taskId: nonEmptyString,
         destinationProjectId: nonEmptyString,
         destinationStatus: optionalNonEmptyString,
+        expectedContentRevision: z.number().int().min(1),
       }),
     },
     async (args) =>
@@ -460,6 +474,7 @@ export function registerMcpTools(
           method: "PUT",
           body: JSON.stringify({
             destinationProjectId: args.destinationProjectId,
+            expectedContentRevision: args.expectedContentRevision,
             ...(args.destinationStatus !== undefined
               ? { destinationStatus: args.destinationStatus }
               : {}),
@@ -472,13 +487,20 @@ export function registerMcpTools(
     "update_task_status",
     {
       description: "Update only the status (column) of a task.",
-      inputSchema: z.object({ taskId: nonEmptyString, status: nonEmptyString }),
+      inputSchema: z.object({
+        taskId: nonEmptyString,
+        status: nonEmptyString,
+        expectedContentRevision: z.number().int().min(1),
+      }),
     },
     async (args) =>
       run(() =>
         client.json(`/api/task/status/${encodeURIComponent(args.taskId)}`, {
           method: "PUT",
-          body: JSON.stringify({ status: args.status }),
+          body: JSON.stringify({
+            status: args.status,
+            expectedContentRevision: args.expectedContentRevision,
+          }),
         }),
       ),
   );
@@ -658,6 +680,8 @@ export function registerMcpTools(
         sourceTaskId: nonEmptyString,
         targetTaskId: nonEmptyString,
         relationType: z.enum(["subtask", "blocks", "related"]),
+        // Required for subtask edges: the parent card's content CAS token.
+        expectedParentContentRevision: z.number().int().min(1).optional(),
       }),
     },
     async (args) =>
@@ -668,6 +692,12 @@ export function registerMcpTools(
             sourceTaskId: args.sourceTaskId,
             targetTaskId: args.targetTaskId,
             relationType: args.relationType,
+            ...(args.expectedParentContentRevision !== undefined
+              ? {
+                  expectedParentContentRevision:
+                    args.expectedParentContentRevision,
+                }
+              : {}),
           }),
         }),
       ),

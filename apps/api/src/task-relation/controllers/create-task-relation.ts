@@ -7,6 +7,7 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { assertTaskContentRevision } from "../../task/content-revision";
 
 async function createTaskRelation({
   sourceTaskId,
@@ -14,12 +15,14 @@ async function createTaskRelation({
   relationType,
   userId,
   workspaceId,
+  expectedParentContentRevision,
 }: {
   sourceTaskId: string;
   targetTaskId: string;
   relationType: string;
   userId: string;
   workspaceId: string;
+  expectedParentContentRevision?: number;
 }) {
   if (sourceTaskId === targetTaskId) {
     throw new HTTPException(400, {
@@ -96,12 +99,28 @@ async function createTaskRelation({
   const [relation] = await db.transaction(async (tx) => {
     let position = 0;
     if (relationType === "subtask") {
-      await tx
-        .select({ id: taskTable.id })
+      // Adding a subtask edge changes the parent card's subtask structure:
+      // CAS against the parent's contentRevision and bump it atomically.
+      if (expectedParentContentRevision === undefined) {
+        throw new HTTPException(400, {
+          message:
+            "expectedParentContentRevision is required for subtask relations",
+        });
+      }
+      const [lockedParent] = await tx
+        .select()
         .from(taskTable)
         .where(eq(taskTable.id, sourceTaskId))
         .for("update")
         .limit(1);
+      if (!lockedParent) {
+        throw new HTTPException(404, { message: "Source task not found" });
+      }
+      await assertTaskContentRevision(
+        tx,
+        sourceTaskId,
+        expectedParentContentRevision,
+      );
       const [maxPosition] = await tx
         .select({ value: max(taskRelationTable.position) })
         .from(taskRelationTable)
@@ -112,6 +131,10 @@ async function createTaskRelation({
           ),
         );
       position = (maxPosition?.value ?? -1) + 1;
+      await tx
+        .update(taskTable)
+        .set({ contentRevision: lockedParent.contentRevision + 1 })
+        .where(eq(taskTable.id, sourceTaskId));
     }
 
     return tx

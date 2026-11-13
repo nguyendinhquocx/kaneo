@@ -82,6 +82,20 @@ async function lookupResourceWorkspaceId(
       .limit(1);
     return row?.workspaceId ?? null;
   }
+  if (resourceType === "task") {
+    // Explicit task branch BEFORE the activity-comment fallback: a task id
+    // must resolve through task.project, never by probing the activity table.
+    const [row] = await db
+      .select({ workspaceId: schema.projectTable.workspaceId })
+      .from(schema.taskTable)
+      .innerJoin(
+        schema.projectTable,
+        eq(schema.taskTable.projectId, schema.projectTable.id),
+      )
+      .where(eq(schema.taskTable.id, resourceId))
+      .limit(1);
+    return row?.workspaceId ?? null;
+  }
   const [row] = await db
     .select({ workspaceId: schema.projectTable.workspaceId })
     .from(schema.activityTable)
@@ -171,6 +185,7 @@ const shareManage = new Hono<{
           "project",
           "document",
           "goal",
+          "task",
           "task_description",
           "activity_comment",
         ]),
@@ -329,6 +344,7 @@ const shareManage = new Hono<{
           "project",
           "document",
           "goal",
+          "task",
           "task_description",
           "activity_comment",
         ]),

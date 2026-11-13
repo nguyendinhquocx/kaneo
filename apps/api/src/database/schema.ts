@@ -608,6 +608,10 @@ export const taskTable = pgTable(
     // Kanban `status`/`columnId` above are presentation mapping only.
     executionState: text("execution_state").notNull().default("published"),
     taskRevision: integer("task_revision").notNull().default(1),
+    // SPEC-2026-11-10-kaneo-card-agent-collaboration: ordinary content CAS
+    // token for card fields/markers/subtask order. Advanced only inside the
+    // mutation that changes it; never touched for execution `taskRevision`.
+    contentRevision: integer("content_revision").notNull().default(1),
     // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: repeated work marker
     // counts. Never derived from title/status/priority.
     workMarkerCounts: jsonb("work_marker_counts")

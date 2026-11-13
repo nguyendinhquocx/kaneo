@@ -7,15 +7,18 @@ import { assertFullRunFieldsImmutable } from "../../execution/finalization-gate"
 import createNotification from "../../notification/controllers/create-notification";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
+import { assertTaskContentRevision } from "../content-revision";
 
 async function updateTaskDescription({
   id,
   description,
   currentUserId,
+  expectedContentRevision,
 }: {
   id: string;
   description: string;
   currentUserId: string;
+  expectedContentRevision: number;
 }) {
   // Keep the FULL mapping check and description write under the same task
   // lock. A check-then-update against the global db executor would leave a
@@ -35,6 +38,8 @@ async function updateTaskDescription({
       });
     }
 
+    await assertTaskContentRevision(tx, id, expectedContentRevision);
+
     // SPEC-kaneo-r10c-description-guard-v0-1 (Fix 1)
     await assertFullRunFieldsImmutable(tx, {
       taskId: id,
@@ -44,7 +49,7 @@ async function updateTaskDescription({
 
     const [updated] = await tx
       .update(taskTable)
-      .set({ description })
+      .set({ description, contentRevision: lockedTask.contentRevision + 1 })
       .where(eq(taskTable.id, id))
       .returning();
 

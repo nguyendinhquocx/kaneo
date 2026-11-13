@@ -90,6 +90,10 @@ const taskRelation = new Hono<{
         sourceTaskId: v.string(),
         targetTaskId: v.string(),
         relationType: v.picklist(["subtask", "blocks", "related"]),
+        // Required for subtask edges: parent card content CAS.
+        expectedParentContentRevision: v.optional(
+          v.pipe(v.number(), v.integer(), v.minValue(1)),
+        ),
       }),
     ),
     async (c, next) => {
@@ -129,13 +133,15 @@ const taskRelation = new Hono<{
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const userId = c.get("userId");
-      const { sourceTaskId, targetTaskId, relationType } = c.req.valid("json");
+      const { sourceTaskId, targetTaskId, relationType, expectedParentContentRevision } =
+        c.req.valid("json");
       const relation = await createTaskRelation({
         sourceTaskId,
         targetTaskId,
         relationType,
         userId,
         workspaceId: c.get("workspaceId"),
+        expectedParentContentRevision,
       });
       return c.json(relation);
     },
@@ -155,12 +161,23 @@ const taskRelation = new Hono<{
       },
     }),
     validator("param", v.object({ taskId: v.string() })),
-    validator("json", v.object({ orderedTargetTaskIds: v.array(v.string()) })),
+    validator(
+      "json",
+      v.object({
+        orderedTargetTaskIds: v.array(v.string()),
+        expectedParentContentRevision: v.pipe(
+          v.number(),
+          v.integer(),
+          v.minValue(1),
+        ),
+      }),
+    ),
     workspaceAccess.fromTaskId("taskId"),
     requireWorkspacePermission({ task: ["update"] }),
     async (c) => {
       const { taskId } = c.req.valid("param");
-      const { orderedTargetTaskIds } = c.req.valid("json");
+      const { orderedTargetTaskIds, expectedParentContentRevision } =
+        c.req.valid("json");
       const actorIsAgent = requestActorIsAgent(c);
 
       for (const targetTaskId of orderedTargetTaskIds) {
@@ -175,6 +192,7 @@ const taskRelation = new Hono<{
         parentTaskId: taskId,
         orderedTargetTaskIds,
         workspaceId: c.get("workspaceId"),
+        expectedParentContentRevision,
       });
       return c.json(relations);
     },
@@ -195,6 +213,17 @@ const taskRelation = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
+    validator(
+      "query",
+      v.optional(
+        v.object({
+          // Required when deleting a subtask edge: parent card content CAS.
+          expectedParentContentRevision: v.optional(
+            v.pipe(v.string(), v.transform(Number)),
+          ),
+        }),
+      ),
+    ),
     async (c, next) => {
       const userId = c.get("userId");
       if (!userId) {
@@ -246,7 +275,12 @@ const taskRelation = new Hono<{
     async (c) => {
       const userId = c.get("userId");
       const { id } = c.req.valid("param");
-      const relation = await deleteTaskRelation(id, userId);
+      const query = c.req.valid("query");
+      const relation = await deleteTaskRelation(
+        id,
+        userId,
+        query?.expectedParentContentRevision,
+      );
       return c.json(relation);
     },
   );
