@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import db from "../../../database";
 import { taskTable } from "../../../database/schema";
 import { findExternalLink, updateExternalLink } from "../services/link-manager";
@@ -156,8 +156,9 @@ export async function handleIssueEdited(payload: IssueEditedPayload) {
           ...updateData,
           // Webhook sync writes are ordinary content edits: advance the
           // content CAS token so stale clients conflict instead of silently
-          // overwriting the synced fields.
-          contentRevision: task.contentRevision + 1,
+          // overwriting the synced fields. Atomic increment: concurrent
+          // webhook events must not lose a revision bump.
+          contentRevision: sql`${taskTable.contentRevision} + 1`,
         })
         .where(eq(taskTable.id, task.id));
 
