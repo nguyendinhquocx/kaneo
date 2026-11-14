@@ -1,6 +1,15 @@
 #!/bin/sh
 # Fixed-path, hash-pinned Kaneo card-agent production rollout; run via visible sudo on ProDesk.
 set -eu
+MODE=plan
+if [ "$#" -eq 1 ] && [ "$1" = "--plan" ]; then
+  MODE=plan
+elif [ "$#" -eq 2 ] && [ "$1" = "--apply" ] && [ "$2" = "--yes" ]; then
+  MODE=apply
+else
+  echo "Usage: $0 --plan | --apply --yes" >&2
+  exit 2
+fi
 BUNDLE=/home/quoc/kaneo/release/.staging/card-agent-collaboration
 PROJECT=/srv/kaneo
 COMPOSE=$PROJECT/compose.yml
@@ -42,12 +51,17 @@ source_now=$(sed -n 's/^source_revision=//p' "$RECOVERY/kaneo-install-metadata" 
 [ "$(grep -Fxc "    image: $NEW_IMAGE" "$BUNDLE/compose.cardagent.yml")" = 1 ] || fail 'candidate compose image pin mismatch'
 (cd "$PROJECT" && docker compose config --quiet) || fail 'current compose invalid'
 (cd "$PROJECT" && docker compose ps --status running --services | grep -Fxq postgres) || fail 'postgres not running'
+docker compose --project-directory "$PROJECT" --file "$BUNDLE/compose.cardagent.yml" config --quiet || fail 'candidate compose invalid'
 
 printf '%s\n' '== 1/9 read-only preflight on current int1'
 "$WRAPPER" --plan
 "$RECOVERY/kaneo-migration-verify"
 "$RECOVERY/kaneo-backup-verify"
 "$STATUS" || true
+if [ "$MODE" = plan ]; then
+  printf '%s\n' "Kaneo card-agent pre-deploy plan PASS: current=$CURRENT_IMAGE candidate=$NEW_IMAGE compose=$NEW_COMPOSE_SHA256; no mutation."
+  exit 0
+fi
 
 printf '%s\n' '== 2/9 fresh encrypted pre-migration snapshot of int1'
 pre_output=$("$RECOVERY/kaneo-backup-snapshot-current")
