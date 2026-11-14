@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi tersambung",
+        "formalRunOwned": "Worker formal memiliki kartu ini",
         "offline": "Pi offline",
         "host": "Host: {{host}}"
       }
@@ -2364,6 +2365,15 @@
       "title": "Terlalu banyak permintaan"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Belum ada komentar",
+    "taskPostComment": "Kirim komentar",
+    "taskCommentPlaceholder": "Tulis komentar…",
+    "taskComments": "Komentar",
+    "taskAddSubtask": "Tambah subtugas",
+    "taskNewSubtask": "Judul subtugas baru",
+    "taskSubtasks": "Subtugas",
+    "taskMarkers": "Penanda kerja",
+    "taskConflict": "Tugas ini bagian dari execution run yang aktif; penyuntingan bersama dinonaktifkan.",
     "revoked": "Revoked",
     "title": "Bagikan",
     "loading": "Memuat proyek…",

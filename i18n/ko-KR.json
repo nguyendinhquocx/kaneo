@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi 연결됨",
+        "formalRunOwned": "정식 워커가 이 카드를 담당합니다",
         "offline": "Pi 오프라인",
         "host": "호스트: {{host}}"
       }
@@ -2364,6 +2365,15 @@
       "title": "요청이 너무 많습니다"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "아직 댓글이 없습니다",
+    "taskPostComment": "댓글 게시",
+    "taskCommentPlaceholder": "댓글 작성…",
+    "taskComments": "댓글",
+    "taskAddSubtask": "하위 작업 추가",
+    "taskNewSubtask": "새 하위 작업 제목",
+    "taskSubtasks": "하위 작업",
+    "taskMarkers": "작업 마커",
+    "taskConflict": "이 작업은 실행 중인 런에 속해 있어 공동 편집이 비활성화되었습니다.",
     "revoked": "Revoked",
     "title": "공유",
     "loading": "프로젝트 불러오는 중…",

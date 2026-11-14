@@ -60,6 +60,15 @@ export async function sendCommentToPi(input: {
   );
 }
 
+export async function getCommentDeliveryByComment(
+  bindingId: string,
+  commentId: string,
+) {
+  return request<{ delivery: CommentDeliveryReceipt | null }>(
+    `/agent-session/bindings/${encodeURIComponent(bindingId)}/deliveries/by-comment/${encodeURIComponent(commentId)}`,
+  );
+}
+
 export async function getCommentDeliveryStatus(
   bindingId: string,
   deliveryId: string,

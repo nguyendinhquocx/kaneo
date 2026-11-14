@@ -13,6 +13,7 @@ import { authenticateApiRequest } from "../utils/authenticate-api-request";
 import { requestActorIsAgent } from "../execution/phase-progress";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
+import { isTaskAgentControlled } from "../share/full-access";
 import {
   bindAgentSession,
   bindingTaskScope,
@@ -40,6 +41,7 @@ import {
   claimNextCommentDelivery,
   getCommentDeliveryStatus,
   queueCommentDelivery,
+  getLatestDeliveryForComment,
 } from "./delivery-service";
 import { getPrivateObject } from "../storage/s3";
 import { buildAssetResponse } from "../storage/asset-response";
@@ -170,7 +172,13 @@ app.get(
   async (c) => {
     const { taskId } = c.req.valid("param");
     const binding = await findActiveBindingForTask(taskId);
-    if (!binding) return c.json({ bound: false, online: false });
+    if (!binding) {
+      // Spec T5: the owner must be able to tell "never bound" apart from
+      // "a formal run owns this card", so the UI can explain why Send-to-Pi
+      // disappeared instead of silently hiding it.
+      const formalRunOwned = await isTaskAgentControlled(taskId);
+      return c.json({ bound: false, online: false, formalRunOwned });
+    }
     const [task] = await db
       .select({ projectId: schema.taskTable.projectId })
       .from(schema.taskTable)
@@ -296,6 +304,24 @@ app.post(
 );
 
 // Pi holds one bounded long-poll for this exact binding/session/generation.
+// Workspace-member read: latest receipt for one comment (post-reload
+// restore). No principal ownership check; receipts carry no content.
+app.get(
+  "/bindings/:bindingId/deliveries/by-comment/:commentId",
+  describeRoute({
+    operationId: "getCommentDeliveryByComment",
+    tags: ["Agent Sessions"],
+  }),
+  async (c) => {
+    const result = await getLatestDeliveryForComment({
+      userId: getUserId(c),
+      bindingId: c.req.param("bindingId") ?? "",
+      commentId: c.req.param("commentId") ?? "",
+    });
+    return c.json({ delivery: result });
+  },
+);
+
 app.get(
   "/bindings/:bindingId/deliveries/claim",
   describeRoute({

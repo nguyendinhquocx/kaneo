@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi đang kết nối",
+        "formalRunOwned": "Worker chính thức đang giữ card này",
         "offline": "Pi ngoại tuyến",
         "host": "Máy: {{host}}"
       }
@@ -2324,6 +2325,15 @@
     "expires": "Hết hạn {{date}}",
     "neverExpires": "Không hết hạn",
     "revoke": "Thu hồi link",
+    "taskNoComments": "Chưa có bình luận nào",
+    "taskPostComment": "Gửi bình luận",
+    "taskCommentPlaceholder": "Viết bình luận…",
+    "taskComments": "Bình luận",
+    "taskAddSubtask": "Thêm công việc con",
+    "taskNewSubtask": "Tiêu đề công việc con mới",
+    "taskSubtasks": "Công việc con",
+    "taskMarkers": "Marker công việc",
+    "taskConflict": "Công việc này thuộc một execution run đang chạy; chế độ sửa chung đang tắt.",
     "revoked": "Đã thu hồi",
     "copyHint": "Sao chép link ngay — token chỉ hiển thị một lần.",
     "copy": "Sao chép",

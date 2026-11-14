@@ -783,43 +783,98 @@ export async function bindingCardUpdateWorkMarkers(
 
 // Formal-run claim fence: an ad-hoc binding loses the card to the run.
 // Called inside the claim transaction while the run rows are locked.
+// A binding rooted at any ANCESTOR of the claimed task also controls this
+// card (the same-project subtree), so ancestor bindings are fenced too —
+// otherwise a claim on a child would leave a zombie binding that blocks
+// later rebinds via the overlap guard while binding-status still says
+// bound/online.
+const MAX_BINDING_ANCESTOR_DEPTH = 32;
+
+async function taskAncestorChain(
+  tx: ShareTransaction,
+  taskId: string,
+  projectId: string,
+): Promise<string[]> {
+  const chain: string[] = [];
+  let current = taskId;
+  for (let depth = 0; depth < MAX_BINDING_ANCESTOR_DEPTH; depth += 1) {
+    const [parentEdge] = await tx
+      .select({ sourceTaskId: schema.taskRelationTable.sourceTaskId })
+      .from(schema.taskRelationTable)
+      .where(
+        and(
+          eq(schema.taskRelationTable.targetTaskId, current),
+          eq(schema.taskRelationTable.relationType, "subtask"),
+        ),
+      )
+      .orderBy(asc(schema.taskRelationTable.position))
+      .limit(1);
+    if (!parentEdge) break;
+    if (chain.includes(parentEdge.sourceTaskId)) break;
+    const [parent] = await tx
+      .select({ projectId: schema.taskTable.projectId })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, parentEdge.sourceTaskId))
+      .limit(1);
+    if (!parent || parent.projectId !== projectId) break;
+    chain.push(parentEdge.sourceTaskId);
+    current = parentEdge.sourceTaskId;
+  }
+  return chain;
+}
+
 export async function fenceBindingForRunClaim(
   tx: ShareTransaction,
   taskId: string,
 ) {
-  const [binding] = await tx
+  const [claimedTask] = await tx
+    .select({ projectId: schema.taskTable.projectId })
+    .from(schema.taskTable)
+    .where(eq(schema.taskTable.id, taskId))
+    .limit(1);
+  if (!claimedTask) return;
+
+  const bindingTaskIds = [
+    taskId,
+    ...(await taskAncestorChain(tx, taskId, claimedTask.projectId)),
+  ];
+  const bindings = await tx
     .select()
     .from(schema.agentSessionBindingTable)
     .where(
       and(
-        eq(schema.agentSessionBindingTable.taskId, taskId),
+        inArray(schema.agentSessionBindingTable.taskId, bindingTaskIds),
         eq(schema.agentSessionBindingTable.status, "active"),
+        eq(schema.agentSessionBindingTable.projectId, claimedTask.projectId),
       ),
     )
-    .for("update")
-    .limit(1);
-  if (!binding) return;
+    .for("update");
+  if (bindings.length === 0) return;
 
-  // A claimed delivery inside its 60s lease blocks the claim: the Pi side
-  // may be mid-send and must ack or time out first.
-  const [inFlight] = await tx
-    .select({ id: schema.agentSessionDeliveryTable.id })
-    .from(schema.agentSessionDeliveryTable)
-    .where(
-      and(
-        eq(schema.agentSessionDeliveryTable.bindingId, binding.id),
-        eq(schema.agentSessionDeliveryTable.state, "claimed"),
-        gt(
-          schema.agentSessionDeliveryTable.claimedLeaseExpiresAt,
-          new Date(),
+  // Check every candidate binding for an in-flight delivery BEFORE staling
+  // anything, so a 409 never leaves a half-fenced set.
+  for (const binding of bindings) {
+    // A claimed delivery inside its 60s lease blocks the claim: the Pi side
+    // may be mid-send and must ack or time out first.
+    const [inFlight] = await tx
+      .select({ id: schema.agentSessionDeliveryTable.id })
+      .from(schema.agentSessionDeliveryTable)
+      .where(
+        and(
+          eq(schema.agentSessionDeliveryTable.bindingId, binding.id),
+          eq(schema.agentSessionDeliveryTable.state, "claimed"),
+          gt(
+            schema.agentSessionDeliveryTable.claimedLeaseExpiresAt,
+            new Date(),
+          ),
         ),
-      ),
-    )
-    .limit(1);
-  if (inFlight) {
-    throw new HTTPException(409, {
-      message: "ad-hoc-delivery-in-flight",
-    });
+      )
+      .limit(1);
+    if (inFlight) {
+      throw new HTTPException(409, {
+        message: "ad-hoc-delivery-in-flight",
+      });
+    }
   }
 
   // Queue/claimed deliveries beyond the lease die with the binding.
@@ -828,7 +883,10 @@ export async function fenceBindingForRunClaim(
     .set({ state: "stale", updatedAt: new Date() })
     .where(
       and(
-        eq(schema.agentSessionDeliveryTable.bindingId, binding.id),
+        inArray(
+          schema.agentSessionDeliveryTable.bindingId,
+          bindings.map((binding) => binding.id),
+        ),
         eq(schema.agentSessionDeliveryTable.state, "queued"),
       ),
     );
@@ -837,7 +895,10 @@ export async function fenceBindingForRunClaim(
     .set({ state: "unknown", updatedAt: new Date() })
     .where(
       and(
-        eq(schema.agentSessionDeliveryTable.bindingId, binding.id),
+        inArray(
+          schema.agentSessionDeliveryTable.bindingId,
+          bindings.map((binding) => binding.id),
+        ),
         eq(schema.agentSessionDeliveryTable.state, "claimed"),
         or(
           isNull(schema.agentSessionDeliveryTable.claimedLeaseExpiresAt),
@@ -845,16 +906,18 @@ export async function fenceBindingForRunClaim(
         ),
       ),
     );
-  await tx
-    .update(schema.agentSessionBindingTable)
-    .set({
-      status: "revoked",
-      revokedAt: new Date(),
-      revokedReason: "formal_run_claim",
-      bindingGeneration: binding.bindingGeneration + 1,
-      updatedAt: new Date(),
-    })
-    .where(eq(schema.agentSessionBindingTable.id, binding.id));
+  for (const binding of bindings) {
+    await tx
+      .update(schema.agentSessionBindingTable)
+      .set({
+        status: "revoked",
+        revokedAt: new Date(),
+        revokedReason: "formal_run_claim",
+        bindingGeneration: binding.bindingGeneration + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.agentSessionBindingTable.id, binding.id));
+  }
 }
 
 // --- assets ----------------------------------------------------------------

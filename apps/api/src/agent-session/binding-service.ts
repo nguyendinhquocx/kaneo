@@ -125,10 +125,21 @@ export async function bindAgentSession(input: {
   await assertNoLiveFormalRun(input.taskId);
 
   return db.transaction(async (tx) => {
+    // ALL advisory locks precede every task-row lock. A fixed global order
+    // (advisory session -> advisory project -> task rows -> binding rows)
+    // cannot form a lock cycle with claimTaskRun (task rows -> binding rows)
+    // or with a concurrent bind, whichever tasks are involved.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${`session:${input.sessionId}`}))`,
+    );
+    // Serialize bindings within a project so two different roots cannot
+    // concurrently claim overlapping subtask trees.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${`binding-project:${task.projectId}`}))`,
+    );
     // Use the same task-row lock order as claimTaskRun. This closes the race
     // where a formal run claims after the preflight but before the bind row
-    // inserts. A second advisory lock serializes one Pi session rebinding to
-    // a different task.
+    // inserts.
     const [lockedTask] = await tx
       .select({ id: schema.taskTable.id, projectId: schema.taskTable.projectId })
       .from(schema.taskTable)
@@ -139,18 +150,10 @@ export async function bindAgentSession(input: {
       throw new HTTPException(404, { message: "Not found" });
     }
     await assertNoLiveFormalRun(input.taskId, tx);
-    // Serialize bindings within a project so two different roots cannot
-    // concurrently claim overlapping subtask trees.
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${`binding-project:${lockedTask.projectId}`}))`,
-    );
     const currentPrincipal = await getOwnedAgentPrincipal(
       input.userId,
       input.agentPrincipalId,
       tx,
-    );
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${`session:${input.sessionId}`}))`,
     );
     const candidateBindings = await tx
       .select()

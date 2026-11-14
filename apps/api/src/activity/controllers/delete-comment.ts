@@ -4,7 +4,7 @@ import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
-import { markQueuedCommentDeliveriesStale } from "../../agent-session/delivery-service";
+import { markQueuedCommentDeliveriesStaleWith } from "../../agent-session/delivery-service";
 
 async function deleteComment(userId: string, id: string) {
   const [existing] = await db
@@ -29,16 +29,23 @@ async function deleteComment(userId: string, id: string) {
     });
   }
 
-  const [deletedComment] = await db
-    .delete(activityTable)
-    .where(
-      and(
-        eq(activityTable.id, id),
-        eq(activityTable.userId, userId),
-        eq(activityTable.type, "comment"),
-      ),
-    )
-    .returning();
+  // A deleted comment must invalidate queued Send-to-Pi receipts in the
+  // same transaction, or a claim could still pin the just-deleted content.
+  const deletedComment = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .delete(activityTable)
+      .where(
+        and(
+          eq(activityTable.id, id),
+          eq(activityTable.userId, userId),
+          eq(activityTable.type, "comment"),
+        ),
+      )
+      .returning();
+    if (!row) return null;
+    await markQueuedCommentDeliveriesStaleWith(tx, row.id);
+    return row;
+  });
 
   if (!deletedComment) {
     throw new HTTPException(404, {
@@ -48,7 +55,6 @@ async function deleteComment(userId: string, id: string) {
 
   // Deletion invalidates queued deliveries; a claimed attempt remains
   // truthful and is reconciled by its lease/ack state machine.
-  void markQueuedCommentDeliveriesStale(deletedComment.id).catch(() => {});
 
   const [task] = await db
     .select({ projectId: taskTable.projectId })

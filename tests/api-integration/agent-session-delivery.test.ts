@@ -389,6 +389,43 @@ describe("API integration: durable comment-to-Pi delivery (SPEC T5)", () => {
     });
   });
 
+  it("restores the latest receipt by comment for workspace members after reload", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const task = await seedTask(project.id);
+    mockAuthenticatedSession(admin.user);
+    const { app } = createApp();
+    const { binding } = await bindTask(app, admin.user.id, task.id);
+    const comment = await createComment(app, task.id, "restore receipt");
+
+    const queued = await queueComment(app, binding, comment.id, "restore-key-1");
+    expect(queued.status).toBe(200);
+    const queuedPayload = (await queued.json()) as {
+      receipt: { deliveryId: string; state: string };
+    };
+
+    const restored = await app.request(
+      `/api/agent-session/bindings/${binding.bindingId}/deliveries/by-comment/${comment.id}`,
+    );
+    expect(restored.status).toBe(200);
+    expect(await restored.json()).toEqual({
+      delivery: expect.objectContaining({
+        deliveryId: queuedPayload.receipt.deliveryId,
+        state: "queued",
+        commentId: comment.id,
+      }),
+    });
+
+    // Unknown comment id reports an empty receipt, not an error.
+    const missing = await app.request(
+      `/api/agent-session/bindings/${binding.bindingId}/deliveries/by-comment/cm-nonexistent0000000000`,
+    );
+    expect(missing.status).toBe(200);
+    expect(await missing.json()).toEqual({ delivery: null });
+  });
+
   it("API-key comments and attachment-only browser comments do not self-steer or trigger no-run fallback", async () => {
     const admin = await createWorkspaceMember({ role: "admin" });
     const { project } = await createProjectFixture({

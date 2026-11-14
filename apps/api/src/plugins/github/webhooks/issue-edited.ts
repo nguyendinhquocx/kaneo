@@ -152,7 +152,13 @@ export async function handleIssueEdited(payload: IssueEditedPayload) {
     if (Object.keys(updateData).length > 0) {
       await db
         .update(taskTable)
-        .set(updateData)
+        .set({
+          ...updateData,
+          // Webhook sync writes are ordinary content edits: advance the
+          // content CAS token so stale clients conflict instead of silently
+          // overwriting the synced fields.
+          contentRevision: task.contentRevision + 1,
+        })
         .where(eq(taskTable.id, task.id));
 
       await updateExternalLink(externalLink.id, {

@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import TaskAgentBindingStatus from "./task-agent-binding-status";
 
 const query = vi.hoisted(() => ({
-  data: null as null | { bound: boolean; online: boolean; hostId?: string },
+  data: null as null | {
+    bound: boolean;
+    online: boolean;
+    hostId?: string;
+    formalRunOwned?: boolean;
+  },
   isLoading: false,
   isError: false,
 }));
@@ -16,7 +21,9 @@ vi.mock("react-i18next", () => ({
     t: (key: string, vars?: { host?: string }) =>
       key === "tasks:detail.agentBinding.host"
         ? `Host: ${vars?.host ?? ""}`
-        : key === "tasks:detail.agentBinding.online"
+        : key === "tasks:detail.agentBinding.formalRunOwned"
+          ? "Formal worker owns this card"
+          : key === "tasks:detail.agentBinding.online"
           ? "Pi connected"
           : "Pi offline",
   }),
@@ -36,6 +43,12 @@ describe("TaskAgentBindingStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Pi connected · Host: pi-prodesk",
     );
+  });
+
+  it("names the formal worker as owner instead of rendering nothing", () => {
+    query.data = { bound: false, online: false, formalRunOwned: true };
+    render(<TaskAgentBindingStatus taskId="task-1" />);
+    expect(screen.getByRole("status", { name: "Formal worker owns this card" })).toBeVisible();
   });
 
   it("shows offline for a bound session with an old heartbeat", () => {

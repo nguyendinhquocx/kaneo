@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi συνδεδεμένο",
+        "formalRunOwned": "Επίσημος worker κατέχει αυτή την κάρτα",
         "offline": "Pi εκτός σύνδεσης",
         "host": "Host: {{host}}"
       }
@@ -2364,6 +2365,15 @@
       "title": "Πάρα πολλά αιτήματα"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Δεν υπάρχουν σχόλια",
+    "taskPostComment": "Δημοσίευση σχολίου",
+    "taskCommentPlaceholder": "Γράψτε ένα σχόλιο…",
+    "taskComments": "Σχόλια",
+    "taskAddSubtask": "Προσθήκη υποεργασίας",
+    "taskNewSubtask": "Τίτλος νέας υποεργασίας",
+    "taskSubtasks": "Υποεργασίες",
+    "taskMarkers": "Δείκτες εργασίας",
+    "taskConflict": "Αυτή η εργασία ανήκει σε ενεργό execution run· η κοινή επεξεργασία είναι απενεργοποιημένη.",
     "revoked": "Revoked",
     "title": "Κοινοποίηση",
     "loading": "Φόρτωση έργου…",

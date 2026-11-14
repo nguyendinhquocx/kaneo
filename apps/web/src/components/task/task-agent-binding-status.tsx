@@ -8,7 +8,26 @@ export default function TaskAgentBindingStatus({ taskId }: { taskId: string }) {
   const { t } = useTranslation();
   const { data, isLoading, isError } = useGetTaskBindingStatus(taskId);
 
-  if (isLoading || isError || !data?.bound) return null;
+  // Spec T5: when a formal run owns the card the Send-to-Pi action hides —
+  // say so instead of rendering nothing, so "never bound" stays distinct.
+  if (isLoading || isError) return null;
+  if (!data?.bound) {
+    if (!data?.formalRunOwned) return null;
+    const label = t("tasks:detail.agentBinding.formalRunOwned");
+    return (
+      <div
+        className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground"
+        aria-label={label}
+        role="status"
+      >
+        <span
+          aria-hidden="true"
+          className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50"
+        />
+        <span>{label}</span>
+      </div>
+    );
+  }
 
   const statusLabel = data.online
     ? t("tasks:detail.agentBinding.online")

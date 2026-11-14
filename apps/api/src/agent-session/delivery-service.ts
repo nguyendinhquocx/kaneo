@@ -4,7 +4,7 @@
 // binding/session/generation; expired claimed attempts become `unknown` and
 // are never automatically replayed.
 import { createHash } from "node:crypto";
-import { and, asc, eq, gt, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lte } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import { extractAssetIds } from "../storage/cleanup-assets";
@@ -549,7 +549,17 @@ export async function getCommentDeliveryStatus(input: {
 }
 
 export async function markQueuedCommentDeliveriesStale(commentId: string) {
-  await db
+  await markQueuedCommentDeliveriesStaleWith(db, commentId);
+}
+
+// Transactional variant so the comment mutation and its delivery invalidation
+// commit atomically; the fire-and-forget wrapper stays for callers outside a
+// transaction.
+export async function markQueuedCommentDeliveriesStaleWith(
+  executor: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0],
+  commentId: string,
+) {
+  await executor
     .update(schema.agentSessionDeliveryTable)
     .set({ state: "stale", updatedAt: new Date() })
     .where(
@@ -558,6 +568,47 @@ export async function markQueuedCommentDeliveriesStale(commentId: string) {
         eq(schema.agentSessionDeliveryTable.state, "queued"),
       ),
     );
+}
+
+// Read-only: latest receipt for one comment on this binding. Workspace
+// member scope (no principal ownership check) so the sender can restore the
+// last receipt state after a page reload; receipts carry no comment content.
+export async function getLatestDeliveryForComment(input: {
+  userId: string;
+  bindingId: string;
+  commentId: string;
+}) {
+  const [binding] = await db
+    .select()
+    .from(schema.agentSessionBindingTable)
+    .where(eq(schema.agentSessionBindingTable.id, input.bindingId))
+    .limit(1);
+  if (!binding) throw staleBinding();
+  await assertUserWorkspacePermission(
+    input.userId,
+    (
+      await db
+        .select({ workspaceId: schema.projectTable.workspaceId })
+        .from(schema.projectTable)
+        .where(eq(schema.projectTable.id, binding.projectId))
+        .limit(1)
+    )[0]?.workspaceId ?? "",
+    { task: ["read"] },
+  ).catch(() => {
+    throw staleBinding();
+  });
+  const [delivery] = await db
+    .select()
+    .from(schema.agentSessionDeliveryTable)
+    .where(
+      and(
+        eq(schema.agentSessionDeliveryTable.bindingId, input.bindingId),
+        eq(schema.agentSessionDeliveryTable.commentId, input.commentId),
+      ),
+    )
+    .orderBy(desc(schema.agentSessionDeliveryTable.createdAt))
+    .limit(1);
+  return delivery ? receipt(delivery) : null;
 }
 
 export type { Delivery, ScopedInput };

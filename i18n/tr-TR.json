@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi bağlı",
+        "formalRunOwned": "Resmi worker bu kartı sahipleniyor",
         "offline": "Pi çevrimdışı",
         "host": "Ana makine: {{host}}"
       }
@@ -2364,6 +2365,15 @@
       "title": "Çok fazla istek"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Henüz yorum yok",
+    "taskPostComment": "Yorum gönder",
+    "taskCommentPlaceholder": "Yorum yaz…",
+    "taskComments": "Yorumlar",
+    "taskAddSubtask": "Alt görev ekle",
+    "taskNewSubtask": "Yeni alt görev başlığı",
+    "taskSubtasks": "Alt görevler",
+    "taskMarkers": "Çalışma işaretleyicileri",
+    "taskConflict": "Bu görev aktif bir execution run’ın parçası; paylaşımlı düzenleme devre dışı.",
     "revoked": "Revoked",
     "title": "Paylaş",
     "loading": "Proje yükleniyor…",

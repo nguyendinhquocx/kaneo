@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi verbonden",
+        "formalRunOwned": "Formele worker is eigenaar van deze kaart",
         "offline": "Pi offline",
         "host": "Host: {{host}}"
       }
@@ -2364,6 +2365,15 @@
       "title": "Te veel verzoeken"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Nog geen reacties",
+    "taskPostComment": "Reactie plaatsen",
+    "taskCommentPlaceholder": "Schrijf een reactie…",
+    "taskComments": "Reacties",
+    "taskAddSubtask": "Subtaak toevoegen",
+    "taskNewSubtask": "Titel van nieuwe subtaak",
+    "taskSubtasks": "Subtaken",
+    "taskMarkers": "Werkmarkers",
+    "taskConflict": "Deze taak maakt deel uit van een actieve execution run; gedeeld bewerken is uitgeschakeld.",
     "revoked": "Revoked",
     "title": "Delen",
     "loading": "Project laden…",

@@ -1787,6 +1787,7 @@
       },
       "agentBinding": {
         "online": "Pi подключен",
+        "formalRunOwned": "Формальный worker владеет этой карточкой",
         "offline": "Pi не в сети",
         "host": "Узел: {{host}}"
       }
@@ -2426,6 +2427,15 @@
       "title": "Слишком много запросов"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Комментариев пока нет",
+    "taskPostComment": "Отправить комментарий",
+    "taskCommentPlaceholder": "Написать комментарий…",
+    "taskComments": "Комментарии",
+    "taskAddSubtask": "Добавить подзадачу",
+    "taskNewSubtask": "Заголовок новой подзадачи",
+    "taskSubtasks": "Подзадачи",
+    "taskMarkers": "Рабочие маркеры",
+    "taskConflict": "Эта задача входит в активный execution run; совместное редактирование отключено.",
     "revoked": "Revoked",
     "title": "Поделиться",
     "loading": "Загрузка проекта…",

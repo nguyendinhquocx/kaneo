@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi connecté",
+        "formalRunOwned": "Un worker formel possède cette carte",
         "offline": "Pi hors ligne",
         "host": "Hôte : {{host}}"
       }
@@ -2364,6 +2365,15 @@
       "title": "Trop de requêtes"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Aucun commentaire pour le moment",
+    "taskPostComment": "Publier le commentaire",
+    "taskCommentPlaceholder": "Écrire un commentaire…",
+    "taskComments": "Commentaires",
+    "taskAddSubtask": "Ajouter une sous-tâche",
+    "taskNewSubtask": "Titre de la nouvelle sous-tâche",
+    "taskSubtasks": "Sous-tâches",
+    "taskMarkers": "Marqueurs de travail",
+    "taskConflict": "Cette tâche fait partie d'un run d'exécution actif ; l'édition partagée est désactivée.",
     "revoked": "Revoked",
     "title": "Partager",
     "loading": "Chargement du projet…",

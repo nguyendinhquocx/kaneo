@@ -10,6 +10,7 @@ import {
 import { useSendCommentToPi } from "@/hooks/mutations/agent-session/use-send-comment-to-pi";
 import { useGetTaskBindingStatus } from "@/hooks/queries/agent-session/use-get-task-binding-status";
 import { useGetCommentDeliveryStatus } from "@/hooks/queries/agent-session/use-get-comment-delivery-status";
+import { useGetCommentDeliveryByComment } from "@/hooks/queries/agent-session/use-get-comment-delivery-by-comment";
 import type { CommentDeliveryState } from "@/fetchers/agent-session/comment-delivery";
 
 export default function SendCommentToPiAction({
@@ -27,12 +28,21 @@ export default function SendCommentToPiAction({
   const [error, setError] = useState<string | null>(null);
   const actionKey = useRef<string | null>(null);
   const send = useSendCommentToPi();
-  const delivery = useGetCommentDeliveryStatus(
+  const liveDelivery = useGetCommentDeliveryStatus(
     binding.data?.bindingId,
     deliveryId,
   );
+  // After a reload the local receipt is gone; restore the latest server
+  // receipt for this comment so queued/unknown state stays visible.
+  const restoredDelivery = useGetCommentDeliveryByComment(
+    binding.data?.bindingId,
+    commentId,
+  );
 
-  const state = delivery.data?.state ?? lastState;
+  const state =
+    liveDelivery.data?.state ??
+    lastState ??
+    restoredDelivery.data?.delivery?.state;
   const bindingData = binding.data;
   const bindingId = bindingData?.bindingId;
   const sessionId = bindingData?.sessionId;

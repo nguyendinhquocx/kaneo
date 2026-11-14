@@ -5,6 +5,7 @@ const apiBase = resolveApiBaseUrl(import.meta.env.VITE_API_URL as string | undef
 export type TaskAgentBindingStatus = {
   bound: boolean;
   online: boolean;
+  formalRunOwned?: boolean;
   hostId?: string;
   bindingId?: string;
   rootTaskId?: string;

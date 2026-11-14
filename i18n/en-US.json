@@ -1788,6 +1788,7 @@
       },
       "agentBinding": {
         "online": "Pi connected",
+        "formalRunOwned": "Formal worker owns this card",
         "offline": "Pi offline",
         "host": "Host: {{host}}"
       }
@@ -2324,6 +2325,15 @@
     "expires": "Expires {{date}}",
     "neverExpires": "Does not expire",
     "revoke": "Revoke link",
+    "taskNoComments": "No comments yet",
+    "taskPostComment": "Post comment",
+    "taskCommentPlaceholder": "Write a comment…",
+    "taskComments": "Comments",
+    "taskAddSubtask": "Add subtask",
+    "taskNewSubtask": "New subtask title",
+    "taskSubtasks": "Subtasks",
+    "taskMarkers": "Work markers",
+    "taskConflict": "This task is part of an active execution run; shared editing is disabled.",
     "revoked": "Revoked",
     "copyHint": "Copy this link now — the token is shown only once.",
     "copy": "Copy",

@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi е поврзан",
+        "formalRunOwned": "Формален worker ја поседува картичката",
         "offline": "Pi е офлајн",
         "host": "Домаќин: {{host}}"
       }
@@ -2364,6 +2365,15 @@
       "title": "Премногу барања"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Се уште нема коментари",
+    "taskPostComment": "Објави коментар",
+    "taskCommentPlaceholder": "Напиши коментар…",
+    "taskComments": "Коментари",
+    "taskAddSubtask": "Додади подзадача",
+    "taskNewSubtask": "Наслов на нова подзадача",
+    "taskSubtasks": "Подзадачи",
+    "taskMarkers": "Работни маркери",
+    "taskConflict": "Оваа задача е дел од активен execution run; заедничкото уредување е оневозможено.",
     "revoked": "Revoked",
     "title": "Сподели",
     "loading": "Се вчитува проектот…",

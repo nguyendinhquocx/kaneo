@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi conectado",
+        "formalRunOwned": "Un worker formal posee esta tarjeta",
         "offline": "Pi desconectado",
         "host": "Host: {{host}}"
       }
@@ -2364,6 +2365,15 @@
       "title": "Demasiadas solicitudes"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Aún no hay comentarios",
+    "taskPostComment": "Publicar comentario",
+    "taskCommentPlaceholder": "Escribe un comentario…",
+    "taskComments": "Comentarios",
+    "taskAddSubtask": "Añadir subtarea",
+    "taskNewSubtask": "Título de la nueva subtarea",
+    "taskSubtasks": "Subtareas",
+    "taskMarkers": "Marcadores de trabajo",
+    "taskConflict": "Esta tarea forma parte de un run de ejecución activo; la edición compartida está deshabilitada.",
     "revoked": "Revoked",
     "title": "Compartir",
     "loading": "Cargando proyecto…",

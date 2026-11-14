@@ -4,7 +4,7 @@ import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
-import { markQueuedCommentDeliveriesStale } from "../../agent-session/delivery-service";
+import { markQueuedCommentDeliveriesStaleWith } from "../../agent-session/delivery-service";
 
 async function updateComment(userId: string, id: string, content: string) {
   const [existing] = await db
@@ -29,26 +29,30 @@ async function updateComment(userId: string, id: string, content: string) {
     });
   }
 
-  const [updated] = await db
-    .update(activityTable)
-    .set({ content })
-    .where(
-      and(
-        eq(activityTable.id, id),
-        eq(activityTable.userId, userId),
-        eq(activityTable.type, "comment"),
-      ),
-    )
-    .returning();
+  // The queued Send-to-Pi receipt pins this exact content revision/hash, so
+  // the invalidation must commit atomically with the edit.
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(activityTable)
+      .set({ content })
+      .where(
+        and(
+          eq(activityTable.id, id),
+          eq(activityTable.userId, userId),
+          eq(activityTable.type, "comment"),
+        ),
+      )
+      .returning();
+    if (!row) return null;
+    await markQueuedCommentDeliveriesStaleWith(tx, row.id);
+    return row;
+  });
 
   if (!updated) {
     throw new HTTPException(404, {
       message: "Comment not found or you are not the author",
     });
   }
-
-  // A queued Send-to-Pi receipt pins this exact content revision/hash.
-  void markQueuedCommentDeliveriesStale(updated.id).catch(() => {});
 
   const [task] = await db
     .select({ projectId: taskTable.projectId })

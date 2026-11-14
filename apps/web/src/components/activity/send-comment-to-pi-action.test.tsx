@@ -5,6 +5,7 @@ import SendCommentToPiAction from "./send-comment-to-pi-action";
 const state = vi.hoisted(() => ({
   binding: null as unknown,
   delivery: null as unknown,
+  restoredDelivery: null as unknown,
   mutateAsync: vi.fn(),
 }));
 
@@ -13,6 +14,9 @@ vi.mock("@/hooks/queries/agent-session/use-get-task-binding-status", () => ({
 }));
 vi.mock("@/hooks/queries/agent-session/use-get-comment-delivery-status", () => ({
   useGetCommentDeliveryStatus: () => ({ data: state.delivery }),
+}));
+vi.mock("@/hooks/queries/agent-session/use-get-comment-delivery-by-comment", () => ({
+  useGetCommentDeliveryByComment: () => ({ data: state.restoredDelivery }),
 }));
 vi.mock("@/hooks/mutations/agent-session/use-send-comment-to-pi", () => ({
   useSendCommentToPi: () => ({ mutateAsync: state.mutateAsync, isPending: false }),
@@ -66,6 +70,7 @@ afterEach(() => {
 beforeEach(() => {
   state.binding = null;
   state.delivery = null;
+  state.restoredDelivery = null;
   state.mutateAsync.mockReset();
   let next = 0;
   vi.stubGlobal("crypto", { randomUUID: () => `client-key-${++next}` });
@@ -101,6 +106,27 @@ describe("SendCommentToPiAction", () => {
       commentId: "comment-1",
       clientActionKey: "client-key-2",
     });
+  });
+
+  it("restores the last server receipt for a comment after reload", () => {
+    liveBinding();
+    state.restoredDelivery = {
+      delivery: {
+        deliveryId: "delivery-restored",
+        bindingId: "binding-1",
+        bindingGeneration: 4,
+        commentId: "comment-1",
+        clientActionKey: "key-1",
+        state: "enqueued",
+        createdAt: "2026-11-14T09:00:00.000Z",
+        expiresAt: "2026-11-14T10:00:00.000Z",
+        enqueuedAt: "2026-11-14T09:00:05.000Z",
+      },
+    };
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+    expect(screen.getByText(/Queued to Pi, not confirmed read/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Send again/ })).toBeVisible();
+    expect(state.mutateAsync).not.toHaveBeenCalled();
   });
 
   it("requires an explicit warned resend after an unknown attempt", async () => {

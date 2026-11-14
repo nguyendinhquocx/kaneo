@@ -1777,6 +1777,7 @@
       },
       "agentBinding": {
         "online": "Pi verbunden",
+        "formalRunOwned": "Formeller Worker besitzt diese Karte",
         "offline": "Pi offline",
         "host": "Host: {{host}}"
       }
@@ -2398,6 +2399,15 @@
       "title": "Zu viele Anfragen"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Noch keine Kommentare",
+    "taskPostComment": "Kommentar senden",
+    "taskCommentPlaceholder": "Kommentar schreiben…",
+    "taskComments": "Kommentare",
+    "taskAddSubtask": "Unteraufgabe hinzufügen",
+    "taskNewSubtask": "Titel der neuen Unteraufgabe",
+    "taskSubtasks": "Unteraufgaben",
+    "taskMarkers": "Arbeits-Marker",
+    "taskConflict": "Diese Aufgabe ist Teil eines aktiven Execution-Runs; gemeinsames Bearbeiten ist deaktiviert.",
     "revoked": "Revoked",
     "title": "Teilen",
     "loading": "Projekt wird geladen…",

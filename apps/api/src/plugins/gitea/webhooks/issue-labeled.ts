@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import db from "../../../database";
 import { labelTable, taskTable } from "../../../database/schema";
 import { publishEvent } from "../../../events";
@@ -147,7 +147,13 @@ export async function handleGiteaIssueLabeled(
       if (priority) {
         await db
           .update(taskTable)
-          .set({ priority })
+          .set({
+            priority,
+            // Label-driven sync writes are ordinary content edits: advance
+            // the content CAS token so stale clients conflict instead of
+            // silently overwriting the synced field.
+            contentRevision: sql`${taskTable.contentRevision} + 1`,
+          })
           .where(eq(taskTable.id, existingLink.taskId));
       }
 

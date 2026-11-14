@@ -1779,6 +1779,7 @@
       },
       "agentBinding": {
         "online": "Pi підключений",
+        "formalRunOwned": "Формальний worker володіє цією карткою",
         "offline": "Pi не в мережі",
         "host": "Вузол: {{host}}"
       }
@@ -2370,6 +2371,15 @@
       "title": "Забагато запитів"
     },
     "revoke": "Revoke link",
+    "taskNoComments": "Коментарів поки немає",
+    "taskPostComment": "Надіслати коментар",
+    "taskCommentPlaceholder": "Напишіть коментар…",
+    "taskComments": "Коментарі",
+    "taskAddSubtask": "Додати підзавдання",
+    "taskNewSubtask": "Заголовок нового підзавдання",
+    "taskSubtasks": "Підзавдання",
+    "taskMarkers": "Робочі маркери",
+    "taskConflict": "Це завдання входить до активного execution run; спільне редагування вимкнено.",
     "revoked": "Revoked",
     "title": "Поділитися",
     "loading": "Завантаження проєкту…",
