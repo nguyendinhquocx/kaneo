@@ -642,4 +642,80 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     );
     expect(stale.status).toBe(409);
   });
+
+  it("claiming a descendant fences the binding rooted at an ancestor", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const [parent] = await db
+      .insert(schema.taskTable)
+      .values({ projectId: project.id, title: "Parent card", status: "to-do", number: null })
+      .returning();
+    const [child] = await db
+      .insert(schema.taskTable)
+      .values({ projectId: project.id, title: "Child card", status: "to-do", number: null })
+      .returning();
+    await db.insert(schema.taskRelationTable).values({
+      sourceTaskId: parent.id,
+      targetTaskId: child.id,
+      relationType: "subtask",
+    });
+
+    mockAuthenticatedSession(admin.user);
+    const { app } = createApp();
+    const bound = await bindCard(app, parent.id, admin.user.id);
+
+    const principalAdmin = await seedPrincipal(admin.user.id);
+    await db.insert(schema.executionManifestTable).values({
+      projectId: project.id,
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+      verificationProfile: "descendant-claim-test",
+      allowedAgentIds: [principalAdmin.id],
+    });
+    await db.insert(schema.githubIntegrationTable).values({
+      projectId: project.id,
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+      isActive: true,
+    });
+
+    mockAuthenticatedSessions(admin.user, {
+      "claim-descendant-token": admin.user,
+    });
+    const claim = await app.request(
+      `/api/execution/task/${child.id}/runs/claim`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer claim-descendant-token",
+          "content-type": "application/json",
+          "idempotency-key": "claim-fence-descendant-1",
+        },
+        body: JSON.stringify({
+          agentPrincipalId: principalAdmin.id,
+          scope: ["README.md"],
+        }),
+      },
+    );
+    if (claim.status !== 201) {
+      throw new Error(`formal claim ${claim.status}: ${await claim.text()}`);
+    }
+
+    // The binding lives on the ancestor, not the claimed task; the fence
+    // must still revoke it, or a zombie binding stays bound/online while
+    // blocking every later rebind through the overlap guard.
+    const [binding] = await db
+      .select()
+      .from(schema.agentSessionBindingTable)
+      .where(eq(schema.agentSessionBindingTable.id, bound.bindingId));
+    expect(binding.status).toBe("revoked");
+    expect(binding.revokedReason).toBe("formal_run_claim");
+    expect(binding.bindingGeneration).toBe(bound.bindingGeneration + 1);
+    const stale = await app.request(
+      `/api/agent-session/bindings/${bound.bindingId}?sessionId=pi-session-a&generation=${bound.bindingGeneration}`,
+    );
+    expect(stale.status).toBe(409);
+  });
 });
