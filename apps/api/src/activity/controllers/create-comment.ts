@@ -10,11 +10,17 @@ import {
 } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { maybeSteerActiveRunFromComment } from "../../execution/service";
+import { findActiveBindingForTask } from "../../agent-session/binding-service";
 import createNotification from "../../notification/controllers/create-notification";
 import { extractAssetIds } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
-async function createComment(taskId: string, userId: string, content: string) {
+async function createComment(
+  taskId: string,
+  userId: string,
+  content: string,
+  actorIsAgent: boolean,
+) {
   const [activity] = await db
     .insert(activityTable)
     .values({
@@ -45,14 +51,30 @@ async function createComment(taskId: string, userId: string, content: string) {
       );
   }
 
-  // SPEC-kaneo-wavefix-v0-2 (T11): a human comment on a task with a live
-  // worker run becomes a steer_message control request (same pipeline as
-  // Telegram replies). Best-effort: never fail the comment itself.
-  maybeSteerActiveRunFromComment({
-    taskId,
-    userId,
-    content,
-  }).catch(() => {});
+  // SPEC-2026-11-10 T5: ordinary comments never become implicit Pi prompts
+  // for an ad-hoc bound session. API-key/MCP agents never self-steer either.
+  // Attachment-only comments are metadata, not a human instruction. Formal
+  // task_run behavior remains unchanged for a human browser-session comment.
+  const steerableText = content
+    .replace(/<kaneo-attachment\b[^>]*\/\s*>/gi, "")
+    .trim();
+  if (!actorIsAgent && steerableText) {
+    let hasAdHocBinding = true;
+    try {
+      hasAdHocBinding = Boolean(await findActiveBindingForTask(taskId));
+    } catch {
+      // Fail closed: if routing state is unavailable, do not guess a Pi
+      // target or run the no-active-run fallback from a plain discussion.
+      hasAdHocBinding = true;
+    }
+    if (!hasAdHocBinding) {
+      maybeSteerActiveRunFromComment({
+        taskId,
+        userId,
+        content: steerableText,
+      }).catch(() => {});
+    }
+  }
 
   const [user] = await db
     .select({ name: userTable.name })

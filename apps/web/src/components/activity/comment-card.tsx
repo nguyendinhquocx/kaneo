@@ -21,6 +21,8 @@ import {
 import useDeleteComment from "@/hooks/mutations/comment/use-delete-comment";
 import useUpdateComment from "@/hooks/mutations/comment/use-update-comment";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
+import { getShareCapability } from "@/components/share/share-capability";
+import SendCommentToPiAction from "./send-comment-to-pi-action";
 import { formatDateTime, formatRelativeTime } from "@/lib/format";
 import { getInitials } from "@/lib/get-initials";
 import { toast } from "@/lib/toast";
@@ -51,8 +53,12 @@ export default function CommentCard({
 }: CommentCardProps) {
   const { t } = useTranslation();
   const { user: currentUser } = useAuth();
-  const { canManageShareLinks } = useWorkspacePermission();
+  const { canManageShareLinks, canManageTasks } = useWorkspacePermission();
+  const shareCapability = getShareCapability();
   const [isEditing, setIsEditing] = useState(false);
+  const canSendToPi = Boolean(
+    currentUser?.id && !shareCapability && canManageTasks() && !isEditing,
+  );
   const [editedContent, setEditedContent] = useState(content);
   const { mutateAsync: updateComment, isPending } = useUpdateComment();
   const { mutate: deleteComment, isPending: isDeleting } =
@@ -203,8 +209,11 @@ export default function CommentCard({
           )}
         </div>
 
-        {(canManageShareLinks() || (canEdit && !isEditing)) && (
+        {(canManageShareLinks() || (canEdit && !isEditing) || canSendToPi) && (
           <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+            {canSendToPi ? (
+              <SendCommentToPiAction taskId={taskId} commentId={commentId} />
+            ) : null}
             {canManageShareLinks() ? (
               <CopyShareLinkButton
                 resourceType="activity_comment"

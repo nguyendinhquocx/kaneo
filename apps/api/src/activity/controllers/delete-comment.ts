@@ -4,6 +4,7 @@ import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
+import { markQueuedCommentDeliveriesStale } from "../../agent-session/delivery-service";
 
 async function deleteComment(userId: string, id: string) {
   const [existing] = await db
@@ -44,6 +45,10 @@ async function deleteComment(userId: string, id: string) {
       message: "Comment not found or you are not the author",
     });
   }
+
+  // Deletion invalidates queued deliveries; a claimed attempt remains
+  // truthful and is reconciled by its lease/ack state machine.
+  void markQueuedCommentDeliveriesStale(deletedComment.id).catch(() => {});
 
   const [task] = await db
     .select({ projectId: taskTable.projectId })

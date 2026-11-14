@@ -3,7 +3,7 @@
 // actions accept no target id, child/asset/comment ids only flow through
 // their named helper, and the API rechecks subtree membership per call.
 // Every write CASes on contentRevision and returns the fresh revision.
-import { and, asc, count, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import {
@@ -829,7 +829,20 @@ export async function fenceBindingForRunClaim(
     .where(
       and(
         eq(schema.agentSessionDeliveryTable.bindingId, binding.id),
-        inArray(schema.agentSessionDeliveryTable.state, ["queued", "claimed"]),
+        eq(schema.agentSessionDeliveryTable.state, "queued"),
+      ),
+    );
+  await tx
+    .update(schema.agentSessionDeliveryTable)
+    .set({ state: "unknown", updatedAt: new Date() })
+    .where(
+      and(
+        eq(schema.agentSessionDeliveryTable.bindingId, binding.id),
+        eq(schema.agentSessionDeliveryTable.state, "claimed"),
+        or(
+          isNull(schema.agentSessionDeliveryTable.claimedLeaseExpiresAt),
+          lte(schema.agentSessionDeliveryTable.claimedLeaseExpiresAt, new Date()),
+        ),
       ),
     );
   await tx

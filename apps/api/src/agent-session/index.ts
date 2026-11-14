@@ -10,11 +10,14 @@ import { describeRoute, validator } from "hono-openapi";
 import * as v from "valibot";
 import db, { schema } from "../database";
 import { authenticateApiRequest } from "../utils/authenticate-api-request";
+import { requestActorIsAgent } from "../execution/phase-progress";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import {
   bindAgentSession,
   bindingTaskScope,
+  findActiveBindingForTask,
+  getOwnedAgentPrincipal,
   heartbeatAgentSessionBinding,
   showAgentSessionBinding,
   unbindAgentSession,
@@ -32,6 +35,12 @@ import {
   bindingCardUpdateWorkMarkers,
   canBindingReadAsset,
 } from "./card-tools";
+import {
+  acknowledgeCommentDelivery,
+  claimNextCommentDelivery,
+  getCommentDeliveryStatus,
+  queueCommentDelivery,
+} from "./delivery-service";
 import { getPrivateObject } from "../storage/s3";
 import { buildAssetResponse } from "../storage/asset-response";
 
@@ -136,9 +145,20 @@ const bindingQueryCtxSchema = v.object({
 const getUserId = (c: { get: (key: string) => unknown }) =>
   (c.get("userId") as string) ?? "";
 
+async function assertBindingPrincipalOwner(userId: string, bindingId: string) {
+  const [binding] = await db
+    .select({ agentPrincipalId: schema.agentSessionBindingTable.agentPrincipalId })
+    .from(schema.agentSessionBindingTable)
+    .where(eq(schema.agentSessionBindingTable.id, bindingId))
+    .limit(1);
+  if (!binding) throw new HTTPException(409, { message: "stale_binding" });
+  await getOwnedAgentPrincipal(userId, binding.agentPrincipalId);
+}
+
 // Owner-only compact status. The workspace-access guard blocks guest
-// capability routes; the response intentionally omits principal IDs, session
-// IDs and raw metadata not needed by the UI.
+// capability routes; the response omits principal IDs and raw metadata, but
+// exposes bindingId/sessionId/generation so Send-to-Pi can target the exact
+// bound session (delivery routes re-verify principal ownership server-side).
 app.get(
   "/tasks/:taskId/binding-status",
   describeRoute({
@@ -149,34 +169,29 @@ app.get(
   workspaceAccess.fromTask("taskId"),
   async (c) => {
     const { taskId } = c.req.valid("param");
-    const [binding] = await db
-      .select({
-        hostId: schema.agentSessionBindingTable.hostId,
-        boundProjectId: schema.agentSessionBindingTable.projectId,
-        currentProjectId: schema.taskTable.projectId,
-        status: schema.agentSessionBindingTable.status,
-        lastHeartbeatAt: schema.agentSessionBindingTable.lastHeartbeatAt,
-      })
-      .from(schema.agentSessionBindingTable)
-      .innerJoin(
-        schema.taskTable,
-        eq(schema.agentSessionBindingTable.taskId, schema.taskTable.id),
-      )
-      .where(
-        and(
-          eq(schema.agentSessionBindingTable.taskId, taskId),
-          eq(schema.agentSessionBindingTable.status, "active"),
-        ),
-      )
+    const binding = await findActiveBindingForTask(taskId);
+    if (!binding) return c.json({ bound: false, online: false });
+    const [task] = await db
+      .select({ projectId: schema.taskTable.projectId })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, taskId))
       .limit(1);
-    if (!binding || binding.boundProjectId !== binding.currentProjectId) {
+    if (!task || task.projectId !== binding.projectId) {
       return c.json({ bound: false, online: false });
     }
     const online = Boolean(
       binding.lastHeartbeatAt &&
         Date.now() - binding.lastHeartbeatAt.getTime() <= 90_000,
     );
-    return c.json({ bound: true, online, hostId: binding.hostId });
+    return c.json({
+      bound: true,
+      online,
+      hostId: binding.hostId,
+      bindingId: binding.id,
+      rootTaskId: binding.taskId,
+      sessionId: binding.sessionId,
+      bindingGeneration: binding.bindingGeneration,
+    });
   },
 );
 
@@ -241,6 +256,116 @@ app.delete(
       bindingId: c.req.param("bindingId"),
       sessionId: query.sessionId,
       generation: query.generation,
+    });
+    return c.json(result);
+  },
+);
+
+app.post(
+  "/bindings/:bindingId/deliveries",
+  describeRoute({
+    operationId: "queueAgentSessionCommentDelivery",
+    tags: ["Agent Sessions"],
+  }),
+  validator(
+    "json",
+    v.object({
+      sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+      generation: v.pipe(v.number(), v.integer(), v.minValue(1)),
+      commentId: v.pipe(v.string(), v.minLength(1)),
+      clientActionKey: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
+    }),
+  ),
+  async (c) => {
+    if (requestActorIsAgent(c)) {
+      throw new HTTPException(403, {
+        message: "Only an authenticated browser actor can send a comment to Pi",
+      });
+    }
+    const body = c.req.valid("json");
+    const result = await queueCommentDelivery({
+      userId: getUserId(c),
+      bindingId: c.req.param("bindingId") ?? "",
+      sessionId: body.sessionId,
+      generation: body.generation,
+      commentId: body.commentId,
+      clientActionKey: body.clientActionKey,
+    });
+    return c.json(result);
+  },
+);
+
+// Pi holds one bounded long-poll for this exact binding/session/generation.
+app.get(
+  "/bindings/:bindingId/deliveries/claim",
+  describeRoute({
+    operationId: "claimAgentSessionCommentDelivery",
+    tags: ["Agent Sessions"],
+  }),
+  validator(
+    "query",
+    v.object({
+      sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+      generation: queryGeneration,
+      waitMs: v.optional(v.pipe(v.string(), v.transform(Number), v.integer(), v.minValue(0), v.maxValue(25_000))),
+    }),
+  ),
+  async (c) => {
+    const query = c.req.valid("query");
+    const bindingId = c.req.param("bindingId") ?? "";
+    await assertBindingPrincipalOwner(getUserId(c), bindingId);
+    const result = await claimNextCommentDelivery({
+      userId: getUserId(c),
+      bindingId,
+      sessionId: query.sessionId,
+      generation: query.generation,
+      waitMs: query.waitMs,
+      signal: c.req.raw.signal,
+    });
+    return c.json(result);
+  },
+);
+
+app.post(
+  "/bindings/:bindingId/deliveries/:deliveryId/ack",
+  describeRoute({
+    operationId: "ackAgentSessionCommentDelivery",
+    tags: ["Agent Sessions"],
+  }),
+  validator(
+    "json",
+    v.object({
+      sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+      generation: v.pipe(v.number(), v.integer(), v.minValue(1)),
+      outcome: v.picklist(["enqueued", "failed_before_send"]),
+    }),
+  ),
+  async (c) => {
+    const body = c.req.valid("json");
+    const bindingId = c.req.param("bindingId") ?? "";
+    await assertBindingPrincipalOwner(getUserId(c), bindingId);
+    const result = await acknowledgeCommentDelivery({
+      userId: getUserId(c),
+      bindingId,
+      sessionId: body.sessionId,
+      generation: body.generation,
+      deliveryId: c.req.param("deliveryId") ?? "",
+      outcome: body.outcome,
+    });
+    return c.json(result);
+  },
+);
+
+app.get(
+  "/bindings/:bindingId/deliveries/:deliveryId",
+  describeRoute({
+    operationId: "getAgentSessionCommentDeliveryStatus",
+    tags: ["Agent Sessions"],
+  }),
+  async (c) => {
+    const result = await getCommentDeliveryStatus({
+      bindingId: c.req.param("bindingId") ?? "",
+      deliveryId: c.req.param("deliveryId") ?? "",
     });
     return c.json(result);
   },

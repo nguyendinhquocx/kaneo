@@ -1989,6 +1989,7 @@ export const agentSessionDeliveryTable = pgTable(
       .notNull()
       .references(() => agentSessionBindingTable.id, { onDelete: "cascade" }),
     taskId: text("task_id").notNull(),
+    bindingGeneration: integer("binding_generation").notNull().default(1),
     clientActionKey: text("client_action_key").notNull(),
     commentId: text("comment_id"),
     commentUpdatedAt: timestamp("comment_updated_at", { mode: "date" }),

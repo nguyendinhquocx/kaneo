@@ -1558,6 +1558,21 @@
           "deleteRow": "Xoá hàng",
           "deleteTable": "Xoá bảng"
         }
+      },
+      "sendToPi": "Gửi cho Pi",
+      "resendToPi": "Gửi lại",
+      "sendToPiTarget": "Gửi tới phiên {{sessionId}} trên {{host}}",
+      "sendingToPi": "Đang gửi cho Pi…",
+      "sendToPiFailed": "Không thể xếp bình luận vào hàng gửi cho Pi.",
+      "unknownResendWarning": "Lần gửi trước có thể đã tới Pi. Gửi lại có thể tạo bản trùng.",
+      "delivery": {
+        "queued": "Đã xếp hàng chờ Pi.",
+        "claimed": "Pi đang nhận bình luận.",
+        "enqueued": "Đã chuyển vào Pi; chưa xác nhận model đã đọc.",
+        "stale": "Bình luận đã đổi hoặc bị xóa trước khi gửi.",
+        "expired": "Hết hạn trước khi Pi nhận.",
+        "failed_before_send": "Pi chưa nhận được lần gửi này.",
+        "unknown": "Không rõ kết quả; bình luận có thể đã tới Pi."
       }
     }
   },

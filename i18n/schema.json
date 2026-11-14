@@ -6362,6 +6362,60 @@
                 "table",
                 "codeLang"
               ]
+            },
+            "sendToPi": {
+              "type": "string"
+            },
+            "resendToPi": {
+              "type": "string"
+            },
+            "sendToPiTarget": {
+              "type": "string"
+            },
+            "sendingToPi": {
+              "type": "string"
+            },
+            "sendToPiFailed": {
+              "type": "string"
+            },
+            "unknownResendWarning": {
+              "type": "string"
+            },
+            "delivery": {
+              "type": "object",
+              "properties": {
+                "queued": {
+                  "type": "string"
+                },
+                "claimed": {
+                  "type": "string"
+                },
+                "enqueued": {
+                  "type": "string"
+                },
+                "stale": {
+                  "type": "string"
+                },
+                "expired": {
+                  "type": "string"
+                },
+                "failed_before_send": {
+                  "type": "string"
+                },
+                "unknown": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "queued",
+                "claimed",
+                "enqueued",
+                "stale",
+                "expired",
+                "failed_before_send",
+                "unknown"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [

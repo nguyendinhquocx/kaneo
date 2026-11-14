@@ -145,6 +145,10 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       bound: true,
       online: true,
       hostId: "test-host",
+      bindingId: bound.bindingId,
+      rootTaskId: task.id,
+      sessionId: "pi-session-a",
+      bindingGeneration: 1,
     });
 
     mockAnonymousSession();
@@ -481,6 +485,20 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       sessionId: "pi-session-a",
       generation: 1,
     };
+
+    // The root binding owns its whole live subtree; no second session may
+    // bind directly to a descendant and race the root writer.
+    const overlappingPrincipal = await seedPrincipal(admin.user.id);
+    const overlappingBind = await app.request("/api/agent-session/bindings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        taskId: child.id,
+        agentPrincipalId: overlappingPrincipal.id,
+        sessionId: "pi-session-child",
+      }),
+    });
+    expect(overlappingBind.status).toBe(409);
 
     // Out-of-tree id fails closed with the generic 404 shape.
     const foreignDelete = await app.request(

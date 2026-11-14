@@ -1566,6 +1566,21 @@
           "deleteRow": "Delete row",
           "deleteTable": "Delete table"
         }
+      },
+      "sendToPi": "Send to Pi",
+      "resendToPi": "Send again",
+      "sendToPiTarget": "Send to session {{sessionId}} on {{host}}",
+      "sendingToPi": "Sending to Pi…",
+      "sendToPiFailed": "Could not queue this comment for Pi.",
+      "unknownResendWarning": "The previous attempt may already have reached Pi. Sending again could duplicate it.",
+      "delivery": {
+        "queued": "Queued for Pi.",
+        "claimed": "Pi is receiving the comment.",
+        "enqueued": "Queued to Pi; this does not confirm the model read it.",
+        "stale": "Comment changed or was deleted before delivery.",
+        "expired": "Delivery expired before Pi claimed it.",
+        "failed_before_send": "Pi did not accept the delivery.",
+        "unknown": "Delivery outcome is unknown; it may already have reached Pi."
       }
     },
     "created": "created this task",

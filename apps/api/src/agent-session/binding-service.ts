@@ -4,7 +4,7 @@
 // every scoped call must present `bindingId + sessionId + generation`.
 // Mismatch or revocation is a typed stale-binding failure — never a silent
 // retarget to a replacement session.
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import { resolveTaskSubtreeScope } from "../share/task-share-access";
@@ -139,6 +139,11 @@ export async function bindAgentSession(input: {
       throw new HTTPException(404, { message: "Not found" });
     }
     await assertNoLiveFormalRun(input.taskId, tx);
+    // Serialize bindings within a project so two different roots cannot
+    // concurrently claim overlapping subtask trees.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${`binding-project:${lockedTask.projectId}`}))`,
+    );
     const currentPrincipal = await getOwnedAgentPrincipal(
       input.userId,
       input.agentPrincipalId,
@@ -147,7 +152,7 @@ export async function bindAgentSession(input: {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtext(${`session:${input.sessionId}`}))`,
     );
-    const priorBindings = await tx
+    const candidateBindings = await tx
       .select()
       .from(schema.agentSessionBindingTable)
       .where(
@@ -159,6 +164,32 @@ export async function bindAgentSession(input: {
           ),
         ),
       );
+    const priorTaskIds = [...new Set(candidateBindings.map((item) => item.taskId))]
+      .filter((id) => id !== input.taskId)
+      .sort();
+    if (priorTaskIds.length > 0) {
+      await tx
+        .select({ id: schema.taskTable.id })
+        .from(schema.taskTable)
+        .where(inArray(schema.taskTable.id, priorTaskIds))
+        .orderBy(asc(schema.taskTable.id))
+        .for("update");
+    }
+    // Re-read and lock binding rows after task-row locks. Formal-run claim
+    // uses the same task -> binding -> delivery order, avoiding a deadlock.
+    const priorBindings = await tx
+      .select()
+      .from(schema.agentSessionBindingTable)
+      .where(
+        and(
+          eq(schema.agentSessionBindingTable.status, "active"),
+          or(
+            eq(schema.agentSessionBindingTable.taskId, input.taskId),
+            eq(schema.agentSessionBindingTable.sessionId, input.sessionId),
+          ),
+        ),
+      )
+      .for("update");
     const priorForTask = priorBindings.find(
       (binding) => binding.taskId === input.taskId,
     );
@@ -171,10 +202,18 @@ export async function bindAgentSession(input: {
         .where(
           and(
             eq(schema.agentSessionDeliveryTable.bindingId, prior.id),
-            inArray(schema.agentSessionDeliveryTable.state, [
-              "queued",
-              "claimed",
-            ]),
+            eq(schema.agentSessionDeliveryTable.state, "queued"),
+          ),
+        );
+      // A claimed attempt might already have reached Pi. Never call that
+      // safely stale/replayable: preserve the truthful terminal `unknown`.
+      await tx
+        .update(schema.agentSessionDeliveryTable)
+        .set({ state: "unknown", updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.agentSessionDeliveryTable.bindingId, prior.id),
+            eq(schema.agentSessionDeliveryTable.state, "claimed"),
           ),
         );
       await tx
@@ -187,6 +226,42 @@ export async function bindAgentSession(input: {
           updatedAt: new Date(),
         })
         .where(eq(schema.agentSessionBindingTable.id, prior.id));
+    }
+
+    // A root binding owns its entire live descendant tree. Reject another
+    // writer binding anywhere inside that tree (or an ancestor whose tree
+    // already contains this card); otherwise two Pi sessions could race on
+    // one subtask while each believes it has the only writer lease.
+    const newScope = await resolveTaskSubtreeScope(
+      input.taskId,
+      lockedTask.projectId,
+      tx,
+    );
+    const activeProjectBindings = await tx
+      .select()
+      .from(schema.agentSessionBindingTable)
+      .where(
+        and(
+          eq(schema.agentSessionBindingTable.projectId, lockedTask.projectId),
+          eq(schema.agentSessionBindingTable.status, "active"),
+        ),
+      );
+    for (const other of activeProjectBindings) {
+      if (newScope.tasks.some((candidate) => candidate.id === other.taskId)) {
+        throw new HTTPException(409, {
+          message: "task tree overlaps an active agent-session binding",
+        });
+      }
+      const otherScope = await resolveTaskSubtreeScope(
+        other.taskId,
+        other.projectId,
+        tx,
+      );
+      if (otherScope.tasks.some((candidate) => candidate.id === input.taskId)) {
+        throw new HTTPException(409, {
+          message: "task tree overlaps an active agent-session binding",
+        });
+      }
     }
 
     // Keep generations monotonic per card across rebinds.
@@ -325,10 +400,16 @@ export async function unbindAgentSession(input: {
       .where(
         and(
           eq(schema.agentSessionDeliveryTable.bindingId, binding.id),
-          inArray(schema.agentSessionDeliveryTable.state, [
-            "queued",
-            "claimed",
-          ]),
+          eq(schema.agentSessionDeliveryTable.state, "queued"),
+        ),
+      );
+    await tx
+      .update(schema.agentSessionDeliveryTable)
+      .set({ state: "unknown", updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.agentSessionDeliveryTable.bindingId, binding.id),
+          eq(schema.agentSessionDeliveryTable.state, "claimed"),
         ),
       );
     const [revoked] = await tx
@@ -419,6 +500,62 @@ async function loadScopedBinding(input: {
     }
     throw error;
   }
+}
+
+// Resolve the one active binding whose root is this card or a current
+// same-project subtask ancestor. Bindings own their whole live subtree, so a
+// child comment/status lookup routes to its root Pi session without a picker.
+export async function findActiveBindingForTask(taskId: string) {
+  const [task] = await db
+    .select({ projectId: schema.taskTable.projectId })
+    .from(schema.taskTable)
+    .where(eq(schema.taskTable.id, taskId))
+    .limit(1);
+  if (!task) return null;
+
+  const visited = new Set<string>();
+  let frontier = [taskId];
+  for (let depth = 0; frontier.length > 0 && depth <= 32; depth += 1) {
+    const current = frontier.filter((id) => !visited.has(id));
+    if (current.length === 0) return null;
+    for (const id of current) visited.add(id);
+
+    const [binding] = await db
+      .select()
+      .from(schema.agentSessionBindingTable)
+      .where(
+        and(
+          eq(schema.agentSessionBindingTable.projectId, task.projectId),
+          eq(schema.agentSessionBindingTable.status, "active"),
+          inArray(schema.agentSessionBindingTable.taskId, current),
+        ),
+      )
+      .limit(1);
+    if (binding) return binding;
+
+    const parentEdges = await db
+      .select({ sourceTaskId: schema.taskRelationTable.sourceTaskId })
+      .from(schema.taskRelationTable)
+      .where(
+        and(
+          inArray(schema.taskRelationTable.targetTaskId, current),
+          eq(schema.taskRelationTable.relationType, "subtask"),
+        ),
+      );
+    const parentIds = [...new Set(parentEdges.map((edge) => edge.sourceTaskId))];
+    if (parentIds.length === 0) return null;
+    const sameProjectParents = await db
+      .select({ id: schema.taskTable.id })
+      .from(schema.taskTable)
+      .where(
+        and(
+          inArray(schema.taskTable.id, parentIds),
+          eq(schema.taskTable.projectId, task.projectId),
+        ),
+      );
+    frontier = sameProjectParents.map((parent) => parent.id);
+  }
+  return null;
 }
 
 export async function bindingTaskScope(input: {

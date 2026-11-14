@@ -72,7 +72,12 @@ const comment = new Hono<{
       const { taskId } = c.req.valid("param");
       const { content } = c.req.valid("json");
       const userId = c.get("userId");
-      const newComment = await createComment(taskId, userId, content);
+      const newComment = await createComment(
+        taskId,
+        userId,
+        content,
+        requestActorIsAgent(c),
+      );
       return c.json(newComment);
     },
   )

@@ -6,6 +6,10 @@ export type TaskAgentBindingStatus = {
   bound: boolean;
   online: boolean;
   hostId?: string;
+  bindingId?: string;
+  rootTaskId?: string;
+  sessionId?: string;
+  bindingGeneration?: number;
 };
 
 export async function getTaskAgentBindingStatus(

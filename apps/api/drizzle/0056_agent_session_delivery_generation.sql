@@ -1,0 +1,1 @@
+ALTER TABLE "agent_session_delivery" ADD COLUMN "binding_generation" integer DEFAULT 1 NOT NULL;

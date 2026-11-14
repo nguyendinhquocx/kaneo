@@ -112,7 +112,12 @@ const activity = new Hono<{
     async (c) => {
       const { taskId, comment } = c.req.valid("json");
       const userId = c.get("userId");
-      const newComment = await createComment(taskId, userId, comment);
+      const newComment = await createComment(
+        taskId,
+        userId,
+        comment,
+        requestActorIsAgent(c),
+      );
 
       return c.json(newComment);
     },

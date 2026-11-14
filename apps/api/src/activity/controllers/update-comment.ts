@@ -4,6 +4,7 @@ import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
+import { markQueuedCommentDeliveriesStale } from "../../agent-session/delivery-service";
 
 async function updateComment(userId: string, id: string, content: string) {
   const [existing] = await db
@@ -45,6 +46,9 @@ async function updateComment(userId: string, id: string, content: string) {
       message: "Comment not found or you are not the author",
     });
   }
+
+  // A queued Send-to-Pi receipt pins this exact content revision/hash.
+  void markQueuedCommentDeliveriesStale(updated.id).catch(() => {});
 
   const [task] = await db
     .select({ projectId: taskTable.projectId })
