@@ -209,11 +209,8 @@ export default function CommentCard({
           )}
         </div>
 
-        {(canManageShareLinks() || (canEdit && !isEditing) || canSendToPi) && (
+        {(canManageShareLinks() || (canEdit && !isEditing)) && (
           <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-            {canSendToPi ? (
-              <SendCommentToPiAction taskId={taskId} commentId={commentId} />
-            ) : null}
             {canManageShareLinks() ? (
               <CopyShareLinkButton
                 resourceType="activity_comment"
@@ -278,6 +275,12 @@ export default function CommentCard({
             onCancelShortcut={isEditing ? handleCancel : undefined}
           />
         </div>
+
+        {canSendToPi ? (
+          <div className="flex justify-end px-3 pb-2">
+            <SendCommentToPiAction taskId={taskId} commentId={commentId} />
+          </div>
+        ) : null}
 
         {isEditing && (
           <div className="flex items-center justify-end gap-2 border-border/70 border-t bg-card/60 px-3 py-2">
