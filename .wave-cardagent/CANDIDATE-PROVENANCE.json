@@ -1,0 +1,46 @@
+{
+  "schema_version": 3,
+  "spec": "SPEC-2026-11-10-kaneo-card-agent-collaboration",
+  "source_sha": "48705de286d1928b38253e22a3559991a2c5a779",
+  "base_source_sha": "d7c142498abadc303e802c4e61338b0b42ed71e3",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-48705de2-card-agent-collab@sha256:51a58e3a3ed1da1c8f8b91eccdab773d5aa4a0e670e3a2410c99d6c245c216bf",
+  "candidate_manifest_digest": "sha256:51a58e3a3ed1da1c8f8b91eccdab773d5aa4a0e670e3a2410c99d6c245c216bf",
+  "candidate_compose_sha256": "727dec02a209e3441840eea4f628b663bf4cf00f2a68df4ff090e36a04fe6da8",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "Candidate product commit 48705de2 was built after source/tests passed. The .wave-cardagent deployment bundle and rendered evidence are excluded by Dockerfile explicit COPY rules.",
+  "verify": [
+    "pnpm exec turbo run test --concurrency=1: 9/9 tasks PASS (default parallel runner twice hit the existing 5s share-agent-content import timeout; isolated API 264/264 and serial turbo pass)",
+    "pnpm test:integration 4/4 turbo tasks / 277 tests",
+    "web 152 tests + typecheck + Vite build",
+    "API 264 unit + typecheck",
+    "i18n:check + regenerated schema.json",
+    "db:check-0053/0055/0056",
+    "kaneo-mcp Node 82/82; pytest 120 passed, 2 skipped",
+    "independent post-fix recheck APPROVED"
+  ],
+  "migration_head_before": {
+    "id": 55,
+    "count": 55,
+    "tag": "0052_secret_maelstrom",
+    "hash": "f8f8a5bd7a6f547285b27f57b960dde03576dc936293303d931a823002277f9d"
+  },
+  "migration_head_after": {
+    "id": 59,
+    "count": 59,
+    "tag": "0056_agent_session_delivery_generation",
+    "hash": "a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f"
+  },
+  "deployment_lane": "fixed .wave-cardagent bundle; pre/post encrypted snapshot + private R2 mirror; hash-pinned adapters; guarded digest compose flip; read-only migration verifier.",
+  "rollback": "previous int1 image pin; migrations 0053-0056 additive-only; old image must tolerate unknown migration rows as proven by previous 0052 additive wave; data restore only via verified fresh-target workflow.",
+  "pi_extension_runtime": {
+    "artifact_id": "kaneo-mcp-linux-da9ba471-b74d529a5412",
+    "source_commit": "da9ba4715aac60e3a1e70628fe0920376ce0315b",
+    "file_count": 17,
+    "archive_sha256": "e593dddd3ab234dab83f717c1a40bc602517f85b658abefa3b88d369f8fb2517",
+    "release_manifest_sha256": "6d2160dda00045caacbb4c5cde99b2c7cd250059cf81c27f9100cba68537bb83",
+    "parity_manifest_sha256": "fe3a3670d8094708e55db48b47ab04905222df20db78ffc837d033a4643c6175",
+    "activation_lane": "Documented T25 selected-file SSH parity release; runtime backup, source manifest/archive/file hashes verified, TelePi stop/apply/restart, protected-state hash guard.",
+    "full_curated_builder": "Failed closed on pre-existing stale/unlisted entries outside Kaneo and TypeScript dependency checks unavailable in the Python repo; no broad manifest edits made. Only the already-approved linux-headless kaneo-mcp entry is included in this selected artifact."
+  }
+}

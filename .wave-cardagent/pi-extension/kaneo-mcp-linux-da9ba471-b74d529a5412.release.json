@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "artifact_id": "kaneo-mcp-linux-da9ba471-b74d529a5412",
+  "target": "linux-headless",
+  "source_repo": "D:/pcloud/workspace/code/python",
+  "source_commit": "da9ba4715aac60e3a1e70628fe0920376ce0315b",
+  "source_path": "app_presets/pi/extensions/kaneo-mcp",
+  "manifest_path": "D:/pcloud/workspace/code/agent/pi-agent-parity/agent-artifacts-manifest.json",
+  "manifest_sha256": "fe3a3670d8094708e55db48b47ab04905222df20db78ffc837d033a4643c6175",
+  "manifest_entry": {
+    "source": "app_presets/pi/extensions/kaneo-mcp",
+    "platforms": [
+      "windows",
+      "linux"
+    ],
+    "environments": [
+      "desktop",
+      "headless"
+    ],
+    "dependencies": [
+      "pi-sdk"
+    ],
+    "status": "approved",
+    "target_status": {
+      "windows-desktop": "approved",
+      "linux-headless": "approved"
+    },
+    "target_policy": "deny-until-classified",
+    "reason": "Private Kaneo MCP bridge required by the ProDesk worker; API key is read from the machine-local 0600 secret file and sent only through curl stdin to the private /api/mcp endpoint.",
+    "entrypoint": "index.ts",
+    "registration": [
+      "default-export",
+      "registerTool",
+      "registerCommand"
+    ],
+    "smoke": {
+      "local_static": "pass",
+      "tsc": "required",
+      "prodesk_runtime": "pending-human-t8"
+    },
+    "protected_paths": []
+  },
+  "file_count": 17,
+  "files": [
+    {
+      "path": "README.md",
+      "size": 13181,
+      "sha256": "fb0d5627e000da09fd0bf27e16820b001f161f218144f09021b46aae27250bd2"
+    },
+    {
+      "path": "card-binding-state.ts",
+      "size": 6077,
+      "sha256": "d85f198b28692e102f8c06eeb78060d58d65b1e79c8054dab661dcd7284110ba"
+    },
+    {
+      "path": "card-binding.ts",
+      "size": 26735,
+      "sha256": "a380dd2ff33781c38f575242ffa969af0a2b3f8f7f604ebaed49518b418d8ced"
+    },
+    {
+      "path": "card-delivery-poller.test.ts",
+      "size": 4405,
+      "sha256": "fc6094498f0ddddaaab1156eadf41939b9b7e1c08678e9b96be4ccd418f83984"
+    },
+    {
+      "path": "card-delivery-poller.ts",
+      "size": 5503,
+      "sha256": "209a2e3be0ba88305f019ddae2646dafbd40f9dec01d5b7b9abddb14f67646d9"
+    },
+    {
+      "path": "execution-runtime.test.ts",
+      "size": 22412,
+      "sha256": "6bff7a1a999a2169efe1907152f20ebf8c00b6de9ebd4857f9ba4618aa4d54c0"
+    },
+    {
+      "path": "execution-runtime.ts",
+      "size": 77930,
+      "sha256": "3fe10b940b93f5c5328158feb9f0a09ae35df06d0739f842c3e1081adaf6ef85"
+    },
+    {
+      "path": "execution-schedule.ts",
+      "size": 19162,
+      "sha256": "82a39290b94e63711b7fe65bb32026a23313ecd8d01ccbb634b4e4ab0435c8cc"
+    },
+    {
+      "path": "execution-tools.ts",
+      "size": 46165,
+      "sha256": "834ac724476e259cd5244fedfa5be331ddc46f58b93c39865be1da490e3a2777"
+    },
+    {
+      "path": "index.ts",
+      "size": 17449,
+      "sha256": "1752ed3bc12e81475b14348ad72ff00c51ffb73f3f107b68838b6608308aae61"
+    },
+    {
+      "path": "kaneo-card-binding.test.ts",
+      "size": 5520,
+      "sha256": "8fee7c62e6adf0864491dda7c28abeff4bf5cbaee8fc0b3e44f684a481abe349"
+    },
+    {
+      "path": "kaneo-client.execution.test.ts",
+      "size": 4477,
+      "sha256": "f106d9d21e10e15d06279d77d7c825e3c9696823293319fa5033dfda1798bb1a"
+    },
+    {
+      "path": "kaneo-client.ts",
+      "size": 39744,
+      "sha256": "110a0b4483b7f5ef45afac8119d1bfed2bf07704bb799ad14c1e6a08a7c7b6bd"
+    },
+    {
+      "path": "share-link.test.ts",
+      "size": 50312,
+      "sha256": "acd3abb4441a216df88239a860e7a65a47f63b3325195d080b6fc021131847d4"
+    },
+    {
+      "path": "share-link.ts",
+      "size": 40935,
+      "sha256": "10260b68fb732c7a0548e6a1e324cbcb9d200d46218a1602b2e987c6b7cf0764"
+    },
+    {
+      "path": "tools.ts",
+      "size": 7554,
+      "sha256": "84a7c225d7850921da45997c256b459e867032f6e06ea34c84e2691aeaefc346"
+    },
+    {
+      "path": "tsconfig.check.json",
+      "size": 1033,
+      "sha256": "6bd57fcf1235ccfdac1c9c91ee007b9ec2e42c421e921ecf1ff0b0a4fa42de5c"
+    }
+  ],
+  "payload_manifest_sha256": "b74d529a541238cb86727ccfac8f4b63e0d6cd6f6833953e85f11b6ac6ebca57",
+  "archive_filename": "kaneo-mcp-linux-da9ba471-b74d529a5412.tar.gz",
+  "archive_sha256": "e593dddd3ab234dab83f717c1a40bc602517f85b658abefa3b88d369f8fb2517",
+  "archive_size": 90744,
+  "exclude_policy": "only git-tracked files under app_presets/pi/extensions/kaneo-mcp; no auth/settings/models/session/secret/runtime state",
+  "verify_commands": [
+    "node --experimental-strip-types --experimental-transform-types --test app_presets/pi/extensions/kaneo-mcp/*.test.ts"
+  ]
+}
