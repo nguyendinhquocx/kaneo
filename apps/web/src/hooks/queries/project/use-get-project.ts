@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import getProject from "@/fetchers/project/get-project";
 import { getShareFullProject } from "@/fetchers/share/share-full-api";
+import { getTaskShareRoot } from "@/fetchers/share/share-task-api";
 import { getShareCapability } from "@/components/share/share-capability";
 
 function useGetProject({
@@ -13,7 +14,18 @@ function useGetProject({
   const capability = getShareCapability();
   return useQuery({
     queryFn: async (): Promise<Awaited<ReturnType<typeof getProject>>> => {
-      if (capability) {
+      if (capability?.resourceType === "task") {
+        return getTaskShareRoot(capability.token).then((share) => ({
+          id: share.scopeProjectId,
+          name: share.root.title,
+          slug: "",
+          icon: null,
+          description: null,
+          workspaceId: "",
+          isPublic: false,
+        }) as unknown as Awaited<ReturnType<typeof getProject>>);
+      }
+      if (capability?.resourceType === "project") {
         return getShareFullProject(capability.token).then((project) => ({
           id: project.id,
           name: project.name,
@@ -27,7 +39,9 @@ function useGetProject({
       return getProject({ id, workspaceId });
     },
     queryKey: capability
-      ? ["share-full", capability.token, "project"]
+      ? capability.resourceType === "task"
+        ? ["share-task", capability.token, "project"]
+        : ["share-full", capability.token, "project"]
       : ["projects", workspaceId, id],
     enabled: Boolean(id || capability),
   });

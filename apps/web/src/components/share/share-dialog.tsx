@@ -79,8 +79,6 @@ export default function ShareDialog({
   const { data: manifest } = useGetExecutionManifest(
     isTaskLink && projectId ? projectId : "",
   );
-  const showTaskEditWarning =
-    isTaskLink && permission === "edit" && !manifest;
   const showTaskManifestWarning = isTaskLink && Boolean(manifest);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const newLink = createLink.data;
@@ -223,17 +221,8 @@ export default function ShareDialog({
               </div>
             </div>
 
-            {/* SPEC-2026-11-10 T3: the edit-link warning renders BEFORE the
-        create button can be used, covering both the bearer-secret risk and
-        the live-subtree scope of a task link. */}
-            {showTaskEditWarning ? (
-              <p
-                  role="note"
-                  className="rounded-lg border border-warning/40 bg-warning/10 p-2.5 text-[11px] leading-relaxed text-warning-foreground"
-                >
-                  {t("task.editWarning")} {t("task.subtreeNote")}
-              </p>
-            ) : null}
+            {/* R1-T1: the bearer-secret scope warning was dropped — the
+        create button and capability badge already carry the essentials. */}
             {showTaskManifestWarning ? (
               <p
                   role="note"

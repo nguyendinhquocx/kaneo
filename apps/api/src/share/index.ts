@@ -120,6 +120,7 @@ async function rewriteFullAssetRefs(
 
 import {
   publicCreateTask,
+  publicMoveTask,
   publicToggleGoalCheckin,
   publicUpdateDocument,
   publicUpdateGoalNote,
@@ -827,7 +828,7 @@ app.post("/project/:token/task/:taskId/move", async (c) => {
   const taskId = c.req.param("taskId");
   assertShareRateLimit(c, "write", hashShareToken(token));
 
-  const link = await resolveShareLink(token, "project", "full");
+  const link = await resolveShareLink(token, "project", "view");
   let rawBody: unknown;
   try {
     rawBody = await c.req.json();
@@ -847,7 +848,13 @@ app.post("/project/:token/task/:taskId/move", async (c) => {
   if (!parsed.success) {
     throw new HTTPException(400, { message: "Invalid task move" });
   }
-  return c.json(await fullMoveTask(link, taskId, parsed.output));
+  if (link.permission === "full") {
+    return c.json(await fullMoveTask(link, taskId, parsed.output));
+  }
+  if (link.permission === "edit") {
+    return c.json(await publicMoveTask(link, taskId, parsed.output));
+  }
+  throw new HTTPException(404, { message: "Not found" });
 });
 
 app.put("/project/:token/task/:taskId", async (c) => {

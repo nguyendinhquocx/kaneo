@@ -11,6 +11,10 @@ import ProjectShareReader from "./project-share-reader";
 import ShareLinkState from "./share-link-state";
 import ShareProjectRouteContent from "./share-project-route-content";
 
+const shareReaderState = vi.hoisted(() => ({
+  boardProps: null as null | { disableDragDrop?: boolean },
+}));
+
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
   return {
@@ -21,11 +25,17 @@ vi.mock("react-i18next", async (importOriginal) => {
 vi.mock("@/components/public-project/markdown-renderer", () => ({
   MarkdownRenderer: ({ content }: { content: string }) => <div>{content}</div>,
 }));
-vi.mock("@/components/public-project/kanban-view", () => ({
-  PublicKanbanView: () => <div data-testid="public-kanban" />,
+vi.mock("@/components/board/board-toolbar", () => ({
+  default: () => <div data-testid="owner-board-toolbar" />,
 }));
-vi.mock("@/components/public-project/list-view", () => ({
-  PublicListView: () => <div data-testid="public-list" />,
+vi.mock("@/components/kanban-board", () => ({
+  default: (props: { disableDragDrop?: boolean }) => {
+    shareReaderState.boardProps = props;
+    return <div data-testid="owner-kanban" />;
+  },
+}));
+vi.mock("@/components/list-view", () => ({
+  default: () => <div data-testid="owner-list" />,
 }));
 
 afterEach(() => {
@@ -78,7 +88,7 @@ describe("project share scope routing", () => {
         fullSurface={fullSurface}
       />,
     );
-    expect(screen.getByTestId("public-kanban")).toBeVisible();
+    expect(screen.getByTestId("owner-kanban")).toBeVisible();
     expect(screen.queryByTestId("full-surface")).toBeNull();
 
     rerender(
@@ -107,6 +117,20 @@ describe("project share scope routing", () => {
       </QueryClientProvider>,
     );
     expect(screen.getByTestId("full-surface")).toHaveTextContent("full");
+  });
+
+  it("uses the owner KanbanBoard and only enables legacy edit dragging after Edit is active", () => {
+    shareReaderState.boardProps = null;
+    renderWithQueryClient(
+      <ProjectShareReader data={{ ...project, scope: "edit" } as unknown as Parameters<typeof ProjectShareReader>[0]["data"]} token="edit-token" />,
+    );
+
+    expect(screen.getByTestId("owner-board-toolbar")).toBeVisible();
+    expect(screen.getByTestId("owner-kanban")).toBeVisible();
+    expect((shareReaderState.boardProps as { disableDragDrop?: boolean } | null)?.disableDragDrop).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "edit" }));
+    expect((shareReaderState.boardProps as { disableDragDrop?: boolean } | null)?.disableDragDrop).toBe(false);
   });
 });
 

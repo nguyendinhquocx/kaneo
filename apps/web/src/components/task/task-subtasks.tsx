@@ -210,6 +210,13 @@ export default function TaskSubtasks({
     userId: subtask.task.userId,
     assigneeId: subtask.task.userId,
     assigneeName: subtask.task.assigneeName,
+    // Keep the current CAS token from the relation projection; falling back
+    // to revision 1 makes every later checkbox click conflict forever.
+    contentRevision:
+      "contentRevision" in subtask.task &&
+      typeof subtask.task.contentRevision === "number"
+        ? subtask.task.contentRevision
+        : undefined,
     // Relation rows carry marker counts; copy them so markers render next
     // to subtask titles without another fetch.
     workMarkerCounts: normalizeWorkMarkerCounts(subtask.task.workMarkerCounts),
@@ -231,12 +238,10 @@ export default function TaskSubtasks({
         ...taskObj,
         status: isCompleted(taskObj.status) ? todoSlug : doneSlug,
       });
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("tasks:popover.status.updateError"),
-      );
+    } catch {
+      // Do not dump raw API JSON (including currentContentRevision) into a
+      // toast; the status popover already has a localized failure message.
+      toast.error(t("tasks:popover.status.updateError"));
     }
   };
 

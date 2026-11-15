@@ -13,9 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Space/Enter/ArrowUp/ArrowDown/Escape; the list keyboard handler must not
 // run list actions while a drag is active, and idle behavior must survive.
 
-const { reorderMock, navigateMock } = vi.hoisted(() => ({
+const { reorderMock, navigateMock, updateStatusMock } = vi.hoisted(() => ({
   reorderMock: vi.fn(),
   navigateMock: vi.fn(),
+  updateStatusMock: vi.fn(),
 }));
 
 type DndHandlers = {
@@ -123,7 +124,7 @@ vi.mock("@/hooks/mutations/task/use-delete-task", () => ({
   useDeleteTask: () => ({ mutateAsync: vi.fn() }),
 }));
 vi.mock("@/hooks/mutations/task/use-update-task-status", () => ({
-  useUpdateTaskStatus: () => ({ mutateAsync: vi.fn() }),
+  useUpdateTaskStatus: () => ({ mutateAsync: updateStatusMock }),
 }));
 vi.mock("@/hooks/queries/column/use-get-columns", () => ({
   useGetColumns: () => ({
@@ -164,6 +165,7 @@ const parentTask = {
   position: 0,
   userId: null,
   assigneeName: null,
+  contentRevision: 1,
   workMarkerCounts: {
     redCross: 0,
     boxedRedCross: 0,
@@ -178,6 +180,7 @@ function childTask(id: string, title: string) {
     id,
     title,
     number: id === "child-1" ? 2 : 3,
+    contentRevision: 2,
     workMarkerCounts: {
       redCross: 2,
       boxedRedCross: 0,
@@ -234,11 +237,27 @@ describe("TaskSubtasks keyboard DnD isolation", () => {
     dndHandlers = {};
     reorderMock.mockReset();
     navigateMock.mockReset();
+    updateStatusMock.mockReset();
   });
 
   afterEach(() => {
     cleanup();
     dndHandlers = {};
+  });
+
+  it("passes the relation card contentRevision when ticking a subtask", { timeout: 20_000 }, async () => {
+    await renderSubtasks();
+    fireEvent.click(screen.getByRole("button", { name: "toggle-child-1" }));
+
+    await waitFor(() => {
+      expect(updateStatusMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "child-1",
+          status: "done",
+          contentRevision: 2,
+        }),
+      );
+    });
   });
 
   it("keeps idle Space selection and Escape clear working before any drag", { timeout: 20_000 }, async () => {

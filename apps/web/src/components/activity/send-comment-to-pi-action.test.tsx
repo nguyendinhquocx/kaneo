@@ -29,6 +29,8 @@ vi.mock("react-i18next", () => ({
         "activity:comment.resendToPi": "Send again",
         "activity:comment.sendingToPi": "Sending to Pi",
         "activity:comment.sendToPiFailed": "Could not queue",
+        "activity:comment.sendToPiUnbound": "No agent is bound to this card yet.",
+        "activity:comment.sendToPiOffline": "The bound agent is offline.",
         "activity:comment.unknownResendWarning": "Previous attempt may already have arrived.",
         "activity:comment.delivery.queued": "Queued for Pi",
         "activity:comment.delivery.claimed": "Pi is receiving it",
@@ -144,5 +146,29 @@ describe("SendCommentToPiAction", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Send again/ }));
     await waitFor(() => expect(state.mutateAsync).toHaveBeenCalledOnce());
+  });
+
+  it("R1-T4: stays visible and disabled with a bind hint when no agent is bound", () => {
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+
+    const button = screen.getByRole("button", { name: /No agent is bound/ });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("R1-T4: stays visible and disabled with an offline hint while bound but offline", () => {
+    state.binding = {
+      bound: true,
+      online: false,
+      bindingId: "binding-1",
+      bindingGeneration: 4,
+      sessionId: "pi-session-exact",
+      hostId: "pi-prodesk",
+    };
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+
+    expect(screen.getByRole("button", { name: /offline/ })).toBeDisabled();
+    expect(state.mutateAsync).not.toHaveBeenCalled();
   });
 });

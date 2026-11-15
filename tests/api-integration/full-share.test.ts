@@ -750,9 +750,8 @@ describe("API integration: full project share capability", () => {
     );
     expect(moved.status).toBe(200);
 
-    // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: even when the owner
-    // task carries non-zero marker counts, the guest board payload must not
-    // expose the marker keys or the authenticated subtask projection.
+    // SPEC-2026-10-27-kaneo-subtask-board-focus-markers: marker counts stay
+    // private. R1-T3 exposes only the non-sensitive board shape below.
     await db
       .update(schema.taskTable)
       .set({
@@ -775,10 +774,185 @@ describe("API integration: full project share capability", () => {
     for (const column of markerPayload.columns) {
       for (const guestTask of column.tasks) {
         expect(guestTask).not.toHaveProperty("workMarkerCounts");
-        expect(guestTask).not.toHaveProperty("isSubtask");
-        expect(guestTask).not.toHaveProperty("nextSubtaskPreview");
+        expect(guestTask).toHaveProperty("isSubtask");
+        expect(guestTask).toHaveProperty("nextSubtaskPreview");
       }
     }
+  });
+
+  it("shares owner-board labels and a bounded same-project subtask preview", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const parent = await seedTask(project.id, { title: "Share parent" });
+    const child = await seedTask(project.id, { title: "Share child" });
+    await db.insert(schema.labelTable).values({
+      name: "UAT label",
+      color: "#123456",
+      taskId: parent.id,
+      workspaceId: project.workspaceId,
+    });
+    await db.insert(schema.taskRelationTable).values({
+      sourceTaskId: parent.id,
+      targetTaskId: child.id,
+      relationType: "subtask",
+      position: 0,
+    });
+    await db.update(schema.taskTable)
+      .set({ workMarkerCounts: { redCross: 4, boxedRedCross: 2, redCircle: 3, greenCheck: 1 } })
+      .where(eq(schema.taskTable.id, child.id));
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const response = await app.request(`/api/share/project/${link.token}`);
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      columns: Array<{ tasks: Array<Record<string, unknown>> }>;
+    };
+    const tasks = payload.columns.flatMap((column) => column.tasks);
+    const sharedParent = tasks.find((task) => task.id === parent.id);
+    const sharedChild = tasks.find((task) => task.id === child.id);
+
+    expect(sharedParent?.labels).toEqual([
+      expect.objectContaining({ name: "UAT label", color: "#123456" }),
+    ]);
+    expect(sharedParent?.isSubtask).toBe(false);
+    expect(sharedParent?.nextSubtaskPreview).toEqual({
+      id: child.id,
+      title: "Share child",
+      workMarkerCounts: { redCross: 0, boxedRedCross: 0, redCircle: 0, greenCheck: 0 },
+    });
+    expect(sharedChild?.isSubtask).toBe(true);
+    expect(sharedChild).not.toHaveProperty("workMarkerCounts");
+  });
+
+  it("gives task view links lane scaffolding but no unrelated project cards", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const root = await seedTask(project.id, { title: "Shared root" });
+    const unrelated = await seedTask(project.id, { title: "Unrelated sibling" });
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "task", root.id, "view");
+    const editLink = await createLink(app, "task", root.id, "edit");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const response = await app.request(`/api/share/task/${link.token}`);
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      rootTaskId: string;
+      statusOptions: Array<{ slug: string; name: string; isFinal: boolean }>;
+      root: { id: string };
+      subtasks: Array<{ id: string }>;
+    };
+    expect(payload.rootTaskId).toBe(root.id);
+    expect(payload.statusOptions.length).toBeGreaterThan(0);
+    expect(payload.root.id).toBe(root.id);
+    expect(payload.subtasks.map((task) => task.id)).not.toContain(unrelated.id);
+
+    const editRead = await app.request(`/api/share/task/${editLink.token}`);
+    const editPayload = (await editRead.json()) as typeof payload;
+    const targetStatus = editPayload.statusOptions.find(
+      (option) => option.slug !== editPayload.root.status,
+    )?.slug;
+    expect(targetStatus).toBeTruthy();
+    const move = await app.request(
+      `/api/share/task/${editLink.token}/task/${root.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          patch: { status: targetStatus },
+          expectedContentRevision: (editPayload.root as { contentRevision: number }).contentRevision,
+        }),
+      },
+    );
+    expect(move.status).toBe(200);
+    const deniedViewWrite = await app.request(
+      `/api/share/task/${link.token}/task/${root.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          patch: { status: targetStatus },
+          expectedContentRevision: (payload.root as { contentRevision: number }).contentRevision,
+        }),
+      },
+    );
+    expect(deniedViewWrite.status).toBe(404);
+  });
+
+  it("shares labels and safe subtask preview on full-project board cards", async () => {
+    const admin = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: admin.workspace.id,
+    });
+    const parent = await seedTask(project.id, { title: "Share parent" });
+    const child = await seedTask(project.id, { title: "Share child" });
+    await db.insert(schema.labelTable).values({
+      name: "UAT label",
+      color: "#123456",
+      taskId: parent.id,
+      workspaceId: project.workspaceId,
+    });
+    await db.insert(schema.taskRelationTable).values({
+      sourceTaskId: parent.id,
+      targetTaskId: child.id,
+      relationType: "subtask",
+      position: 0,
+    });
+    await db
+      .update(schema.taskTable)
+      .set({
+        workMarkerCounts: {
+          redCross: 4,
+          boxedRedCross: 2,
+          redCircle: 3,
+          greenCheck: 1,
+        },
+      })
+      .where(eq(schema.taskTable.id, child.id));
+
+    mockAuthenticatedSession(admin.user);
+    let { app } = createApp();
+    const link = await createLink(app, "project", project.id, "full");
+    mockAnonymousSession();
+    ({ app } = createApp());
+
+    const response = await app.request(`/api/share/project/${link.token}`);
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      columns: Array<{ tasks: Array<Record<string, unknown>> }>;
+    };
+    const tasks = payload.columns.flatMap((column) => column.tasks);
+    const sharedParent = tasks.find((task) => task.id === parent.id);
+    const sharedChild = tasks.find((task) => task.id === child.id);
+
+    expect(sharedParent?.labels).toEqual([
+      expect.objectContaining({ name: "UAT label", color: "#123456" }),
+    ]);
+    expect(sharedParent?.isSubtask).toBe(false);
+    expect(sharedParent?.nextSubtaskPreview).toEqual({
+      id: child.id,
+      title: "Share child",
+      workMarkerCounts: {
+        redCross: 0,
+        boxedRedCross: 0,
+        redCircle: 0,
+        greenCheck: 0,
+      },
+    });
+    expect(sharedChild?.isSubtask).toBe(true);
+    expect(sharedChild).not.toHaveProperty("workMarkerCounts");
   });
 
   it("moves guest kanban cards in one write and reindexes integer lane positions", async () => {

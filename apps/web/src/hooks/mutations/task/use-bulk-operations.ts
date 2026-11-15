@@ -74,6 +74,7 @@ export function useBulkOperations() {
   const invalidateCommon = () => {
     invalidateShareQueries(queryClientRef);
     queryClientRef.invalidateQueries({ queryKey: ["tasks"] });
+    queryClientRef.invalidateQueries({ queryKey: ["task-relations"] });
     queryClientRef.invalidateQueries({ queryKey: ["projects"] });
   };
 

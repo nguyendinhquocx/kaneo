@@ -8,12 +8,14 @@ type ColumnProps = {
   column: ProjectWithTasks["columns"][number];
   projectDisplayDefaults: ProjectDisplayDefaults;
   disableDragDrop?: boolean;
+  onTaskClick?: (taskId: string) => void;
 };
 
 function Column({
   column,
   projectDisplayDefaults,
   disableDragDrop = false,
+  onTaskClick,
 }: ColumnProps) {
   const [isDropzoneOver, setIsDropzoneOver] = useState(false);
 
@@ -33,6 +35,7 @@ function Column({
           column={column}
           projectDisplayDefaults={projectDisplayDefaults}
           disableDragDrop={disableDragDrop}
+          onTaskClick={onTaskClick}
           onIsOverChange={setIsDropzoneOver}
         />
       </div>

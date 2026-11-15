@@ -1,4 +1,4 @@
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TaskDescription from "./task-description";
 
@@ -61,6 +61,17 @@ beforeEach(() => {
 });
 
 describe("TaskDescription editor lifecycle", () => {
+  it("ignores non-Element related targets when the editor loses hover", () => {
+    render(<TaskDescription taskId="task-1" />);
+    const editor = screen.getByRole("region", {
+      name: "tasks:detail.editor.ariaLabel",
+    });
+
+    expect(() =>
+      fireEvent.mouseLeave(editor, { relatedTarget: new EventTarget() }),
+    ).not.toThrow();
+  });
+
   it("keeps the editor instance stable when navigating from a child task to its parent", () => {
     const view = render(<TaskDescription taskId="child-task" />);
     const childDependencies = editorDependencies.at(-1);

@@ -63,7 +63,8 @@ export type TaskShareRootPayload = {
   permission: "view" | "edit";
   rootTaskId: string;
   scopeProjectId: string;
-  statusOptions?: ShareTaskStatusOption[];
+  // Board lane names are safe scaffolding for both view/edit card links.
+  statusOptions: ShareTaskStatusOption[];
   root: ShareTaskCard;
   subtasks: ShareTaskCard[];
   commentsPage: ShareTaskCommentsPage;

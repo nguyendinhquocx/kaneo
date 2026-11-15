@@ -51,6 +51,9 @@ export default function SendCommentToPiAction({
   const isActive = state === "queued" || state === "claimed";
   const isUnknown = state === "unknown";
 
+  // R1-T4: the affordance must stay visible even without a live binding —
+  // a hidden button reads as "the feature does not exist" during UAT.
+  // Disabled with a direct hint instead of vanishing.
   if (
     !bindingData?.bound ||
     !bindingData.online ||
@@ -58,7 +61,35 @@ export default function SendCommentToPiAction({
     !sessionId ||
     bindingGeneration === undefined
   ) {
-    return null;
+    const hintKey = bindingData?.bound
+      ? "activity:comment.sendToPiOffline"
+      : "activity:comment.sendToPiUnbound";
+    const hint = t(hintKey);
+    return (
+      <span className="inline-flex flex-col items-end gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="size-11 p-0 opacity-40 sm:size-8"
+              aria-label={hint}
+              title={hint}
+              aria-disabled="true"
+              disabled
+            >
+              <Send className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <span className="block max-w-64 text-[10px] text-muted-foreground">
+              {hint}
+            </span>
+          </TooltipContent>
+        </Tooltip>
+      </span>
+    );
   }
   const targetLabel = t("activity:comment.sendToPiTarget", {
     sessionId,

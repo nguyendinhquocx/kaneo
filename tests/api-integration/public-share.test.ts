@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
@@ -47,10 +47,16 @@ async function seedTask(
     userId: string;
   }>,
 ) {
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.taskTable)
+    .where(eq(schema.taskTable.projectId, projectId));
+  const nextNumber = Number(count) + 1;
   const [task] = await db
     .insert(schema.taskTable)
     .values({
       projectId,
+      number: nextNumber,
       title: overrides?.title ?? "Public task",
       description:
         overrides?.description === undefined
@@ -63,6 +69,10 @@ async function seedTask(
   if (!task) {
     throw new Error("Failed to seed task");
   }
+  await db
+    .update(schema.projectTable)
+    .set({ lastTaskNumber: nextNumber })
+    .where(eq(schema.projectTable.id, projectId));
   return task;
 }
 
@@ -115,6 +125,141 @@ describe("API integration: public share boundary", () => {
       expect(task).toHaveProperty("title");
     }
     expect(flatTasks.length).toBeGreaterThan(0);
+  });
+
+  it("public board cards retain labels and a marker-redacted subtask preview", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const parent = await seedTask(project.id, { title: "Public parent" });
+    const child = await seedTask(project.id, { title: "Public child" });
+    await db.insert(schema.labelTable).values({
+      name: "Public label",
+      color: "#123456",
+      taskId: parent.id,
+      workspaceId: project.workspaceId,
+    });
+    await db.insert(schema.taskRelationTable).values({
+      sourceTaskId: parent.id,
+      targetTaskId: child.id,
+      relationType: "subtask",
+      position: 0,
+    });
+    await db
+      .update(schema.taskTable)
+      .set({
+        workMarkerCounts: {
+          redCross: 4,
+          boxedRedCross: 2,
+          redCircle: 3,
+          greenCheck: 1,
+        },
+      })
+      .where(eq(schema.taskTable.id, child.id));
+    await db
+      .update(schema.projectTable)
+      .set({ isPublic: true })
+      .where(eq(schema.projectTable.id, project.id));
+
+    mockAnonymousSession();
+    const { app } = createApp();
+    const response = await app.request(`/api/public-project/${project.id}`);
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      columns: Array<{ tasks: Array<Record<string, unknown>> }>;
+    };
+    const tasks = payload.columns.flatMap((column) => column.tasks);
+    const publicParent = tasks.find((task) => task.id === parent.id);
+    const publicChild = tasks.find((task) => task.id === child.id);
+
+    expect(publicParent?.labels).toEqual([
+      expect.objectContaining({ name: "Public label", color: "#123456" }),
+    ]);
+    expect(publicParent?.isSubtask).toBe(false);
+    expect(publicParent?.nextSubtaskPreview).toEqual({
+      id: child.id,
+      title: "Public child",
+      workMarkerCounts: {
+        redCross: 0,
+        boxedRedCross: 0,
+        redCircle: 0,
+        greenCheck: 0,
+      },
+    });
+    expect(publicChild?.isSubtask).toBe(true);
+    expect(publicChild).not.toHaveProperty("workMarkerCounts");
+  });
+
+  it("legacy project edit link moves a board card with content revision fencing", async () => {
+    const member = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+    const [firstColumn, secondColumn] = await db
+      .select({ slug: schema.columnTable.slug })
+      .from(schema.columnTable)
+      .where(eq(schema.columnTable.projectId, project.id))
+      .orderBy(schema.columnTable.position)
+      .limit(2);
+    if (!firstColumn || !secondColumn) throw new Error("Expected two project columns");
+    const first = await seedTask(project.id, { title: "First", status: firstColumn.slug });
+    const moving = await seedTask(project.id, { title: "Move me", status: firstColumn.slug });
+    await db
+      .update(schema.projectTable)
+      .set({ isPublic: true })
+      .where(eq(schema.projectTable.id, project.id));
+
+    mockAuthenticatedSession(member.user);
+    let { app } = createApp();
+    const created = await createShareLinkViaApi(app, {
+      resourceType: "project",
+      resourceId: project.id,
+      permission: "edit",
+    });
+    expect(created.status).toBe(200);
+    const link = (await created.json()) as { token: string };
+
+    mockAnonymousSession();
+    ({ app } = createApp());
+    const moved = await app.request(
+      `/api/share/project/${link.token}/task/${moving.id}/move`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: secondColumn.slug,
+          position: 0,
+          expectedContentRevision: moving.contentRevision,
+        }),
+      },
+    );
+    expect(moved.status).toBe(200);
+    const [updated] = await db
+      .select({ status: schema.taskTable.status, contentRevision: schema.taskTable.contentRevision })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, moving.id));
+    expect(updated?.status).toBe(secondColumn.slug);
+    expect(updated?.contentRevision).toBe(moving.contentRevision + 1);
+    const [reindexedSource] = await db
+      .select({ position: schema.taskTable.position })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, first.id));
+    expect(reindexedSource?.position).toBe(0);
+
+    const stale = await app.request(
+      `/api/share/project/${link.token}/task/${moving.id}/move`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: secondColumn.slug,
+          position: 0,
+          expectedContentRevision: moving.contentRevision,
+        }),
+      },
+    );
+    expect(stale.status).toBe(409);
   });
 
   it("anonymous legacy route refuses private projects", async () => {

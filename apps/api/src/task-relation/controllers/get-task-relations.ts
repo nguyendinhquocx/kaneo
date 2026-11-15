@@ -43,6 +43,7 @@ async function getTaskRelations(taskId: string, workspaceId: string) {
       priority: string | null;
       number: number | null;
       projectId: string;
+      contentRevision: number;
       position: number | null;
       userId: string | null;
       workMarkerCounts: TaskMarkerCounts;
@@ -59,6 +60,7 @@ async function getTaskRelations(taskId: string, workspaceId: string) {
         priority: taskTable.priority,
         number: taskTable.number,
         projectId: taskTable.projectId,
+        contentRevision: taskTable.contentRevision,
         position: taskTable.position,
         userId: taskTable.userId,
         workMarkerCounts: taskTable.workMarkerCounts,

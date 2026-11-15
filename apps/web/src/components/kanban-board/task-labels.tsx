@@ -32,8 +32,20 @@ function validColor(value: string): string {
   return "var(--color-neutral-400)";
 }
 
-function TaskCardLabels({ taskId }: { taskId: string }) {
-  const { data: labels = [] } = useGetLabelsByTask(taskId);
+function TaskCardLabels({
+  taskId,
+  labels: providedLabels,
+}: {
+  taskId: string;
+  labels?: Array<{ id: string; name: string; color: string }>;
+}) {
+  // Full-project share DTOs already carry the authorized labels. Avoid a
+  // second per-card request and render the same labels as the owner board.
+  const { data: queriedLabels = [] } = useGetLabelsByTask(
+    taskId,
+    providedLabels === undefined,
+  );
+  const labels = providedLabels ?? queriedLabels;
 
   if (!labels.length) return null;
 

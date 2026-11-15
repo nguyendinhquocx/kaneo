@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ThemeToggle } from "@/components/public-project/theme-toggle";
 import ProjectShareReader from "@/components/share/project-share-reader";
+import { ShareCapabilityProvider } from "@/components/share/share-capability";
 import {
   isFullProjectShare,
   type ShareProjectPayload,
@@ -32,7 +33,13 @@ export default function ShareProjectRouteContent({
         </div>
       </header>
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6">
-        <ProjectShareReader data={data} token={token} />
+        <ShareCapabilityProvider
+          token={token}
+          projectId={data.id}
+          permission={data.scope === "edit" ? "edit" : "view"}
+        >
+          <ProjectShareReader data={data} token={token} />
+        </ShareCapabilityProvider>
       </main>
     </div>
   );

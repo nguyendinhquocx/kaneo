@@ -13,6 +13,7 @@ type ColumnDropzoneProps = {
   column: ProjectWithTasks["columns"][number];
   projectDisplayDefaults: ProjectDisplayDefaults;
   disableDragDrop?: boolean;
+  onTaskClick?: (taskId: string) => void;
   onIsOverChange?: (isOver: boolean) => void;
 };
 
@@ -20,6 +21,7 @@ export function ColumnDropzone({
   column,
   projectDisplayDefaults,
   disableDragDrop = false,
+  onTaskClick,
   onIsOverChange,
 }: ColumnDropzoneProps) {
   const { setNodeRef, isOver } = useDroppable({
@@ -62,6 +64,7 @@ export function ColumnDropzone({
                   task={task}
                   projectDisplayDefaults={projectDisplayDefaults}
                   disableDragDrop={disableDragDrop}
+                  onTaskClick={onTaskClick}
                 />
               </motion.div>
             ))}

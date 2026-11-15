@@ -48,9 +48,10 @@ import TaskRow from "./task-row";
 type ListViewProps = {
   project: ProjectWithTasks;
   disableDragDrop?: boolean;
+  onTaskClick?: (taskId: string) => void;
 };
 
-function ListView({ project, disableDragDrop = false }: ListViewProps) {
+function ListView({ project, disableDragDrop = false, onTaskClick }: ListViewProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { setProject } = useProjectStore();
@@ -120,6 +121,10 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
       },
       Enter: () => {
         if (focusedTaskId && project) {
+          if (onTaskClick) {
+            onTaskClick(focusedTaskId);
+            return;
+          }
           // SPEC-2026-10-22: capability keyboard navigation stays on the
           // share surface.
           const capability = getShareCapability();
@@ -363,6 +368,7 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
                       projectSlug={project?.slug ?? ""}
                       projectDisplayDefaults={project}
                       disableDragDrop={isDragDisabled}
+                      onTaskClick={onTaskClick}
                     />
                   </motion.div>
                 ))}

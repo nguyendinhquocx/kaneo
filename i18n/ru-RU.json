@@ -1581,7 +1581,9 @@
         "expired": "Delivery expired before Pi claimed it.",
         "failed_before_send": "Pi did not accept the delivery.",
         "unknown": "Delivery outcome is unknown; it may already have reached Pi."
-      }
+      },
+      "sendToPiUnbound": "К этой карточке ещё не привязан агент. Выполни /kaneo-card <task-id> в сессии Pi.",
+      "sendToPiOffline": "Привязанный агент не в сети. Дождись повторного подключения сессии."
     },
     "created": "created this task",
     "moved": "moved task from \"{{from}}\" to \"{{to}}\""

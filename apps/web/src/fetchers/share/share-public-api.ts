@@ -135,6 +135,32 @@ export async function createSharedProjectTask({
   return (await response.json()) as SharedTaskResult;
 }
 
+export async function moveSharedProjectTask({
+  token,
+  taskId,
+  status,
+  position,
+  expectedContentRevision,
+}: {
+  token: string;
+  taskId: string;
+  status: string;
+  position: number;
+  expectedContentRevision: number;
+}): Promise<{ success: boolean; contentRevision: number }> {
+  const response = await fetch(
+    `${apiBase}/share/project/${token}/task/${taskId}/move`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, position, expectedContentRevision }),
+    },
+  );
+  if (response.status === 409) throw new ShareConflictError();
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as { success: boolean; contentRevision: number };
+}
+
 export async function updateSharedProjectTask({
   token,
   taskId,

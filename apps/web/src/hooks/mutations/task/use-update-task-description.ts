@@ -27,6 +27,7 @@ export function useUpdateTaskDescription() {
       queryClient.invalidateQueries({
         queryKey: ["task", variables.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["task-relations"] });
       queryClient.invalidateQueries({
         queryKey: ["tasks", variables.projectId],
       });

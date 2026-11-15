@@ -8,12 +8,18 @@ import { useMoveShareTask } from "./use-update-task";
 
 const mocks = vi.hoisted(() => ({
   moveShareFullTask: vi.fn(),
+  updateTaskShareTask: vi.fn(),
   toastError: vi.fn(),
 }));
 
 vi.mock("@/fetchers/share/share-full-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/fetchers/share/share-full-api")>();
   return { ...actual, moveShareFullTask: mocks.moveShareFullTask };
+});
+
+vi.mock("@/fetchers/share/share-task-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/fetchers/share/share-task-api")>();
+  return { ...actual, updateTaskShareTask: mocks.updateTaskShareTask };
 });
 
 vi.mock("@/lib/toast", () => ({ toast: { error: mocks.toastError } }));
@@ -75,6 +81,55 @@ function makeProject() {
 }
 
 describe("useMoveShareTask", () => {
+  it("routes a task-share board lane move through the scoped task patch and CAS revision", async () => {
+    mocks.updateTaskShareTask.mockResolvedValue({
+      task: { contentRevision: 8 },
+      contentRevision: 8,
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["share-task", "task-token", "root"], {
+      permission: "edit",
+      rootTaskId: "root",
+      scopeProjectId: "project-1",
+      statusOptions: [
+        { slug: "to-do", name: "To Do", isFinal: false },
+        { slug: "done", name: "Done", isFinal: true },
+      ],
+      root: { id: "root", contentRevision: 7, status: "to-do" },
+      subtasks: [],
+      commentsPage: { items: [], nextCursor: null },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <ShareCapabilityProvider
+          token="task-token"
+          projectId="project-1"
+          resourceType="task"
+          permission="edit"
+          rootTaskId="root"
+        >
+          {children}
+        </ShareCapabilityProvider>
+      </QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useMoveShareTask(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ taskId: "root", status: "done", position: 0 });
+    });
+
+    expect(mocks.updateTaskShareTask).toHaveBeenCalledWith({
+      token: "task-token",
+      taskId: "root",
+      patch: { status: "done" },
+      expectedContentRevision: 7,
+    });
+    expect(mocks.moveShareFullTask).not.toHaveBeenCalled();
+
+    unmount();
+    queryClient.clear();
+  });
+
   it("optimistically moves one card, sends one request, and rolls back on failure", async () => {
     let rejectMove: (error: Error) => void = () => {};
     mocks.moveShareFullTask.mockReturnValue(
@@ -90,7 +145,7 @@ describe("useMoveShareTask", () => {
     queryClient.setQueryData(queryKey, original);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>
-        <ShareCapabilityProvider token="share-token" projectId="project-1">
+        <ShareCapabilityProvider token="share-token" projectId="project-1" permission="full">
           {children}
         </ShareCapabilityProvider>
       </QueryClientProvider>

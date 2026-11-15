@@ -33,9 +33,10 @@ import TaskCard from "./task-card";
 type KanbanBoardProps = {
   project: ProjectWithTasks;
   disableDragDrop?: boolean;
+  onTaskClick?: (taskId: string) => void;
 };
 
-function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
+function KanbanBoard({ project, disableDragDrop = false, onTaskClick }: KanbanBoardProps) {
   const queryClient = useQueryClient();
   const {
     setAvailableTasks,
@@ -84,10 +85,21 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
       },
       Enter: () => {
         if (focusedTaskId && project) {
+          if (onTaskClick) {
+            onTaskClick(focusedTaskId);
+            return;
+          }
           // SPEC-2026-10-22: capability keyboard navigation stays on the
           // share surface.
           const capability = getShareCapability();
-          if (capability) {
+          if (capability?.resourceType === "task") {
+            navigate({
+              to: "/share/task/$token/task/$taskId",
+              params: { token: capability.token, taskId: focusedTaskId },
+            });
+            return;
+          }
+          if (capability?.resourceType === "project") {
             navigate({
               to: "/share/project/$token/task/$taskId",
               params: { token: capability.token, taskId: focusedTaskId },
@@ -252,6 +264,7 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
                   column={column}
                   projectDisplayDefaults={project}
                   disableDragDrop={isDragDisabled}
+                  onTaskClick={onTaskClick}
                 />
               </div>
             ))}

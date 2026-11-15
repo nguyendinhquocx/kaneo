@@ -1,4 +1,4 @@
-import { and, eq, max } from "drizzle-orm";
+import { and, asc, eq, inArray, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import { isProjectAgentControlled } from "../project/controllers/public-project-dto";
@@ -15,6 +15,133 @@ import {
   appendShareActionAudit,
   type ResolvedShareLink,
 } from "./resolve-share-link";
+
+type PublicMoveBody = {
+  status: string;
+  position: number;
+  expectedContentRevision: number;
+};
+
+// Legacy edit links support the same board drag behavior as the owner surface,
+// but remain limited to ordinary project tasks and status/position changes.
+export async function publicMoveTask(
+  link: ResolvedShareLink,
+  taskId: string,
+  body: PublicMoveBody,
+) {
+  if (await isProjectAgentControlled(link.resourceId)) {
+    throw agentControlledRefusal();
+  }
+  const [task] = await db
+    .select({
+      id: schema.taskTable.id,
+      projectId: schema.taskTable.projectId,
+      status: schema.taskTable.status,
+    })
+    .from(schema.taskTable)
+    .where(
+      and(
+        eq(schema.taskTable.id, taskId),
+        eq(schema.taskTable.projectId, link.resourceId),
+      ),
+    )
+    .limit(1);
+  if (!task) throw new HTTPException(404, { message: "Not found" });
+  await assertValidTaskStatus(body.status, link.resourceId);
+  if (VIRTUAL_STATUSES.includes(body.status as (typeof VIRTUAL_STATUSES)[number])) {
+    throw new HTTPException(400, { message: "Public links cannot set planned or archived status" });
+  }
+
+  const moved = await db.transaction(async (tx) => {
+    await lockProjectTaskLanes(tx, [link.resourceId]);
+    const [targetColumn] = await tx
+      .select({ id: schema.columnTable.id })
+      .from(schema.columnTable)
+      .where(
+        and(
+          eq(schema.columnTable.projectId, link.resourceId),
+          eq(schema.columnTable.slug, body.status),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    if (!targetColumn) throw new HTTPException(400, { message: "Invalid task status" });
+
+    const statuses = [...new Set([task.status, body.status])];
+    const laneTasks = await tx
+      .select({
+        id: schema.taskTable.id,
+        status: schema.taskTable.status,
+        position: schema.taskTable.position,
+        contentRevision: schema.taskTable.contentRevision,
+      })
+      .from(schema.taskTable)
+      .where(
+        and(
+          eq(schema.taskTable.projectId, link.resourceId),
+          inArray(schema.taskTable.status, statuses),
+        ),
+      )
+      .orderBy(asc(schema.taskTable.id))
+      .for("update");
+    const movingTask = laneTasks.find((row) => row.id === task.id);
+    if (!movingTask) throw new HTTPException(404, { message: "Not found" });
+    await assertTaskContentRevision(tx, task.id, body.expectedContentRevision);
+
+    const ordered = [...laneTasks].sort((left, right) => {
+      if (left.position === null && right.position !== null) return 1;
+      if (right.position === null && left.position !== null) return -1;
+      return (left.position ?? 0) - (right.position ?? 0) || left.id.localeCompare(right.id);
+    });
+    const sourceTasks = ordered.filter((row) => row.status === task.status && row.id !== task.id);
+    const destinationTasks = task.status === body.status
+      ? sourceTasks
+      : ordered.filter((row) => row.status === body.status && row.id !== task.id);
+    const destinationIndex = Math.max(0, Math.min(Math.trunc(body.position), destinationTasks.length));
+    destinationTasks.splice(destinationIndex, 0, movingTask);
+
+    if (task.status !== body.status) {
+      for (const [position, row] of sourceTasks.entries()) {
+        await tx
+          .update(schema.taskTable)
+          .set({ position })
+          .where(
+            and(
+              eq(schema.taskTable.id, row.id),
+              eq(schema.taskTable.projectId, link.resourceId),
+            ),
+          );
+      }
+    }
+    for (const [position, row] of destinationTasks.entries()) {
+      await tx
+        .update(schema.taskTable)
+        .set({
+          status: body.status,
+          columnId: targetColumn.id,
+          position,
+          ...(row.id === task.id
+            ? { contentRevision: movingTask.contentRevision + 1 }
+            : {}),
+        })
+        .where(
+          and(
+            eq(schema.taskTable.id, row.id),
+            eq(schema.taskTable.projectId, link.resourceId),
+          ),
+        );
+    }
+    await appendShareActionAudit(link, "task.move", tx);
+    const [updated] = await tx
+      .select({ contentRevision: schema.taskTable.contentRevision })
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, task.id))
+      .limit(1);
+    if (!updated) throw new HTTPException(404, { message: "Not found" });
+    return updated;
+  });
+  return { success: true, contentRevision: moved.contentRevision };
+}
 
 // SPEC-2026-10-08-kaneo-workspace-collaboration T7: anonymous writes through
 // capability links. Bearer permission by design — every mutation is audited

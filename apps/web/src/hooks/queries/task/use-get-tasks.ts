@@ -58,19 +58,19 @@ export function mapShareFullProjectPayload(
       ...column,
       tasks: column.tasks.map((task) => ({
         ...mapShareTask(task),
-        isSubtask: false,
-        nextSubtaskPreview: null,
+        isSubtask: task.isSubtask ?? false,
+        nextSubtaskPreview: task.nextSubtaskPreview ?? null,
       })),
     })),
     archivedTasks: payload.archivedTasks.map((task) => ({
       ...mapShareTask(task),
-      isSubtask: false,
-      nextSubtaskPreview: null,
+      isSubtask: task.isSubtask ?? false,
+      nextSubtaskPreview: task.nextSubtaskPreview ?? null,
     })),
     plannedTasks: payload.plannedTasks.map((task) => ({
       ...mapShareTask(task),
-      isSubtask: false,
-      nextSubtaskPreview: null,
+      isSubtask: task.isSubtask ?? false,
+      nextSubtaskPreview: task.nextSubtaskPreview ?? null,
     })),
   } as unknown as ProjectWithTasks;
 }

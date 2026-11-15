@@ -368,14 +368,13 @@ export async function buildTaskShareRootPayload(link: ResolvedShareLink) {
     rootTaskId: scope.rootTaskId,
     // Adapter/cache scope only: carries no authority and no project metadata.
     scopeProjectId: scope.projectId,
-    statusOptions:
-      link.permission === "edit"
-        ? columns.map((column) => ({
-            slug: column.slug,
-            name: column.name,
-            isFinal: column.isFinal,
-          }))
-        : undefined,
+    // Both permissions need the same lane names to render the shared card on
+    // the owner board. This is board scaffolding, not project enumeration.
+    statusOptions: columns.map((column) => ({
+      slug: column.slug,
+      name: column.name,
+      isFinal: column.isFinal,
+    })),
     root: dto,
     subtasks: subtaskDtos,
     commentsPage,
@@ -438,14 +437,11 @@ export async function buildTaskShareSubtreePayload(
     permission: link.permission,
     rootTaskId: scope.rootTaskId,
     scopeProjectId: scope.projectId,
-    statusOptions:
-      link.permission === "edit"
-        ? columns.map((column) => ({
-            slug: column.slug,
-            name: column.name,
-            isFinal: column.isFinal,
-          }))
-        : undefined,
+    statusOptions: columns.map((column) => ({
+      slug: column.slug,
+      name: column.name,
+      isFinal: column.isFinal,
+    })),
     task: dto,
     parent,
     subtasks: subtaskDtos,

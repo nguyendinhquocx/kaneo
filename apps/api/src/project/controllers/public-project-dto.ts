@@ -23,6 +23,18 @@ export type PublicProjectTask = {
   // SPEC-2026-11-10 T2: optimistic-concurrency token for public edit writes.
   contentRevision: number;
   labels: Array<{ id: string; name: string; color: string | null }>;
+  // R1-T3: same non-sensitive card projection used by the authenticated board.
+  isSubtask: boolean;
+  nextSubtaskPreview: {
+    id: string;
+    title: string;
+    workMarkerCounts: {
+      redCross: number;
+      boxedRedCross: number;
+      redCircle: number;
+      greenCheck: number;
+    };
+  } | null;
 };
 
 export type PublicProjectColumn = {
@@ -150,6 +162,68 @@ export async function buildPublicProjectPayload(
     labelsByTask.set(label.taskId, list);
   }
 
+  const projectColumns = await db
+    .select()
+    .from(schema.columnTable)
+    .where(eq(schema.columnTable.projectId, projectId))
+    .orderBy(asc(schema.columnTable.position));
+  const columnBySlug = new Map(
+    projectColumns.map((column) => [column.slug, column]),
+  );
+  const subtaskRelations =
+    taskIds.length > 0
+      ? await db
+          .select({
+            sourceTaskId: schema.taskRelationTable.sourceTaskId,
+            targetTaskId: schema.taskRelationTable.targetTaskId,
+            position: schema.taskRelationTable.position,
+            createdAt: schema.taskRelationTable.createdAt,
+          })
+          .from(schema.taskRelationTable)
+          .where(
+            and(
+              eq(schema.taskRelationTable.relationType, "subtask"),
+              inArray(schema.taskRelationTable.sourceTaskId, taskIds),
+              inArray(schema.taskRelationTable.targetTaskId, taskIds),
+            ),
+          )
+          .orderBy(
+            asc(schema.taskRelationTable.position),
+            asc(schema.taskRelationTable.createdAt),
+          )
+      : [];
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const isSubtaskById = new Set<string>();
+  const childrenByParentId = new Map<string, string[]>();
+  for (const relation of subtaskRelations) {
+    if (!taskById.has(relation.sourceTaskId) || !taskById.has(relation.targetTaskId)) {
+      continue;
+    }
+    isSubtaskById.add(relation.targetTaskId);
+    const children = childrenByParentId.get(relation.sourceTaskId) ?? [];
+    children.push(relation.targetTaskId);
+    childrenByParentId.set(relation.sourceTaskId, children);
+  }
+  const buildNextSubtaskPreview = (parentId: string) => {
+    for (const childId of childrenByParentId.get(parentId) ?? []) {
+      const child = taskById.get(childId);
+      const status = child ? columnBySlug.get(child.status) : undefined;
+      if (!child || !status || status.isFinal) continue;
+      return {
+        id: child.id,
+        title: child.title,
+        // Public DTOs never disclose the child's private marker counts.
+        workMarkerCounts: {
+          redCross: 0,
+          boxedRedCross: 0,
+          redCircle: 0,
+          greenCheck: 0,
+        },
+      };
+    }
+    return null;
+  };
+
   const toPublicTask = (task: (typeof tasks)[number]): PublicProjectTask => ({
     id: task.id,
     projectId: task.projectId,
@@ -166,13 +240,9 @@ export async function buildPublicProjectPayload(
     createdAt: task.createdAt,
     contentRevision: task.contentRevision,
     labels: labelsByTask.get(task.id) ?? [],
+    isSubtask: isSubtaskById.has(task.id),
+    nextSubtaskPreview: buildNextSubtaskPreview(task.id),
   });
-
-  const projectColumns = await db
-    .select()
-    .from(schema.columnTable)
-    .where(and(eq(schema.columnTable.projectId, projectId)))
-    .orderBy(asc(schema.columnTable.position));
 
   const columns: PublicProjectColumn[] = projectColumns.map((column) => ({
     id: column.slug,

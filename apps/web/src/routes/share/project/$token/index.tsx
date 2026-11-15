@@ -154,7 +154,7 @@ function FullProjectSurface({
   }, [createDocument, openDocument, payload.id, t]);
 
   return (
-    <ShareCapabilityProvider token={token} projectId={payload.id}>
+    <ShareCapabilityProvider token={token} projectId={payload.id} permission="full">
       <ShareProjectCapabilityContent
         token={token}
         projectId={payload.id}

@@ -587,6 +587,7 @@ describe("API integration: work markers, project default and subtask projection"
       .update(schema.taskTable)
       .set({
         workMarkerCounts: { redCross: 0, boxedRedCross: 3, redCircle: 4, greenCheck: 2 },
+        contentRevision: 2,
       })
       .where(eq(schema.taskTable.id, child.id));
 
@@ -596,10 +597,10 @@ describe("API integration: work markers, project default and subtask projection"
     expect(response.status).toBe(200);
     const relations = (await response.json()) as Array<{
       sourceTask:
-        | { id: string; workMarkerCounts: Record<string, number> }
+        | { id: string; workMarkerCounts: Record<string, number>; contentRevision: number }
         | null;
       targetTask:
-        | { id: string; workMarkerCounts: Record<string, number> }
+        | { id: string; workMarkerCounts: Record<string, number>; contentRevision: number }
         | null;
     }>;
     const subtask = relations.find(
@@ -617,6 +618,7 @@ describe("API integration: work markers, project default and subtask projection"
       redCircle: 4,
       greenCheck: 2,
     });
+    expect(subtask?.targetTask?.contentRevision).toBe(2);
   });
 
   it("keeps immutable task fields untouched when replacing markers", async () => {

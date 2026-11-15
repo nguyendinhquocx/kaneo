@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import getLabelsByWorkspace from "@/fetchers/label/get-label-by-workspace";
 import { getShareFullProject } from "@/fetchers/share/share-full-api";
+import { getTaskShareRoot } from "@/fetchers/share/share-task-api";
 import { getShareCapability } from "@/components/share/share-capability";
 
 function useGetLabelsByWorkspace(workspaceId: string) {
@@ -8,10 +9,24 @@ function useGetLabelsByWorkspace(workspaceId: string) {
   return useQuery({
     enabled: Boolean(capability || workspaceId),
     queryKey: capability
-      ? ["share-full", capability.token, "labels"]
+      ? capability.resourceType === "task"
+        ? ["share-task", capability.token, "labels"]
+        : ["share-full", capability.token, "labels"]
       : ["labels", workspaceId],
     queryFn: async (): Promise<Awaited<ReturnType<typeof getLabelsByWorkspace>>> => {
-      if (capability) {
+      if (capability?.resourceType === "task") {
+        const payload = await getTaskShareRoot(capability.token);
+        const seen = new Map<string, { id: string; name: string; color: string | null }>();
+        for (const task of [payload.root, ...payload.subtasks]) {
+          for (const label of task.labels) {
+            if (!seen.has(label.id)) {
+              seen.set(label.id, { ...label, color: label.color ?? "" });
+            }
+          }
+        }
+        return [...seen.values()] as Awaited<ReturnType<typeof getLabelsByWorkspace>>;
+      }
+      if (capability?.resourceType === "project") {
         // Task-scoped labels aggregated from the capability payload; the
         // workspace label list itself is never exposed to a holder.
         return getShareFullProject(capability.token).then((payload) => {

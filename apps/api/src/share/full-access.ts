@@ -313,6 +313,88 @@ export async function buildFullProjectPayload(resourceId: string) {
     labelsByTask.set(label.taskId, list);
   }
 
+  // R1-T3: same-project subtask projection so the guest board cards render
+  // the same "next subtask" preview row as the owner board. One relation
+  // query bounded to project task ids — both ends are always in allTasks.
+  // taskIds already computed above for the label query.
+  const subtaskRelationsOfProject =
+    taskIds.length > 0
+      ? await db
+          .select({
+            sourceTaskId: schema.taskRelationTable.sourceTaskId,
+            targetTaskId: schema.taskRelationTable.targetTaskId,
+            position: schema.taskRelationTable.position,
+            createdAt: schema.taskRelationTable.createdAt,
+          })
+          .from(schema.taskRelationTable)
+          .where(
+            and(
+              eq(schema.taskRelationTable.relationType, "subtask"),
+              inArray(schema.taskRelationTable.sourceTaskId, taskIds),
+              inArray(schema.taskRelationTable.targetTaskId, taskIds),
+            ),
+          )
+          .orderBy(
+            asc(schema.taskRelationTable.position),
+            asc(schema.taskRelationTable.createdAt),
+          )
+      : [];
+
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const isSubtaskTaskId = new Set<string>();
+  const subtaskChildrenByParentId = new Map<
+    string,
+    Array<{ targetTaskId: string }>
+  >();
+  for (const relation of subtaskRelationsOfProject) {
+    const child = taskById.get(relation.targetTaskId);
+    const parent = taskById.get(relation.sourceTaskId);
+    // Both ends are project tasks by construction; the child must not have
+    // been filtered out (denied/redacted) for a preview to stay accurate.
+    if (!child || !parent) continue;
+    isSubtaskTaskId.add(child.id);
+    const children = subtaskChildrenByParentId.get(parent.id) ?? [];
+    children.push({ targetTaskId: child.id });
+    subtaskChildrenByParentId.set(parent.id, children);
+  }
+
+  const projectColumns = await db
+    .select()
+    .from(schema.columnTable)
+    .where(eq(schema.columnTable.projectId, resourceId))
+    .orderBy(asc(schema.columnTable.position));
+
+  const columnBySlug = new Map(
+    projectColumns.map((column) => [column.slug, column]),
+  );
+  const isBoardVisibleStatus = (status: string) => columnBySlug.has(status);
+  const isFinalStatus = (status: string) =>
+    columnBySlug.get(status)?.isFinal === true;
+
+  const buildNextSubtaskPreview = (parentId: string) => {
+    const children = subtaskChildrenByParentId.get(parentId);
+    if (!children || children.length === 0) {
+      return null;
+    }
+    for (const child of children) {
+      const full = taskById.get(child.targetTaskId);
+      if (!full) continue;
+      if (isBoardVisibleStatus(full.status) && !isFinalStatus(full.status)) {
+        return {
+          id: full.id,
+          title: full.title,
+          workMarkerCounts: {
+            redCross: 0,
+            boxedRedCross: 0,
+            redCircle: 0,
+            greenCheck: 0,
+          },
+        };
+      }
+    }
+    return null;
+  };
+
   const toFullTask = (task: (typeof tasks)[number]) => ({
     id: task.id,
     projectId: task.projectId,
@@ -330,13 +412,10 @@ export async function buildFullProjectPayload(resourceId: string) {
     // guest field writes never fly blind.
     contentRevision: task.contentRevision,
     labels: labelsByTask.get(task.id) ?? [],
+    // R1-T3: board parity with the owner payload (get-tasks decorateTask).
+    isSubtask: isSubtaskTaskId.has(task.id),
+    nextSubtaskPreview: buildNextSubtaskPreview(task.id),
   });
-
-  const projectColumns = await db
-    .select()
-    .from(schema.columnTable)
-    .where(eq(schema.columnTable.projectId, resourceId))
-    .orderBy(asc(schema.columnTable.position));
 
   return {
     id: project.id,

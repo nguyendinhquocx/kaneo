@@ -505,3 +505,59 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - [ ] Owner review working spec; formal `task_run` comment auto-steer policy đã được chốt là giữ legacy human-comment behavior, không dùng comment này thay nút Gửi cho Pi của session thường.
 - [ ] T1–T6 acceptance, `Reproduce` commands, file scopes và repo boundaries được duyệt.
 - [ ] Implementation chưa bắt đầu trong giai đoạn này; `spec-archive` chỉ sau implementation, `/verify`, required UAT và release gates PASS.
+
+# Revision 1 (owner UAT 2026-11-15)
+
+## R1-T1 — Bỏ cảnh báo bearer-secret rác trên popup chia sẻ thẻ
+- Root cause: `share-dialog.tsx` renders `share.task.editWarning` + `share.task.subtreeNote` (dài dòng, rác thị giác).
+- Fix: bỏ dòng JSX đó trong ShareDialog (giữ `manifestWarning` — useful), cập nhật test nếu assert.
+- Acceptance: popup tạo/sao chép link sửa thẻ không còn text bearer-secret; `pnpm web tests` pass.
+
+## R1-T2 — Link chia sẻ thẻ (xem/sửa) dùng board thật, chỉ có thẻ đó
+- Root cause: `/share/task/:token` (sửa) + `/share/task/:token/task/:taskId` (xem) render `TaskShareReader` — layout "chế" riêng, không phải board Kaneo.
+- Fix: guest thấy `KanbanBoard` thật dựng từ task-share DTO (1 root card trong lane đúng status, nhãn và preview công việc con trong cây scope; lane names chỉ là board scaffolding). View link drag-disabled; edit link kéo root qua lane bằng PATCH + `contentRevision` CAS. Click card mở route detail chỉ trong cây share.
+- Acceptance: mở link xem/sửa thẻ "pi android" thấy board owner component nhưng chỉ 1 root card; task ngoài scope không lộ; full project share link behavior độc lập; web tests + typecheck pass.
+- Note: detail route vẫn dùng task-share reader scoped hiện có; UAT request tập trung landing board, chưa chuyển reader sang TaskDetailsSheet owner.
+
+## R1-T3 — Project share hiển thị thẻ đủ như owner (labels + subtask preview)
+- Root cause: (a) API `full-access.ts` không trả subtask projection (`isSubtask`, `nextSubtaskPreview`); (b) web `mapShareFullProjectPayload` hard-code `false/null`; (c) `TaskCardLabels` fetch qua authenticated hook thay vì nhận labels từ task prop → guest luôn rỗng.
+- Fix: API trả projection same-project; web map dùng; TaskCardLabels nhận labels prop (share path) với fallback hook.
+- Acceptance: share project xem/sửa cards hiện labels + "↳ subtask" y như owner board; drag vẫn hoạt động; integration tests pass.
+
+## R1-T4 — "Send to Pi" luôn hiển thị trên comment
+- Root cause: `SendCommentToPiAction` return null khi chưa có session Pi bound+online → owner không thấy chỗ gửi.
+- Fix: luôn render action khi điều kiện quyền đạt; khi chưa bind/offline → disabled + tooltip hướng dẫn `/kaneo-card`; bound thì như cũ.
+- Acceptance: card chưa bind vẫn thấy nút (disabled + tooltip); card bind online gửi được, receipt queued/read giữ nguyên; tests pass.
+
+## R1-T5 — Kiểm tra trạng thái extension kaneo-mcp trên laptop Li
+- Owner hỏi extension đã cài chưa; chỉ kiểm tra read-only, không sync/restart nếu chưa có yêu cầu mutation rõ.
+- Result: runtime `C:/Users/quocn/.pi/agent/extensions/kaneo-mcp` là bản cũ 10 files, không có `/kaneo-card`; chưa sync artifact mới trong revision này.
+
+## R1 verification/deploy state
+- UI unit suite 156/156, API unit 264/264, full-share + public-share integration 54/54, web typecheck/build and i18n check PASS; production remains on earlier UAT candidate until a new release is explicitly approved.
+- Pi laptop status check: C:/Users/quocn/.pi/agent/extensions/kaneo-mcp is the old 10-file build, no `/kaneo-card`; no Li sync/activation was run in this revision.
+
+
+# Revision 2 (owner UAT console, 2026-11-15)
+
+## R2-T1 — Tick subtasks không gửi contentRevision cũ
+- Evidence: `/api/task/status/:id` trả 409 với `currentContentRevision: 2` khi tick subtask trong detail; `get-task-relations.ts` không serialize contentRevision; `TaskSubtasks.buildTaskObject` bỏ field này nên fallback về 1.
+- Fix: add contentRevision vào authenticated relation task projection + preserve vào Task object; stale-conflict toast không show raw JSON. Invalidate relation cache on content writes.
+- Acceptance: subtask có revision 2 tick pass; genuinely stale conflict vẫn giữ state và hiện lỗi thân thiện; relation response vẫn không dùng làm project/workspace enumeration.
+
+## R2-T2 — Guard event target khi rời editor
+- Evidence: `TaskDescription.handleEditorMouseLeave` cast `relatedTarget` sang HTMLElement rồi gọi `.closest`; browser có thể gửi `Window`/EventTarget không có `.closest`, gây uncaught TypeError.
+- Fix: gọi `closest` chỉ khi `relatedTarget` là Element (hoặc có function closest).
+- Acceptance: mouse leave từ editor sang window/menu không crash; existing editor tests pass.
+
+## R2-T3 — Phân loại các console message
+- `/api/execution/project/:id/manifest` 404 là optional probe có chủ đích khi project không có execution manifest; `getExecutionManifest` map 404 thành null nên không chặn UI.
+- `content.js: Combined Extension` scrollbar/grayscale logs và `Unchecked runtime.lastError` thuộc browser extension/message-port lifecycle, không phải Kaneo bundle.
+- Chỉ R2-T1 409 và R2-T2 TypeError là app failures cần sửa.
+
+
+## R2 verification state
+- Fixed: authenticated `GET /task-relation/:taskId` includes each task's `contentRevision`; `TaskSubtasks` forwards it to status CAS and no longer surfaces raw API JSON on failure. Field edits invalidate relation projections.
+- Fixed: task-description and comment-editor hover handlers guard `relatedTarget` before calling `.closest`.
+- Verified: web 161/161 tests, API unit 264/264, share integration 54/54, task-subtask integration 13/13, web typecheck/build, API typecheck and `i18n:check` PASS.
+- Console classification: manifest probe 404 is an intentional no-manifest response mapped to `null`; `content.js` scrollbar/grayscale and message-port errors originate from browser extensions, not the Kaneo bundle.

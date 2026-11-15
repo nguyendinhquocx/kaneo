@@ -59,6 +59,7 @@ type TaskRowProps = {
   projectSlug: string;
   projectDisplayDefaults: ProjectDisplayDefaults;
   disableDragDrop?: boolean;
+  onTaskClick?: (taskId: string) => void;
 };
 
 function TaskRow({
@@ -66,6 +67,7 @@ function TaskRow({
   projectSlug,
   projectDisplayDefaults,
   disableDragDrop = false,
+  onTaskClick,
 }: TaskRowProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -171,6 +173,11 @@ function TaskRow({
   const handleClick = (e: React.MouseEvent) => {
     if (!project || !task) return;
     if (e.defaultPrevented) return;
+    if (onTaskClick && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      onTaskClick(task.id);
+      return;
+    }
 
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();

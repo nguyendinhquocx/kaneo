@@ -57,6 +57,7 @@ type TaskCardProps = {
   task: ProjectBoardTask;
   projectDisplayDefaults?: ProjectDisplayDefaults;
   disableDragDrop?: boolean;
+  onTaskClick?: (taskId: string) => void;
   /** Guest surfaces never render the per-user preview projection. */
   showNextSubtaskPreviewRow?: boolean;
 };
@@ -65,6 +66,7 @@ function TaskCard({
   task,
   projectDisplayDefaults,
   disableDragDrop = false,
+  onTaskClick,
   showNextSubtaskPreviewRow = true,
 }: TaskCardProps) {
   const { t } = useTranslation();
@@ -181,6 +183,20 @@ function TaskCard({
 
     const currentParams = new URLSearchParams(window.location.search);
     const currentTaskId = currentParams.get("taskId");
+
+    if (onTaskClick) {
+      onTaskClick(task.id);
+      return;
+    }
+
+    const capability = getShareCapability();
+    if (capability?.resourceType === "task") {
+      navigate({
+        to: "/share/task/$token/task/$taskId",
+        params: { token: capability.token, taskId: task.id },
+      });
+      return;
+    }
 
     if (currentTaskId === task.id) {
       navigate({
@@ -307,7 +323,7 @@ function TaskCard({
 
             {showLabels && (
               <div className="mb-2.5">
-                <TaskCardLabels taskId={task.id} />
+                <TaskCardLabels taskId={task.id} labels={task.labels} />
               </div>
             )}
 

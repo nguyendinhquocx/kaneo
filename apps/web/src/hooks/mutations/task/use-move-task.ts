@@ -33,6 +33,7 @@ export function useMoveTask() {
       queryClient.invalidateQueries({
         queryKey: ["task", variables.taskId],
       });
+      queryClient.invalidateQueries({ queryKey: ["task-relations"] });
       queryClient.invalidateQueries({
         queryKey: ["tasks", result.sourceProjectId],
       });

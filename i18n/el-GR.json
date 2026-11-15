@@ -1573,7 +1573,9 @@
         "expired": "Delivery expired before Pi claimed it.",
         "failed_before_send": "Pi did not accept the delivery.",
         "unknown": "Delivery outcome is unknown; it may already have reached Pi."
-      }
+      },
+      "sendToPiUnbound": "Δεν έχει συνδεθεί ακόμη agent σε αυτήν την κάρτα. Εκτέλεσε /kaneo-card <task-id> σε μια συνεδρία Pi.",
+      "sendToPiOffline": "Ο συνδεδεμένος agent είναι εκτός σύνδεσης. Περίμενε να επανασυνδεθεί η συνεδρία."
     }
   },
   "tasks": {

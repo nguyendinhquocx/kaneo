@@ -1573,7 +1573,9 @@
         "expired": "Hết hạn trước khi Pi nhận.",
         "failed_before_send": "Pi chưa nhận được lần gửi này.",
         "unknown": "Không rõ kết quả; bình luận có thể đã tới Pi."
-      }
+      },
+      "sendToPiUnbound": "Chưa có agent nào bind vào thẻ này — chạy /kaneo-card <task-id> trong session Pi rồi thử lại.",
+      "sendToPiOffline": "Agent đang bind nhưng đang offline — chờ session kết nối lại."
     }
   },
   "tasks": {

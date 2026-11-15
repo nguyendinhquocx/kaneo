@@ -64,6 +64,7 @@ export function useReorderProjectTasks() {
         queryClient.invalidateQueries({ queryKey: context.queryKey, exact: true }),
         queryClient.invalidateQueries({ queryKey: ["projects"] }),
         queryClient.invalidateQueries({ queryKey: ["task", variables.taskId] }),
+        queryClient.invalidateQueries({ queryKey: ["task-relations"] }),
         queryClient.invalidateQueries({
           queryKey: ["activities", variables.taskId],
         }),

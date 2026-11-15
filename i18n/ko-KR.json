@@ -1573,7 +1573,9 @@
         "expired": "Delivery expired before Pi claimed it.",
         "failed_before_send": "Pi did not accept the delivery.",
         "unknown": "Delivery outcome is unknown; it may already have reached Pi."
-      }
+      },
+      "sendToPiUnbound": "이 카드에 연결된 에이전트가 없습니다. Pi 세션에서 /kaneo-card <task-id>를 실행하세요.",
+      "sendToPiOffline": "연결된 에이전트가 오프라인입니다. 세션이 다시 연결될 때까지 기다리세요."
     }
   },
   "tasks": {

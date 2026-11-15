@@ -3,9 +3,9 @@ import { authClient } from "@/lib/auth-client";
 import { getShareCapability } from "@/components/share/share-capability";
 
 function useActiveWorkspace() {
-  // SPEC-2026-10-22: a capability holder has no workspace context. Surface a
-  // synthetic active workspace (real project id, empty id) so shared toolbar
-  // components keep working without ever reading workspace membership data.
+  // Capability holders have no authenticated workspace context. Keep only an
+  // empty synthetic shell so owner components can render without triggering
+  // member-list or organization lookups.
   const capability = getShareCapability();
   const { data: activeOrganization, error } =
     authClient.useActiveOrganization();
@@ -25,7 +25,7 @@ function useActiveWorkspace() {
     ? organizations?.find((organization) => organization.id === workspaceId)
     : undefined;
   const workspace = capability
-    ? ({ id: capability.projectId, name: "" } as never)
+    ? ({ id: "", name: "" } as never)
     : (workspaceFromRoute ?? activeOrganization);
   const isLoading = capability
     ? false

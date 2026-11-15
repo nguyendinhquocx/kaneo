@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import TaskShareReader from "@/components/share/task-share-reader";
+import TaskShareBoard from "@/components/share/task-share-board";
 import {
   ShareCapabilityProvider,
   setShareCapabilityProjectId,
@@ -15,10 +15,8 @@ import {
   ShareRequestError,
 } from "@/fetchers/share/share-request-error";
 
-// SPEC-2026-11-10-kaneo-card-agent-collaboration T3: guest task root route.
-// The link grants exactly one card and its live subtask tree — no board,
-// no sidebar, no navigation that leaves the tree. Authorization is the
-// bearer token; the page sends no credentials and no referrer.
+// R1-T2: render the authorized root card in the real Kaneo board surface;
+// only this task appears, while the task capability still fences all data.
 
 export const Route = createFileRoute("/share/task/$token")({
   component: ShareTaskRoute,
@@ -62,22 +60,7 @@ function ShareTaskRoute() {
       permission={payload.permission}
       rootTaskId={payload.rootTaskId}
     >
-      <div className="h-svh overflow-y-auto">
-        <meta name="robots" content="noindex, nofollow" />
-        <meta name="referrer" content="no-referrer" />
-        <TaskShareReader
-          token={token}
-          projectId={payload.scopeProjectId}
-          rootTaskId={payload.rootTaskId}
-          permission={payload.permission}
-          card={payload.root}
-          subtasks={payload.subtasks}
-          comments={payload.commentsPage.items}
-          parent={null}
-          statusOptions={payload.statusOptions ?? []}
-          onRefresh={() => void share.refetch()}
-        />
-      </div>
+      <TaskShareBoard token={token} payload={payload} />
     </ShareCapabilityProvider>
   );
 }

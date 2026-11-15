@@ -6,6 +6,11 @@ import {
   updateShareFullTask,
 } from "@/fetchers/share/share-full-api";
 import {
+  updateTaskShareTask,
+  type TaskShareRootPayload,
+} from "@/fetchers/share/share-task-api";
+import { moveSharedProjectTask } from "@/fetchers/share/share-public-api";
+import {
   getShareCapability,
   invalidateShareQueries,
 } from "@/components/share/share-capability";
@@ -29,10 +34,47 @@ export function useMoveShareTask() {
     ShareTaskMove,
     ShareTaskMoveContext | undefined
   >({
-    mutationFn: (input) => {
+    mutationFn: async (input) => {
       const capability = getShareCapability();
       if (!capability) {
-        throw new Error("A full-share capability is required to move a task.");
+        throw new Error("A share capability is required to move a task.");
+      }
+      if (capability.resourceType === "task") {
+        if (capability.permission !== "edit" || input.taskId !== capability.rootTaskId) {
+          throw new Error("Only the shared root card can move on this board.");
+        }
+        const root = queryClient.getQueryData<TaskShareRootPayload>([
+          "share-task",
+          capability.token,
+          "root",
+        ]);
+        if (!root || root.root.id !== input.taskId) {
+          throw new Error("The shared card is not available for this move.");
+        }
+        await updateTaskShareTask({
+          token: capability.token,
+          taskId: input.taskId,
+          patch: { status: input.status },
+          expectedContentRevision: root.root.contentRevision,
+        });
+        return { success: true };
+      }
+      if (capability.permission !== "full") {
+        if (capability.permission !== "edit") {
+          throw new Error("The shared project is read-only.");
+        }
+        const movingTask = queryClient
+          .getQueryData<ProjectWithTasks>(["share-full", capability.token])
+          ?.columns.flatMap((column) => column.tasks)
+          .find((candidate) => candidate.id === input.taskId);
+        if (!movingTask) throw new Error("The shared card is unavailable.");
+        return moveSharedProjectTask({
+          token: capability.token,
+          taskId: input.taskId,
+          status: input.status,
+          position: input.position,
+          expectedContentRevision: movingTask.contentRevision ?? 1,
+        });
       }
       const movingTask = queryClient
         .getQueryData<ProjectWithTasks>(["share-full", capability.token])
@@ -51,7 +93,7 @@ export function useMoveShareTask() {
     },
     onMutate: async (input) => {
       const capability = getShareCapability();
-      if (!capability) return undefined;
+      if (!capability || capability.resourceType === "task") return undefined;
 
       const queryKey = ["share-full", capability.token] as const;
       await queryClient.cancelQueries({ queryKey, exact: true });
@@ -132,6 +174,19 @@ export function useMoveShareTask() {
       toast.error(t("share:full.moveFailed"));
     },
     onSettled: (_data, _error, _input, context) => {
+      const capability = getShareCapability();
+      invalidateShareQueries(queryClient);
+      if (capability?.resourceType === "project" && capability.permission !== "full") {
+        void Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ["share", "project", capability.token],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ["share-project-route", capability.token],
+            exact: true,
+          }),
+        ]);
+      }
       if (context) {
         return queryClient.invalidateQueries({
           queryKey: context.queryKey,
@@ -173,6 +228,7 @@ export function useUpdateTask({ deferInvalidation = false }: { deferInvalidation
       queryClient.invalidateQueries({
         queryKey: ["task", variables.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["task-relations"] });
       queryClient.invalidateQueries({
         queryKey: ["tasks", variables.projectId],
       });

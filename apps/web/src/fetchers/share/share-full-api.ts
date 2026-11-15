@@ -25,6 +25,19 @@ export type ShareFullTask = {
   // SPEC-2026-11-10 T2: content CAS token for full-share guest writes.
   contentRevision: number;
   labels: Array<{ id: string; name: string; color: string | null }>;
+  // R1-T3: owner-board parity — guest cards carry the same subtask
+  // projection so "↳ next subtask" rows render like the owner sees.
+  isSubtask?: boolean;
+  nextSubtaskPreview?: {
+    id: string;
+    title: string;
+    workMarkerCounts: {
+      redCross: number;
+      boxedRedCross: number;
+      redCircle: number;
+      greenCheck: number;
+    };
+  } | null;
 };
 
 export type ShareFullProjectPayload = {

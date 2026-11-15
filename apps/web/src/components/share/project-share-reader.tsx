@@ -1,9 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Layout, List, Pencil, Plus, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Pencil, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PublicKanbanView } from "@/components/public-project/kanban-view";
-import { PublicListView } from "@/components/public-project/list-view";
+import BoardToolbar from "@/components/board/board-toolbar";
+import KanbanBoard from "@/components/kanban-board";
+import ListView from "@/components/list-view";
+import { setShareCapabilityProjectId } from "@/components/share/share-capability";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogPopup } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -18,9 +20,65 @@ import type {
   PublicProjectPayload,
   PublicProjectTask,
 } from "@/types/public-project";
+import type { ProjectBoardTask, ProjectWithTasks } from "@/types/project";
+import useProjectStore from "@/store/project";
+import { useBoardSort } from "@/hooks/use-board-sort";
+import { useTaskFiltersWithLabelsSupport } from "@/hooks/use-task-filters-with-labels-support";
+import { useUserPreferencesStore } from "@/store/user-preferences";
+import { sortTasks } from "@/lib/sort-tasks";
 import { SharedMarkdown, ShareScopeBadge } from "./goal-share-reader";
 
 type ProjectShareData = PublicProjectPayload & { scope?: "view" | "edit" };
+
+function mapPublicTask(task: PublicProjectTask, projectId: string): ProjectBoardTask {
+  return {
+    id: task.id,
+    projectId,
+    number: task.number,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    startDate: task.startDate ? task.startDate.toString() : null,
+    dueDate: task.dueDate ? task.dueDate.toString() : null,
+    position: task.position,
+    createdAt: task.createdAt.toString(),
+    userId: null,
+    assigneeId: null,
+    assigneeName: null,
+    contentRevision: task.contentRevision,
+    labels: task.labels.map((label) => ({ ...label, color: label.color ?? "" })),
+    workMarkerCounts: {
+      redCross: 0,
+      boxedRedCross: 0,
+      redCircle: 0,
+      greenCheck: 0,
+    },
+    isSubtask: task.isSubtask,
+    nextSubtaskPreview: task.nextSubtaskPreview,
+  };
+}
+
+function mapPublicProjectToBoard(data: ProjectShareData): ProjectWithTasks {
+  return {
+    id: data.id,
+    name: data.name,
+    slug: data.slug,
+    icon: data.icon,
+    description: data.description,
+    workspaceId: "",
+    isPublic: data.isPublic,
+    showSubtaskCardsByDefault: true,
+    showAssigneesByDefault: false,
+    showPriorityByDefault: true,
+    columns: data.columns.map((column) => ({
+      ...column,
+      tasks: column.tasks.map((task) => mapPublicTask(task, data.id)),
+    })),
+    archivedTasks: data.archivedTasks.map((task) => mapPublicTask(task, data.id)),
+    plannedTasks: data.plannedTasks.map((task) => mapPublicTask(task, data.id)),
+  } as ProjectWithTasks;
+}
 
 const PRIORITY_VALUES = [
   "no-priority",
@@ -44,8 +102,19 @@ export default function ProjectShareReader({
   const { t } = useTranslation("share");
   const queryClient = useQueryClient();
   const canEdit = data.scope === "edit";
-  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [isEditing, setIsEditing] = useState(false);
+  const { setProject } = useProjectStore();
+  const { viewMode, setViewMode } = useUserPreferencesStore();
+  const { sort, setSort } = useBoardSort(data.id);
+  const project = useMemo(() => mapPublicProjectToBoard(data), [data]);
+  const {
+    filteredProject,
+    filters,
+    updateFilter,
+    clearFilters,
+    hasActiveFilters,
+    updateLabelFilter,
+  } = useTaskFiltersWithLabelsSupport(project, data.id);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -55,11 +124,45 @@ export default function ProjectShareReader({
   );
   const selectedTask =
     allTasks.find((task) => task.id === selectedTaskId) ?? null;
+  const workspaceLabels = useMemo(() => {
+    const labels = new Map<string, { id: string; name: string; color: string }>();
+    for (const task of allTasks) {
+      for (const label of task.labels ?? []) {
+        labels.set(label.id, { ...label, color: label.color ?? "" });
+      }
+    }
+    return [...labels.values()];
+  }, [allTasks]);
+
+  useEffect(() => {
+    setShareCapabilityProjectId(data.id);
+    setProject(project as unknown as Parameters<typeof setProject>[0]);
+    // The owner KanbanBoard move hook uses a scoped cache snapshot for the
+    // legacy edit capability so it can send the current contentRevision.
+    queryClient.setQueryData(["share-full", token], project);
+  }, [data.id, project, queryClient, setProject, token]);
+
+  const sortedProject = useMemo(() => {
+    if (!filteredProject) return null;
+    return {
+      ...filteredProject,
+      columns: filteredProject.columns.map((column) => ({
+        ...column,
+        tasks: sortTasks(column.tasks, sort),
+      })),
+    };
+  }, [filteredProject, sort]);
 
   const refresh = () =>
-    queryClient.invalidateQueries({
-      queryKey: ["share", "project", token],
-    });
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["share", "project", token],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["share-project-route", token],
+        exact: true,
+      }),
+    ]);
 
   return (
     <article className="space-y-4">
@@ -102,52 +205,36 @@ export default function ProjectShareReader({
         <p className="text-xs text-muted-foreground">{t("project.viewHint")}</p>
       )}
 
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="xs"
-          className={
-            viewMode === "kanban"
-              ? "bg-accent text-foreground"
-              : "text-muted-foreground"
-          }
-          onClick={() => setViewMode("kanban")}
-          aria-pressed={viewMode === "kanban"}
-        >
-          <Layout className="size-3.5" />
-          {t("project.boardView")}
-        </Button>
-        <Button
-          variant="ghost"
-          size="xs"
-          className={
-            viewMode === "list"
-              ? "bg-accent text-foreground"
-              : "text-muted-foreground"
-          }
-          onClick={() => setViewMode("list")}
-          aria-pressed={viewMode === "list"}
-        >
-          <List className="size-3.5" />
-          {t("project.listView")}
-        </Button>
+      <div className="flex h-[70vh] min-h-0 flex-col gap-2">
+        <BoardToolbar
+          project={filteredProject ?? null}
+          filters={filters}
+          updateFilter={updateFilter}
+          updateLabelFilter={updateLabelFilter}
+          clearFilters={() => clearFilters()}
+          hasActiveFilters={hasActiveFilters}
+          users={[] as never}
+          workspaceLabels={workspaceLabels as never}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          sort={sort}
+          onSortChange={setSort}
+        />
+        <div className="min-h-0 flex-1">
+          {viewMode === "board" && sortedProject ? (
+            <KanbanBoard
+              project={sortedProject}
+              disableDragDrop={!canEdit || !isEditing || hasActiveFilters}
+              onTaskClick={(taskId) => setSelectedTaskId(taskId)}
+            />
+          ) : sortedProject ? (
+            <ListView
+              project={sortedProject}
+              onTaskClick={(taskId) => setSelectedTaskId(taskId)}
+            />
+          ) : null}
+        </div>
       </div>
-
-      {viewMode === "kanban" ? (
-        <div className="flex h-[70vh] min-h-0 flex-col">
-          <PublicKanbanView
-            project={data}
-            onTaskClick={(task) => setSelectedTaskId(task.id)}
-          />
-        </div>
-      ) : (
-        <div className="flex h-[70vh] min-h-0 flex-col">
-          <PublicListView
-            project={data}
-            onTaskClick={(task) => setSelectedTaskId(task.id)}
-          />
-        </div>
-      )}
 
       {canEdit && isCreating ? (
         <SharedTaskFormDialog
