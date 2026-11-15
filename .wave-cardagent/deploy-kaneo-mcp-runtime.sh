@@ -14,12 +14,12 @@ else
 fi
 
 BUNDLE=/home/quoc/kaneo/release/.staging/card-agent-collaboration/pi-extension
-ARTIFACT_ID=kaneo-mcp-linux-da9ba471-b74d529a5412
+ARTIFACT_ID=kaneo-mcp-linux-d81cd37-18aa5f8a
 ARCHIVE=$BUNDLE/$ARTIFACT_ID.tar.gz
 RELEASE_MANIFEST=$BUNDLE/$ARTIFACT_ID.release.json
-EXPECTED_ARCHIVE_SHA=e593dddd3ab234dab83f717c1a40bc602517f85b658abefa3b88d369f8fb2517
-EXPECTED_RELEASE_MANIFEST_SHA=6d2160dda00045caacbb4c5cde99b2c7cd250059cf81c27f9100cba68537bb83
-EXPECTED_SOURCE_COMMIT=da9ba4715aac60e3a1e70628fe0920376ce0315b
+EXPECTED_ARCHIVE_SHA=6db3b953ff173c7c087abbbe92ef6e153c329221f49ff5b80675abc2de8d3d6c
+EXPECTED_RELEASE_MANIFEST_SHA=bd2cdebdcb440ffd348bc4dece82f6fe0532de22e732628baa4848589e32b32c
+EXPECTED_SOURCE_COMMIT=d81cd37cd18d2ff771bf39db6fc5b4f2a0895392
 EXPECTED_PARITY_MANIFEST_SHA=fe3a3670d8094708e55db48b47ab04905222df20db78ffc837d033a4643c6175
 RUNTIME=/home/quoc/.pi/agent/extensions/kaneo-mcp
 BACKUP_BASE=/home/quoc/pi-agent-work/extensions/kaneo-mcp-runtime-backups
@@ -45,7 +45,7 @@ raw = pathlib.Path(manifest_path).read_bytes()
 manifest = json.loads(raw)
 if hashlib.sha256(raw).hexdigest() != "6d2160dda00045caacbb4c5cde99b2c7cd250059cf81c27f9100cba68537bb83":
     raise SystemExit("release manifest digest mismatch")
-if manifest.get("artifact_id") != "kaneo-mcp-linux-da9ba471-b74d529a5412":
+if manifest.get("artifact_id") != "kaneo-mcp-linux-d81cd37-18aa5f8a":
     raise SystemExit("artifact id mismatch")
 if manifest.get("source_commit") != expected_commit:
     raise SystemExit("source commit mismatch")

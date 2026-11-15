@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "artifact_id": "kaneo-mcp-linux-da9ba471-b74d529a5412",
+  "artifact_id": "kaneo-mcp-linux-d81cd37-18aa5f8a",
   "target": "linux-headless",
   "source_repo": "D:/pcloud/workspace/code/python",
-  "source_commit": "da9ba4715aac60e3a1e70628fe0920376ce0315b",
+  "source_commit": "d81cd37cd18d2ff771bf39db6fc5b4f2a0895392",
   "source_path": "app_presets/pi/extensions/kaneo-mcp",
   "manifest_path": "D:/pcloud/workspace/code/agent/pi-agent-parity/agent-artifacts-manifest.json",
   "manifest_sha256": "fe3a3670d8094708e55db48b47ab04905222df20db78ffc837d033a4643c6175",
@@ -43,11 +43,6 @@
   "file_count": 17,
   "files": [
     {
-      "path": "README.md",
-      "size": 13181,
-      "sha256": "fb0d5627e000da09fd0bf27e16820b001f161f218144f09021b46aae27250bd2"
-    },
-    {
       "path": "card-binding-state.ts",
       "size": 6077,
       "sha256": "d85f198b28692e102f8c06eeb78060d58d65b1e79c8054dab661dcd7284110ba"
@@ -69,8 +64,8 @@
     },
     {
       "path": "execution-runtime.test.ts",
-      "size": 22412,
-      "sha256": "6bff7a1a999a2169efe1907152f20ebf8c00b6de9ebd4857f9ba4618aa4d54c0"
+      "size": 22757,
+      "sha256": "1eba7c10f9d71faa994ff2eedfea764b7adcde61f99d2c97effdb33f5875695b"
     },
     {
       "path": "execution-runtime.ts",
@@ -108,6 +103,11 @@
       "sha256": "110a0b4483b7f5ef45afac8119d1bfed2bf07704bb799ad14c1e6a08a7c7b6bd"
     },
     {
+      "path": "README.md",
+      "size": 13181,
+      "sha256": "fb0d5627e000da09fd0bf27e16820b001f161f218144f09021b46aae27250bd2"
+    },
+    {
       "path": "share-link.test.ts",
       "size": 50312,
       "sha256": "acd3abb4441a216df88239a860e7a65a47f63b3325195d080b6fc021131847d4"
@@ -128,10 +128,10 @@
       "sha256": "6bd57fcf1235ccfdac1c9c91ee007b9ec2e42c421e921ecf1ff0b0a4fa42de5c"
     }
   ],
-  "payload_manifest_sha256": "b74d529a541238cb86727ccfac8f4b63e0d6cd6f6833953e85f11b6ac6ebca57",
-  "archive_filename": "kaneo-mcp-linux-da9ba471-b74d529a5412.tar.gz",
-  "archive_sha256": "e593dddd3ab234dab83f717c1a40bc602517f85b658abefa3b88d369f8fb2517",
-  "archive_size": 90744,
+  "payload_manifest_sha256": "18aa5f8a920000fb7fe6add34ed9b481b79d850f24a1e2a6e142a6f7cd389978",
+  "archive_filename": "kaneo-mcp-linux-d81cd37-18aa5f8a.tar.gz",
+  "archive_sha256": "6db3b953ff173c7c087abbbe92ef6e153c329221f49ff5b80675abc2de8d3d6c",
+  "archive_size": 92024,
   "exclude_policy": "only git-tracked files under app_presets/pi/extensions/kaneo-mcp; no auth/settings/models/session/secret/runtime state",
   "verify_commands": [
     "node --experimental-strip-types --experimental-transform-types --test app_presets/pi/extensions/kaneo-mcp/*.test.ts"
