@@ -159,7 +159,13 @@ with tarfile.open(archive_path,"r:gz") as archive:
 print("candidate extension staged and checksummed")
 PY
 [ "$(find "$STAGE" -type f | wc -l)" -eq 17 ] || fail 'staged file count differs from signed manifest'
-node --experimental-strip-types --experimental-transform-types --test "$STAGE"/*.test.ts
+# Smoke tests must resolve the sibling import exactly like the live runtime does;
+# the runtime sibling is read-only for tests and never copied into the artifact.
+TEST_SIBLING="$BUNDLE/kaneo-agent-control"
+ln -sfn /home/quoc/.pi/agent/extensions/kaneo-agent-control "$TEST_SIBLING"
+node --experimental-strip-types --experimental-transform-types --test "$STAGE"/*.test.ts; test_rc=$?
+rm -f "$TEST_SIBLING"
+[ "$test_rc" -eq 0 ] || fail "candidate extension node smoke tests failed (rc=$test_rc)"
 systemctl --user stop telepi.service
 mkdir -m 0700 "$PREPARED"
 cp -a "$STAGE/." "$PREPARED/"
