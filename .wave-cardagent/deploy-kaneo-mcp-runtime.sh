@@ -43,7 +43,7 @@ import hashlib, json, pathlib, sys, tarfile
 archive_path, manifest_path, expected_commit, expected_manifest_sha = sys.argv[1:]
 raw = pathlib.Path(manifest_path).read_bytes()
 manifest = json.loads(raw)
-if hashlib.sha256(raw).hexdigest() != "6d2160dda00045caacbb4c5cde99b2c7cd250059cf81c27f9100cba68537bb83":
+if hashlib.sha256(raw).hexdigest() != "bd2cdebdcb440ffd348bc4dece82f6fe0532de22e732628baa4848589e32b32c":
     raise SystemExit("release manifest digest mismatch")
 if manifest.get("artifact_id") != "kaneo-mcp-linux-d81cd37-18aa5f8a":
     raise SystemExit("artifact id mismatch")
