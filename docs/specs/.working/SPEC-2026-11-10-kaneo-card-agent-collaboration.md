@@ -506,7 +506,15 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - [ ] T1–T6 acceptance, `Reproduce` commands, file scopes và repo boundaries được duyệt.
 - [ ] Implementation chưa bắt đầu trong giai đoạn này; `spec-archive` chỉ sau implementation, `/verify`, required UAT và release gates PASS.
 
-# Revision 1 (owner UAT 2026-11-15)
+# Revision 1+2 release (deployed 2026-11-15)
+
+## Release state
+- Candidate `2.14.0-candidate-c12b6da5-card-agent-collab-r2@sha256:e39f082f…aa888` built from commit `c12b6da5` (linux/amd64, Dockerfile.kaneo) and pushed to GHCR digest-pinned.
+- Pre-deploy gates: turbo serial 9/9 (web 161/161), integration 4/4 (283/283), i18n PASS, migration checks 0053/0055/0056 PASS, kaneo-mcp extension 82/82.
+- Wave apply PASS on ProDesk: compose flip `727dec02→88ac4814`, wrapper repinned `e0525908…`, pre/post encrypted snapshots + R2 mirrors inside the fail-closed wave; post-deploy snapshot `kaneo-20261115T174639Z` verified; migration head unchanged 0056 (id 59/59); rollback pin `48705de2@sha256:51a58e3a`.
+- Live: loopback + HTTPS `/api/health` 200 `{"status":"ok"}`, home page 200, caddy active.
+- Li laptop runtime synced: `C:/Users/quocn/.pi/agent/extensions/kaneo-mcp` now the 17-file build (all SHA256 match source), backup at `kaneo-mcp.bak-20261115T181500` (old 12-file build). New Pi sessions get `/kaneo-card`; the running session must restart to load it.
+- Branch `kaneo/prodesk-production` pushed to `github-main` (`b64c8c94..c12b6da5`).
 
 ## R1-T1 — Bỏ cảnh báo bearer-secret rác trên popup chia sẻ thẻ
 - Root cause: `share-dialog.tsx` renders `share.task.editWarning` + `share.task.subtreeNote` (dài dòng, rác thị giác).
