@@ -625,4 +625,5 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - `useCreateTaskRelation` uses the live parent's contentRevision (regression test).
 - Double-click/add-during-relation-pending regression test; failed relation cleanup checks current edge before deleting.
 - Web 53 files / 167 tests PASS, typecheck/build PASS; API typecheck + 264 unit PASS; i18n PASS.
-- R7 deployed image/build status: pending current release wave.
+- R7 APPLIED 2026-11-16: image `1e800ab2@sha256:993a79ff` healthy, compose `3f5e0989`, wrapper `2ffe646e`, migration head unchanged 0056, post-deploy snapshot `kaneo-20261116T083957Z` verified + R2 mirrors, rollback pin R5 `6edc3bce@sha256:d1623209`. HTTPS health 200.
+- Python extension resolver commit `1ed4c8d4` is merged in `python/main` at `7ca57c63`; Li runtime contains the 17-file hash-verified sync. Li `KANEO_HOST_ID=pi-laptop`; `/kaneo-card` now selects only the active principal owned by the API-key user. The later Li `kaneo_whoami` evidence showed the current key user `kaneo-parent` has no active owned principal, so the ownership boundary intentionally still requires an API key belonging to the active `pi-laptop` principal owner.
