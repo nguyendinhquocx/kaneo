@@ -590,7 +590,7 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 ## R4 fixes (commit 30499878)
 - API: batch lane reorder `PUT /task/reorder/:projectId` — one transaction per drag (lane locks, final-column gates, CAS bumps, per-task events) instead of one full PATCH per changed card.
 - Web: board dragging no longer locks while writes are pending; each drag renders its own optimistic projection and the batch rolls back on failure — consecutive drags never wait 2-3s.
-- Web: guest task detail route flattened (`$token.task.$taskId.tsx`) — the nested route was a child of the landing route which never rendered an Outlet, so the URL changed while the board stayed and the detail never opened.
+- Web: task detail URL routing (original fix was incomplete; R5 adds the required Outlet to its nested parent).
 - Web: share-aware better-auth fetch answers organization lookups locally while a share capability is active — no more guest 401 console noise.
 
 ## R4 verification + deploy state
@@ -607,3 +607,9 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 ## R5 verification
 - Regression tests: route outlet 1/1, guest auth interception 3/3; full web 52 files / 165 tests PASS, typecheck/build PASS; API typecheck + 264 unit PASS; i18n PASS.
 - Still to deploy: candidate build and guarded ProDesk wave. Production remains at R4 image until R5 apply PASS.
+
+## R5 applied state
+- Candidate `6edc3bce@sha256:d1623209` deployed 2026-11-16; compose `c2f0554a`; container healthy, migration head still 0056, post-deploy snapshot `kaneo-20261116T053405Z` verified + R2 mirrors, rollback pin R4 `30499878@sha256:30857accf54ba7b090186c5d10dc1a105d0d9b56f3933cb35e9054604c55a6eb`; HTTPS health 200.
+- R5 fixes: add `<Outlet/>` render for matched nested task detail (root cause of R4 URL-changing-but-board-stays bug); disable landing query on child route; use Better Auth-supported `fetchOptions.customFetchImpl` so share guests do not emit organization 401s.
+- R5 checks: full web 52 files / 165 tests PASS, web typecheck/build, auth fetch 3/3, nested detail outlet 1/1, API tsc + 264 unit, i18n PASS.
+- Commit `6edc3bce` pushed to `github-main`; awaiting owner re-UAT before spec archive.
