@@ -664,3 +664,15 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - Source commit `071cb51c5d1882a7ebb48637e16c4547ab36a340` pushed to `kaneo/prodesk-production`.
 - Production APPLIED 2026-11-16: R9 image `071cb51c@sha256:dcdf49e6` healthy, Compose `676edc65`, wrapper `343c2656`, migration head unchanged 0056; post-deploy snapshot `kaneo-20261116T110608Z` verified + private R2 mirror PASS; HTTPS health 200, home 200. Rollback pin R8 `c3df945b@sha256:dbb32fe5`.
 - Remaining gate: reload/restart the active Li session, owner UAT the 5 requested behaviors + marker picker, then archive the working spec. Browser-rendered visual evidence and live Pi image/prompt behavior are not yet confirmed.
+
+# Revision 10 (owner-approved UAT bugfix deploy 2026-11-16)
+
+## R10 fixes (commit da107aa4)
+- Bug A (iss_20261116113108): the subtask "multi-field PATCH 500" root cause was NOT the field combo — a repro integration test proved valid-ISO combos return 200. The real 500 came from unparsable client date strings (e.g. dd/mm/yyyy) reaching the driver as an Invalid Date. Fix: `parseTaskDateInput(field, value)` in `apps/api/src/task/validate-task-fields.ts` rejects unparsable dates with HTTP 400 naming the field; wired into the binding card/subtask updates and `PUT /task/:id`. Bad patches are rejected before any write (no partial apply).
+- Bug B (iss_20261116113109): `resolveUploadOwner` looked `ownerId` up only in the task table, so comment-bound uploads 404ed. Fix in `apps/api/src/agent-session/card-tools.ts`: `task_comment` first resolves the comment activity row to its owning task, falls back to the task-level ownerId form (backward compatible), and unknown owners get a clear 404 message. `assetTable` still has no comment-id column (surface=comment is task-scoped) — no migration added; head stays 0056.
+- Verification: 10 new integration tests PASS on the deployed commit (subtask date validation + comment asset), focused 9-file integration suite 59/59, API unit 264/264, tsc + biome PASS. Regression evidence recorded on both backlog issues (status confirmed).
+
+## R10 applied state
+- Production APPLIED 2026-11-16 via the guarded visible-sudo wave: R10 image `da107aa4@sha256:ab61b5e0` healthy, Compose `f24c4851`, wrapper `60f9989f`, migration head unchanged 0056 (hash `a4b63b1a`); pre-deploy encrypted snapshot created + R2 mirrored inside the wave; post-deploy snapshot `kaneo-20261116T121340Z` verified + private R2 mirror PASS; HTTPS health `{status:ok}` + home 200. Rollback pin R9 `071cb51c@sha256:dcdf49e6`.
+- Bundle `.wave-cardagent-r10` rendered via `.wave-cardagent-r9/render_r10.py` (no hand-edited hashes); staging copy hash-matched all 10 files before apply.
+- Remaining gates: bound-session re-test of the two decisive cases on production (bad date → 400 with field name; comment-bound upload resolves), owner UAT of R8 behaviors + marker picker + R4 share/drag, `/bug-fix` plan approval to close both backlog issues as fixed_verified, then archive the working spec.
