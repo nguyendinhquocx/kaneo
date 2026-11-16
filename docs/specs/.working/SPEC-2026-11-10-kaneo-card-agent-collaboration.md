@@ -569,3 +569,18 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - Fixed: task-description and comment-editor hover handlers guard `relatedTarget` before calling `.closest`.
 - Verified: web 161/161 tests, API unit 264/264, share integration 54/54, task-subtask integration 13/13, web typecheck/build, API typecheck and `i18n:check` PASS.
 - Console classification: manifest probe 404 is an intentional no-manifest response mapped to `null`; `content.js` scrollbar/grayscale and message-port errors originate from browser extensions, not the Kaneo bundle.
+
+# Revision 3 (owner UAT 2026-11-16, deployed same day)
+
+## R3 fixes (commit 683c163c)
+- API: Postgres pool max 10 -> 20 + pool client error logging. Root cause of the mid-drag 500s was pool exhaustion ("timeout exceeded when trying to connect") from the drag fan-out bursts.
+- Web: lane reorders persist sequentially (no N concurrent full-task PATCHes per drag).
+- Web: share routes only show the loading screen before any data exists; background refetches no longer flash the whole board between drags.
+- Web: legacy project edit links are editable by default - the extra Edit toggle is gone; view links stay read-only.
+- Web: shared task/project dialogs no longer render duplicate close buttons (popup default + manual DialogClose overlapped).
+- Web: guests can click shared cards again - owner-only active-workspace guard no longer swallows clicks; task share board wires onTaskClick to the scoped detail route.
+
+## R3 verification + deploy state
+- Web 50 files / 161 tests PASS, share/kanban/mutation focused suites 24/24 PASS, web typecheck + build PASS, API tsc + 264 unit PASS, i18n PASS.
+- Wave `card-agent-collab-r3` APPLIED 2026-11-16: image `683c163c@sha256:798944e8` healthy, compose `b550c905`, wrapper `8a2d886e`, migration head unchanged 0056, post-deploy snapshot `kaneo-20261116T022643Z` verified + R2 mirrors, rollback pin `c12b6da5@sha256:e39f082f`. HTTPS health 200.
+- Branch pushed to github-main (e90c0ae1..683c163c). Awaiting owner re-UAT.
