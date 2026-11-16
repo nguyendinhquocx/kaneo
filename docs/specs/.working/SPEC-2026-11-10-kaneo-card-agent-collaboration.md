@@ -613,3 +613,16 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - R5 fixes: add `<Outlet/>` render for matched nested task detail (root cause of R4 URL-changing-but-board-stays bug); disable landing query on child route; use Better Auth-supported `fetchOptions.customFetchImpl` so share guests do not emit organization 401s.
 - R5 checks: full web 52 files / 165 tests PASS, web typecheck/build, auth fetch 3/3, nested detail outlet 1/1, API tsc + 264 unit, i18n PASS.
 - Commit `6edc3bce` pushed to `github-main`; awaiting owner re-UAT before spec archive.
+
+# Revision 7 (owner UAT 2026-11-16)
+
+## R7 root cause and fix
+- `/api/task-relation` subtask creation is CAS-guarded on the parent's `contentRevision`; adding a relation increments it.
+- `useCreateTaskRelation` used `fetchQuery` with a stub `queryFn` resolving `undefined` and swallowed the error, so it fell back to revision 1 and sent stale CAS tokens. The UI only disabled Add while the task-create request was pending, not while the follow-up relation request was pending; repeated clicks created multiple orphan tasks and 409 relation attempts.
+- Fix: fetch the real parent task through `getTask` before relation creation; guard the entire child+relation sequence against duplicate submits; on relation failure, refetch relations and remove the just-created orphan only when confirmed unlinked (preserve if commit status is uncertain); invalidate parent task cache after relation success.
+
+## R7 verification state
+- `useCreateTaskRelation` uses the live parent's contentRevision (regression test).
+- Double-click/add-during-relation-pending regression test; failed relation cleanup checks current edge before deleting.
+- Web 53 files / 167 tests PASS, typecheck/build PASS; API typecheck + 264 unit PASS; i18n PASS.
+- R7 deployed image/build status: pending current release wave.

@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import createTaskRelation from "@/fetchers/task-relation/create-task-relation";
+import getTask from "@/fetchers/task/get-task";
 import { createShareFullRelation } from "@/fetchers/share/share-full-api";
 import {
   getShareCapability,
   invalidateShareQueries,
 } from "@/components/share/share-capability";
-import type Task from "@/types/task";
 import { getExpectedContentRevision } from "@/lib/task-content-revision";
 
 function useCreateTaskRelation() {
@@ -29,19 +29,24 @@ function useCreateTaskRelation() {
       // subtask structure, so the create is CAS-guarded on the parent.
       const expectedParentContentRevision =
         input.relationType === "subtask"
-          ? await queryClient
-              .fetchQuery({
+          ? getExpectedContentRevision(
+              await queryClient.fetchQuery({
                 queryKey: ["task", input.sourceTaskId],
-                queryFn: () => Promise.resolve(undefined as Task | undefined),
+                // Never substitute undefined here: the server increments the
+                // parent contentRevision when a subtask edge is added, so the
+                // relation PATCH must use a real fresh read or it 409s forever.
+                queryFn: () => getTask(input.sourceTaskId),
                 staleTime: 0,
-              })
-              .catch(() => undefined)
-              .then(getExpectedContentRevision)
+              }),
+            )
           : undefined;
       return createTaskRelation({ ...input, expectedParentContentRevision });
     },
     onSuccess: (_, variables) => {
       invalidateShareQueries(queryClient);
+      queryClient.invalidateQueries({
+        queryKey: ["task", variables.sourceTaskId],
+      });
       queryClient.invalidateQueries({
         queryKey: ["task-relations", variables.sourceTaskId],
       });

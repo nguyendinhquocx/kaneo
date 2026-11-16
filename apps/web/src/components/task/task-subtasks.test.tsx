@@ -13,10 +13,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Space/Enter/ArrowUp/ArrowDown/Escape; the list keyboard handler must not
 // run list actions while a drag is active, and idle behavior must survive.
 
-const { reorderMock, navigateMock, updateStatusMock } = vi.hoisted(() => ({
+const {
+  reorderMock,
+  navigateMock,
+  updateStatusMock,
+  createTaskMock,
+  createRelationMock,
+  deleteTaskMock,
+} = vi.hoisted(() => ({
   reorderMock: vi.fn(),
   navigateMock: vi.fn(),
   updateStatusMock: vi.fn(),
+  createTaskMock: vi.fn(),
+  createRelationMock: vi.fn(),
+  deleteTaskMock: vi.fn(),
 }));
 
 type DndHandlers = {
@@ -112,16 +122,16 @@ vi.mock("@/hooks/queries/workspace-users/use-get-active-workspace-users", () => 
   useGetActiveWorkspaceUsers: () => ({ data: { members: [] } }),
 }));
 vi.mock("@/hooks/mutations/task/use-create-task", () => ({
-  default: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  default: () => ({ mutateAsync: createTaskMock, isPending: false }),
 }));
 vi.mock("@/hooks/mutations/task-relation/use-create-task-relation", () => ({
-  default: () => ({ mutateAsync: vi.fn() }),
+  default: () => ({ mutateAsync: createRelationMock }),
 }));
 vi.mock("@/hooks/mutations/task-relation/use-reorder-subtasks", () => ({
   useReorderSubtasks: () => ({ mutate: reorderMock }),
 }));
 vi.mock("@/hooks/mutations/task/use-delete-task", () => ({
-  useDeleteTask: () => ({ mutateAsync: vi.fn() }),
+  useDeleteTask: () => ({ mutateAsync: deleteTaskMock }),
 }));
 vi.mock("@/hooks/mutations/task/use-update-task-status", () => ({
   useUpdateTaskStatus: () => ({ mutateAsync: updateStatusMock }),
@@ -238,11 +248,39 @@ describe("TaskSubtasks keyboard DnD isolation", () => {
     reorderMock.mockReset();
     navigateMock.mockReset();
     updateStatusMock.mockReset();
+    createTaskMock.mockReset();
+    createRelationMock.mockReset();
+    deleteTaskMock.mockReset();
   });
 
   afterEach(() => {
     cleanup();
     dndHandlers = {};
+  });
+
+  it("prevents a second child create while its relation write is pending", { timeout: 20_000 }, async () => {
+    let resolveRelation!: () => void;
+    createTaskMock.mockResolvedValue({ id: "child-new" });
+    createRelationMock.mockImplementation(
+      () => new Promise<void>((resolve) => { resolveRelation = resolve; }),
+    );
+    await renderSubtasks();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "tasks:subtasks.inputPlaceholder" }),
+    );
+    fireEvent.change(screen.getByPlaceholderText("tasks:subtasks.inputPlaceholder"), {
+      target: { value: "New child" },
+    });
+    const addButton = screen.getByRole("button", { name: "tasks:subtasks.addAction" });
+    fireEvent.click(addButton);
+
+    await waitFor(() => expect(createTaskMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(addButton).toBeDisabled());
+    fireEvent.click(addButton);
+    expect(createTaskMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolveRelation());
   });
 
   it("passes the relation card contentRevision when ticking a subtask", { timeout: 20_000 }, async () => {

@@ -34,6 +34,7 @@ import useCreateTaskRelation from "@/hooks/mutations/task-relation/use-create-ta
 import { useReorderSubtasks } from "@/hooks/mutations/task-relation/use-reorder-subtasks";
 import { useGetColumns } from "@/hooks/queries/column/use-get-columns";
 import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-relations";
+import getTaskRelations from "@/fetchers/task-relation/get-task-relations";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
@@ -74,6 +75,8 @@ export default function TaskSubtasks({
   const [isOpen, setIsOpen] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
+  const createSubtaskInFlight = useRef(false);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -346,7 +349,10 @@ export default function TaskSubtasks({
   ]);
 
   const handleAddSubtask = async () => {
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || createSubtaskInFlight.current) return;
+    createSubtaskInFlight.current = true;
+    setIsCreatingSubtask(true);
+    let createdTask: { id: string } | null = null;
 
     try {
       const newTask = await createTask.mutateAsync({
@@ -356,6 +362,7 @@ export default function TaskSubtasks({
         status: "to-do",
         priority: "no-priority",
       });
+      createdTask = { id: newTask.id };
 
       await createRelation.mutateAsync({
         sourceTaskId: taskId,
@@ -366,7 +373,33 @@ export default function TaskSubtasks({
       setNewTitle("");
       setIsAdding(false);
     } catch {
+      // Task and relation creation are separate endpoints. If the relation
+      // failed, verify whether it committed before cleaning up the newly
+      // created task; never leave an orphan card or delete a committed child.
+      if (createdTask && !getShareCapability()) {
+        try {
+          const currentRelations = await getTaskRelations(taskId);
+          const relationCommitted = currentRelations.some(
+            (relation) =>
+              relation.sourceTaskId === taskId &&
+              relation.targetTaskId === createdTask?.id &&
+              relation.relationType === "subtask",
+          );
+          if (relationCommitted) {
+            setNewTitle("");
+            setIsAdding(false);
+            return;
+          }
+          await deleteTask(createdTask.id);
+        } catch {
+          // Preserve the child rather than risking deletion if the server
+          // cannot confirm whether the relation write committed.
+        }
+      }
       toast.error(t("tasks:subtasks.createError"));
+    } finally {
+      createSubtaskInFlight.current = false;
+      setIsCreatingSubtask(false);
     }
   };
 
@@ -431,6 +464,7 @@ export default function TaskSubtasks({
               variant="ghost"
               size="xs"
               className="text-muted-foreground"
+              aria-label={t("tasks:subtasks.inputPlaceholder")}
               onClick={() => setIsAdding(true)}
             >
               <Plus className="size-3.5" />
@@ -497,12 +531,14 @@ export default function TaskSubtasks({
                 size="sm"
                 placeholder={t("tasks:subtasks.inputPlaceholder")}
                 value={newTitle}
+                disabled={isCreatingSubtask}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setNewTitle(e.target.value)
                 }
                 onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                   if (e.key === "Enter") handleAddSubtask();
                   if (e.key === "Escape") {
+                    if (isCreatingSubtask) return;
                     setIsAdding(false);
                     setNewTitle("");
                   }
@@ -512,13 +548,14 @@ export default function TaskSubtasks({
               <Button
                 size="xs"
                 onClick={handleAddSubtask}
-                disabled={!newTitle.trim() || createTask.isPending}
+                disabled={!newTitle.trim() || isCreatingSubtask}
               >
                 {t("tasks:subtasks.addAction")}
               </Button>
               <Button
                 variant="ghost"
                 size="xs"
+                disabled={isCreatingSubtask}
                 onClick={() => {
                   setIsAdding(false);
                   setNewTitle("");
