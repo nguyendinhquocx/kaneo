@@ -34,7 +34,9 @@ function ShareTaskRoute() {
     refetchOnWindowFocus: false,
   });
 
-  if (share.isLoading || share.isFetching) {
+  // R3: background refetches (e.g. after a drag) must not flash the whole
+  // route into a loading screen; only show it before any data exists.
+  if (share.isPending) {
     return <ShareLinkState kind="loading" />;
   }
   if (share.isError) {

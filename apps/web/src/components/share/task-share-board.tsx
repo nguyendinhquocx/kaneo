@@ -153,6 +153,12 @@ export default function TaskShareBoard({
             <KanbanBoard
               project={sortedProject}
               disableDragDrop={payload.permission !== "edit" || hasActiveFilters}
+              onTaskClick={(taskId) =>
+                navigate({
+                  to: "/share/task/$token/task/$taskId",
+                  params: { token, taskId },
+                })
+              }
             />
           ) : sortedProject ? (
             <ListView

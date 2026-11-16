@@ -36,7 +36,9 @@ function ShareTaskSubtreeRoute() {
     refetchOnWindowFocus: false,
   });
 
-  if (share.isLoading || share.isFetching) {
+  // R3: background refetches must not flash the route into a loading screen;
+  // only show it before any data exists.
+  if (share.isPending) {
     return <ShareLinkState kind="loading" />;
   }
   if (share.isError) {

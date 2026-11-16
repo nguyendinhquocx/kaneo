@@ -19,8 +19,10 @@ type ReorderProjectTasksContext = {
 
 /**
  * A lane reorder is rendered optimistically, then persisted with the existing
- * guarded task-update route. Per-task invalidations are deferred until the full
- * group settles so a slow request cannot flash the old lane back into view.
+ * guarded task-update route. Requests persist sequentially so a large lane
+ * never bursts N concurrent PATCHes into the Postgres pool (R3: concurrent
+ * fan-out exhausted the pool and surfaced 500s mid-drag), and per-task
+ * invalidations stay deferred until the whole group settles.
  */
 export function useReorderProjectTasks() {
   const queryClient = useQueryClient();
@@ -35,13 +37,9 @@ export function useReorderProjectTasks() {
     ReorderProjectTasksContext
   >({
     mutationFn: async ({ changedTasks }) => {
-      const results = await Promise.allSettled(
-        changedTasks.map((task) => updateTask(task)),
-      );
-      const failure = results.find(
-        (result): result is PromiseRejectedResult => result.status === "rejected",
-      );
-      if (failure) throw failure.reason;
+      for (const task of changedTasks) {
+        await updateTask(task);
+      }
     },
     onMutate: async ({ projectId, optimisticProject }) => {
       const queryKey = ["tasks", projectId] as const;

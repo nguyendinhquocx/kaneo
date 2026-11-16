@@ -102,7 +102,10 @@ describe("project share scope routing", () => {
         />
       </QueryClientProvider>,
     );
-    expect(screen.getByRole("button", { name: "edit" })).toBeVisible();
+    // R3: edit links are editable by default — no separate edit toggle.
+    expect(
+      screen.getByRole("button", { name: "project.newTask" }),
+    ).toBeVisible();
     expect(screen.queryByTestId("full-surface")).toBeNull();
 
     rerender(
@@ -119,7 +122,7 @@ describe("project share scope routing", () => {
     expect(screen.getByTestId("full-surface")).toHaveTextContent("full");
   });
 
-  it("uses the owner KanbanBoard and only enables legacy edit dragging after Edit is active", () => {
+  it("uses the owner KanbanBoard and enables legacy edit dragging by default", () => {
     shareReaderState.boardProps = null;
     renderWithQueryClient(
       <ProjectShareReader data={{ ...project, scope: "edit" } as unknown as Parameters<typeof ProjectShareReader>[0]["data"]} token="edit-token" />,
@@ -127,9 +130,6 @@ describe("project share scope routing", () => {
 
     expect(screen.getByTestId("owner-board-toolbar")).toBeVisible();
     expect(screen.getByTestId("owner-kanban")).toBeVisible();
-    expect((shareReaderState.boardProps as { disableDragDrop?: boolean } | null)?.disableDragDrop).toBe(true);
-
-    fireEvent.click(screen.getByRole("button", { name: "edit" }));
     expect((shareReaderState.boardProps as { disableDragDrop?: boolean } | null)?.disableDragDrop).toBe(false);
   });
 });
@@ -220,7 +220,7 @@ describe("public share edit affordances", () => {
     expect(checkboxes[0]).toBeEnabled();
   });
 
-  it("shows a project edit action only for edit scope and gates task creation behind it", () => {
+  it("shows task creation only for edit scope without an extra edit toggle", () => {
     const { rerender } = renderWithQueryClient(
       <ProjectShareReader
         data={{ ...project, scope: "view" } as never}
@@ -245,11 +245,6 @@ describe("public share edit affordances", () => {
         />
       </QueryClientProvider>,
     );
-    expect(screen.getByRole("button", { name: "edit" })).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "project.newTask" }),
-    ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "edit" }));
     expect(
       screen.getByRole("button", { name: "project.newTask" }),
     ).toBeVisible();

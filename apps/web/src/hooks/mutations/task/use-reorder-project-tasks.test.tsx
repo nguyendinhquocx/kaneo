@@ -117,6 +117,8 @@ describe("useReorderProjectTasks", () => {
       previous,
       intent!,
     );
+    // R3: writes persist sequentially, so each call only starts after the
+    // previous one resolves — no concurrent fan-out into the API pool.
     const resolvers: Array<() => void> = [];
     updateTask.mockImplementation(
       () => new Promise<void>((resolve) => resolvers.push(resolve)),
@@ -141,10 +143,16 @@ describe("useReorderProjectTasks", () => {
         ["b"],
       ]);
     });
+    expect(updateTask).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolvers[0]?.();
+      await Promise.resolve();
+    });
     expect(updateTask).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      for (const resolve of resolvers) resolve();
+      resolvers[1]?.();
       await mutation;
     });
     expect(ids(queryClient.getQueryData<ProjectWithTasks>(["tasks", previous.id])!)).toEqual([

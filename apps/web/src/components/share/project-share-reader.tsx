@@ -88,10 +88,11 @@ const PRIORITY_VALUES = [
   "urgent",
 ] as const;
 
-// R4-T4: the project token page. View links render the same read-only board
-// as the legacy public page. Edit links additionally expose a visible
-// "Chỉnh sửa" surface limited to the T7 basic task fields (create + update);
-// every write goes through the audited capability endpoints.
+// R4-T4, revised in R3: the project token page. View links render the same
+// read-only board as the legacy public page. Edit links are editable by
+// default — no extra "Chỉnh sửa" toggle — limited to the T7 basic task
+// fields (create + update); every write goes through the audited capability
+// endpoints.
 export default function ProjectShareReader({
   data,
   token,
@@ -102,7 +103,6 @@ export default function ProjectShareReader({
   const { t } = useTranslation("share");
   const queryClient = useQueryClient();
   const canEdit = data.scope === "edit";
-  const [isEditing, setIsEditing] = useState(false);
   const { setProject } = useProjectStore();
   const { viewMode, setViewMode } = useUserPreferencesStore();
   const { sort, setSort } = useBoardSort(data.id);
@@ -171,31 +171,15 @@ export default function ProjectShareReader({
         <ShareScopeBadge scope={canEdit ? "edit" : "view"} />
         <div className="flex-1" />
         {canEdit ? (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="min-h-11 sm:min-h-8"
-              aria-pressed={isEditing}
-              onClick={() => {
-                setSelectedTaskId(null);
-                setIsEditing((current) => !current);
-              }}
-            >
-              {isEditing ? t("doneEditing") : t("edit")}
-            </Button>
-            {isEditing ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="min-h-11 sm:min-h-8"
-                onClick={() => setIsCreating(true)}
-              >
-                <Plus className="size-3.5" />
-                {t("project.newTask")}
-              </Button>
-            ) : null}
-          </>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-11 sm:min-h-8"
+            onClick={() => setIsCreating(true)}
+          >
+            <Plus className="size-3.5" />
+            {t("project.newTask")}
+          </Button>
         ) : null}
       </div>
       {data.description ? (
@@ -224,7 +208,7 @@ export default function ProjectShareReader({
           {viewMode === "board" && sortedProject ? (
             <KanbanBoard
               project={sortedProject}
-              disableDragDrop={!canEdit || !isEditing || hasActiveFilters}
+              disableDragDrop={!canEdit || hasActiveFilters}
               onTaskClick={(taskId) => setSelectedTaskId(taskId)}
             />
           ) : sortedProject ? (
@@ -249,7 +233,7 @@ export default function ProjectShareReader({
         />
       ) : null}
 
-      {canEdit && isEditing && selectedTask ? (
+      {canEdit && selectedTask ? (
         <SharedTaskEditDialog
           token={token}
           task={selectedTask}
@@ -265,14 +249,14 @@ export default function ProjectShareReader({
         />
       ) : null}
 
-      {(!canEdit || !isEditing) && selectedTask ? (
+      {!canEdit && selectedTask ? (
         <Dialog
           open={Boolean(selectedTask)}
           onOpenChange={(open) => {
             if (!open) setSelectedTaskId(null);
           }}
         >
-          <DialogPopup className="w-full max-w-2xl">
+          <DialogPopup className="w-full max-w-2xl" showCloseButton={false}>
             <div className="flex items-center justify-between border-border/70 border-b px-4 py-3">
               <span className="truncate text-sm font-medium text-foreground">
                 {data.slug?.toUpperCase()}-{selectedTask.number}{" "}
@@ -420,7 +404,7 @@ function SharedTaskFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="w-full max-w-lg">
+      <DialogPopup className="w-full max-w-lg" showCloseButton={false}>
         <div className="flex items-center justify-between border-border/70 border-b px-4 py-3">
           <span className="text-sm font-semibold text-foreground">
             {t("project.newTask")}
@@ -616,7 +600,7 @@ function SharedTaskEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="w-full max-w-lg">
+      <DialogPopup className="w-full max-w-lg" showCloseButton={false}>
         <div className="flex items-center justify-between border-border/70 border-b px-4 py-3">
           <span className="truncate text-sm font-semibold text-foreground">
             {t("project.editTaskTitle")}

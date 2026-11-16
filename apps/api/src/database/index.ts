@@ -211,7 +211,14 @@ export function getDatabasePool(): Pool {
       // indefinitely and blocking every API request.
       connectionTimeoutMillis: 5_000,
       idleTimeoutMillis: 30_000,
-      max: 10,
+      // A board drag fans out into several concurrent task PATCHes plus SSE,
+      // websocket and auth traffic; 10 connections exhausted in production
+      // (SPEC-2026-11-10 R3: pg-pool "timeout exceeded when trying to
+      // connect" 500s). Postgres allows far more than this.
+      max: 20,
+    });
+    pool.on("error", (error) => {
+      console.error("Unexpected Postgres pool client error", error);
     });
   }
 

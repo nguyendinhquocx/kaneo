@@ -174,7 +174,7 @@ function TaskCard({
   function handleTaskCardClick(
     e: React.MouseEvent<HTMLDivElement> | React.KeyboardEvent<HTMLDivElement>,
   ) {
-    if (!project || !task || !workspace) return;
+    if (!project || !task) return;
 
     if ((e as React.MouseEvent).metaKey || (e as React.KeyboardEvent).ctrlKey) {
       toggleSelection(task.id);
@@ -197,6 +197,10 @@ function TaskCard({
       });
       return;
     }
+
+    // Guest share surfaces have no active workspace; only the owner
+    // search-param navigation below needs one.
+    if (!workspace) return;
 
     if (currentTaskId === task.id) {
       navigate({

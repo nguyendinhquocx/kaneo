@@ -62,7 +62,9 @@ function ShareProjectRoute() {
     refetchOnWindowFocus: false,
   });
 
-  if (share.isLoading || share.isFetching) {
+  // R3: drag-triggered refetches must not flash the whole board into a
+  // loading screen; only show it before any data exists.
+  if (share.isPending) {
     return <ShareLinkState kind="loading" />;
   }
   if (share.isError) {
@@ -72,9 +74,6 @@ function ShareProjectRoute() {
         onRetry={() => void share.refetch()}
       />
     );
-  }
-  if (!share.data) {
-    return <ShareLinkState kind="error" onRetry={() => void share.refetch()} />;
   }
 
   return (
