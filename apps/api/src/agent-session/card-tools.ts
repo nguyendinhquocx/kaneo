@@ -3,9 +3,23 @@
 // actions accept no target id, child/asset/comment ids only flow through
 // their named helper, and the API rechecks subtree membership per call.
 // Every write CASes on contentRevision and returns the fresh revision.
-import { and, asc, count, desc, eq, gt, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+} from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
+import { publishEvent } from "../events";
+import { resolveTaskSubtreeScope } from "../share/task-share-access";
 import {
   assertContentAssetKeyMatchesContext,
   createContentAssetUploadUrl,
@@ -15,8 +29,6 @@ import {
   validateFullLinkUploadInput,
 } from "../storage/s3";
 import { assertTaskContentRevision } from "../task/content-revision";
-import { resolveTaskSubtreeScope } from "../share/task-share-access";
-import { normalizeWorkMarkerCounts } from "../task/work-marker-counts";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
 import { lockProjectTaskLanes } from "../task/lock-project-task-lanes";
 import {
@@ -24,7 +36,8 @@ import {
   assertValidTaskStatus,
   VIRTUAL_STATUSES,
 } from "../task/validate-task-fields";
-import { loadScopedBinding, type AgentSessionBinding } from "./binding-service";
+import { normalizeWorkMarkerCounts } from "../task/work-marker-counts";
+import { type AgentSessionBinding, loadScopedBinding } from "./binding-service";
 
 const notFound = () => new HTTPException(404, { message: "Not found" });
 
@@ -94,7 +107,10 @@ async function lockBindingScope(
       tx,
     );
   } catch (error) {
-    if (error instanceof HTTPException && [403, 404, 409].includes(error.status)) {
+    if (
+      error instanceof HTTPException &&
+      [403, 404, 409].includes(error.status)
+    ) {
       throw staleBinding();
     }
     throw error;
@@ -102,7 +118,12 @@ async function lockBindingScope(
   await tx
     .select({ id: schema.taskTable.id })
     .from(schema.taskTable)
-    .where(inArray(schema.taskTable.id, initial.tasks.map((task) => task.id)))
+    .where(
+      inArray(
+        schema.taskTable.id,
+        initial.tasks.map((task) => task.id),
+      ),
+    )
     .orderBy(asc(schema.taskTable.id))
     .for("update");
   let scope: BindingScope;
@@ -113,12 +134,16 @@ async function lockBindingScope(
       tx,
     );
   } catch (error) {
-    if (error instanceof HTTPException && [403, 404, 409].includes(error.status)) {
+    if (
+      error instanceof HTTPException &&
+      [403, 404, 409].includes(error.status)
+    ) {
       throw staleBinding();
     }
     throw error;
   }
-  if (!scope.tasks.some((task) => task.id === targetTaskId)) throw staleBinding();
+  if (!scope.tasks.some((task) => task.id === targetTaskId))
+    throw staleBinding();
   const [current] = await tx
     .select()
     .from(schema.agentSessionBindingTable)
@@ -138,7 +163,10 @@ async function lockBindingScope(
   return scope;
 }
 
-async function assertDescriptionAllowed(scope: BindingScope, hasDescription: boolean) {
+async function assertDescriptionAllowed(
+  scope: BindingScope,
+  hasDescription: boolean,
+) {
   const [manifest] = await db
     .select({ id: schema.executionManifestTable.id })
     .from(schema.executionManifestTable)
@@ -223,12 +251,12 @@ export async function bindingCardGet(ctx: BindingContext) {
       isFinal: column.isFinal,
     })),
     subtasks: directSubtasks.map((task) => ({
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        statusLabel: labelMap.get(task.status) ?? null,
-        contentRevision: task.contentRevision,
-      })),
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      statusLabel: labelMap.get(task.status) ?? null,
+      contentRevision: task.contentRevision,
+    })),
     subtaskCount,
   };
 }
@@ -300,15 +328,13 @@ export async function bindingCardUpdate(
       : null;
   }
   if (body.patch.dueDate !== undefined) {
-    updates.dueDate = body.patch.dueDate
-      ? new Date(body.patch.dueDate)
-      : null;
+    updates.dueDate = body.patch.dueDate ? new Date(body.patch.dueDate) : null;
   }
   if (Object.keys(updates).length === 0) {
     throw new HTTPException(400, { message: "No valid card fields to update" });
   }
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     if (updates.status !== undefined) {
       await lockProjectTaskLanes(tx, [scope.projectId]);
     }
@@ -348,6 +374,12 @@ export async function bindingCardUpdate(
       contentRevision: row.contentRevision,
     };
   });
+  await publishEvent("task.updated", {
+    taskId: task.id,
+    projectId: scope.projectId,
+    userId: ctx.userId,
+  });
+  return result;
 }
 
 async function loadParentRelation(
@@ -398,7 +430,7 @@ export async function bindingCardCreateSubtask(
   }
   assertValidPriority(priority);
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await lockProjectTaskLanes(tx, [scope.projectId]);
     await lockBindingScope(tx, ctx, binding, parent.id);
     const [lockedParent] = await tx
@@ -439,7 +471,8 @@ export async function bindingCardCreateSubtask(
         number: taskNumber,
       })
       .returning();
-    if (!child) throw new HTTPException(500, { message: "Failed to create subtask" });
+    if (!child)
+      throw new HTTPException(500, { message: "Failed to create subtask" });
     const [relation] = await tx
       .insert(schema.taskRelationTable)
       .values({
@@ -449,7 +482,8 @@ export async function bindingCardCreateSubtask(
         position: 0,
       })
       .returning();
-    if (!relation) throw new HTTPException(500, { message: "Failed to link subtask" });
+    if (!relation)
+      throw new HTTPException(500, { message: "Failed to link subtask" });
     const [updatedParent] = await tx
       .update(schema.taskTable)
       .set({ contentRevision: lockedParent.contentRevision + 1 })
@@ -467,6 +501,20 @@ export async function bindingCardCreateSubtask(
       parentContentRevision: updatedParent.contentRevision,
     };
   });
+  await publishEvent("task.created", {
+    taskId: result.subtask.id,
+    projectId: scope.projectId,
+    userId: ctx.userId,
+  });
+  await publishEvent("task-relation.created", {
+    id: result.relationId,
+    taskId: parent.id,
+    sourceTaskId: parent.id,
+    targetTaskId: result.subtask.id,
+    projectId: scope.projectId,
+    userId: ctx.userId,
+  });
+  return result;
 }
 
 export async function bindingCardUpdateSubtask(
@@ -521,15 +569,15 @@ export async function bindingCardUpdateSubtask(
       : null;
   }
   if (body.patch.dueDate !== undefined) {
-    updates.dueDate = body.patch.dueDate
-      ? new Date(body.patch.dueDate)
-      : null;
+    updates.dueDate = body.patch.dueDate ? new Date(body.patch.dueDate) : null;
   }
   if (Object.keys(updates).length === 0) {
-    throw new HTTPException(400, { message: "No valid subtask fields to update" });
+    throw new HTTPException(400, {
+      message: "No valid subtask fields to update",
+    });
   }
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     if (updates.status !== undefined) {
       await lockProjectTaskLanes(tx, [scope.projectId]);
     }
@@ -569,6 +617,12 @@ export async function bindingCardUpdateSubtask(
       contentRevision: row.contentRevision,
     };
   });
+  await publishEvent("task.updated", {
+    taskId: task.id,
+    projectId: scope.projectId,
+    userId: ctx.userId,
+  });
+  return result;
 }
 
 async function collectDescendantIds(
@@ -616,7 +670,7 @@ export async function bindingCardDeleteSubtask(
   // Descendant-only: resolve the immediate parent inside the current bound
   // tree, then CAS that parent before deleting the selected descendant and
   // its own descendants atomically (no orphaned subtask rows).
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const freshScope = await lockBindingScope(tx, ctx, binding, task.id);
     const { parent } = await loadParentRelation(tx, freshScope, task.id);
     const [lockedParent] = await tx
@@ -632,6 +686,20 @@ export async function bindingCardDeleteSubtask(
       body.expectedParentContentRevision,
     );
     const descendantIds = await collectDescendantIds(tx, freshScope, task.id);
+    const deletedRelations = await tx
+      .select({
+        id: schema.taskRelationTable.id,
+        sourceTaskId: schema.taskRelationTable.sourceTaskId,
+        targetTaskId: schema.taskRelationTable.targetTaskId,
+        relationType: schema.taskRelationTable.relationType,
+      })
+      .from(schema.taskRelationTable)
+      .where(
+        or(
+          inArray(schema.taskRelationTable.sourceTaskId, descendantIds),
+          inArray(schema.taskRelationTable.targetTaskId, descendantIds),
+        ),
+      );
     await tx
       .delete(schema.taskTable)
       .where(inArray(schema.taskTable.id, descendantIds));
@@ -644,10 +712,36 @@ export async function bindingCardDeleteSubtask(
     return {
       deletedSubtaskId: task.id,
       deletedDescendantCount: descendantIds.length,
+      deletedTaskIds: descendantIds,
+      deletedRelations,
       parentTaskId: parent.id,
       parentContentRevision: updatedParent.contentRevision,
     };
   });
+  for (const taskId of result.deletedTaskIds) {
+    await publishEvent("task.deleted", {
+      taskId,
+      projectId: scope.projectId,
+      userId: ctx.userId,
+    });
+  }
+  for (const relation of result.deletedRelations) {
+    await publishEvent("task-relation.deleted", {
+      id: relation.id,
+      taskId: relation.sourceTaskId,
+      sourceTaskId: relation.sourceTaskId,
+      targetTaskId: relation.targetTaskId,
+      relationType: relation.relationType,
+      projectId: scope.projectId,
+      userId: ctx.userId,
+    });
+  }
+  return {
+    deletedSubtaskId: result.deletedSubtaskId,
+    deletedDescendantCount: result.deletedDescendantCount,
+    parentTaskId: result.parentTaskId,
+    parentContentRevision: result.parentContentRevision,
+  };
 }
 
 const COMMENTS_DEFAULT_LIMIT = 10;
@@ -670,7 +764,9 @@ export async function bindingCardListComments(
   ];
   if (cursor) {
     const separator = cursor.indexOf("|");
-    const cursorDate = new Date(separator >= 0 ? cursor.slice(0, separator) : cursor);
+    const cursorDate = new Date(
+      separator >= 0 ? cursor.slice(0, separator) : cursor,
+    );
     const cursorId = separator >= 0 ? cursor.slice(separator + 1) : "";
     if (!Number.isNaN(cursorDate.getTime())) {
       conditions.push(
@@ -700,7 +796,10 @@ export async function bindingCardListComments(
       eq(schema.activityTable.userId, schema.userTable.id),
     )
     .where(and(...conditions))
-    .orderBy(desc(schema.activityTable.createdAt), desc(schema.activityTable.id))
+    .orderBy(
+      desc(schema.activityTable.createdAt),
+      desc(schema.activityTable.id),
+    )
     .limit(limit + 1);
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
@@ -713,9 +812,7 @@ export async function bindingCardListComments(
       authorName: row.authorName ?? row.externalUserName ?? "Unknown",
     })),
     nextCursor:
-      hasMore && last
-        ? `${last.createdAt.toISOString()}|${last.id}`
-        : null,
+      hasMore && last ? `${last.createdAt.toISOString()}|${last.id}` : null,
   };
 }
 
@@ -725,7 +822,7 @@ export async function bindingCardCreateComment(
 ) {
   const { binding, scope } = await loadScopedBinding(ctx);
   assertInScope(scope, scope.rootTaskId);
-  return db.transaction(async (tx) => {
+  const comment = await db.transaction(async (tx) => {
     await lockBindingScope(tx, ctx, binding, scope.rootTaskId);
     const [comment] = await tx
       .insert(schema.activityTable)
@@ -747,6 +844,13 @@ export async function bindingCardCreateComment(
       createdAt: comment.createdAt,
     };
   });
+  await publishEvent("comment.created", {
+    taskId: scope.rootTaskId,
+    projectId: scope.projectId,
+    userId: ctx.userId,
+    id: comment.id,
+  });
+  return comment;
 }
 
 export async function bindingCardUpdateWorkMarkers(
@@ -755,7 +859,7 @@ export async function bindingCardUpdateWorkMarkers(
 ) {
   const { binding, scope } = await loadScopedBinding(ctx);
   const task = assertInScope(scope, scope.rootTaskId);
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await lockBindingScope(tx, ctx, binding, task.id);
     const [locked] = await tx
       .select()
@@ -779,6 +883,12 @@ export async function bindingCardUpdateWorkMarkers(
       contentRevision: row.contentRevision,
     };
   });
+  await publishEvent("task.updated", {
+    taskId: task.id,
+    projectId: scope.projectId,
+    userId: ctx.userId,
+  });
+  return result;
 }
 
 // Formal-run claim fence: an ad-hoc binding loses the card to the run.
@@ -902,7 +1012,10 @@ export async function fenceBindingForRunClaim(
         eq(schema.agentSessionDeliveryTable.state, "claimed"),
         or(
           isNull(schema.agentSessionDeliveryTable.claimedLeaseExpiresAt),
-          lte(schema.agentSessionDeliveryTable.claimedLeaseExpiresAt, new Date()),
+          lte(
+            schema.agentSessionDeliveryTable.claimedLeaseExpiresAt,
+            new Date(),
+          ),
         ),
       ),
     );
@@ -1104,13 +1217,24 @@ export async function bindingCardFinalizeUpload(
     }
   }
 
+  let asset: { id: string };
   try {
-    const asset = await db.transaction(async (tx) => {
-      const freshScope = await lockBindingScope(tx, ctx, binding, input.ownerId);
-      if (!freshScope.tasks.some((candidate) => candidate.id === owner.taskId)) {
+    asset = await db.transaction(async (tx) => {
+      const freshScope = await lockBindingScope(
+        tx,
+        ctx,
+        binding,
+        input.ownerId,
+      );
+      if (
+        !freshScope.tasks.some((candidate) => candidate.id === owner.taskId)
+      ) {
         throw notFound();
       }
-      if (freshScope.manifestProject && input.ownerType === "task_description") {
+      if (
+        freshScope.manifestProject &&
+        input.ownerType === "task_description"
+      ) {
         throw new HTTPException(403, {
           message: "Descriptions are read-only in manifest projects.",
         });
@@ -1161,12 +1285,6 @@ export async function bindingCardFinalizeUpload(
       }
       return row;
     });
-    return {
-      id: asset.id,
-      filename: input.filename,
-      mimeType: actualType,
-      size: actualLength,
-    };
   } catch (error) {
     // Do not delete a key that another finalizer already committed. Other
     // conflicts (notably stale_binding after a revoke/rebind) own only a
@@ -1180,6 +1298,18 @@ export async function bindingCardFinalizeUpload(
     }
     throw error;
   }
+  await publishEvent("asset.created", {
+    taskId: owner.taskId,
+    projectId: owner.projectId,
+    userId: ctx.userId,
+    assetId: asset.id,
+  });
+  return {
+    id: asset.id,
+    filename: input.filename,
+    mimeType: actualType,
+    size: actualLength,
+  };
 }
 
 // Asset reads re-check the asset's task is STILL in the current subtree.
@@ -1191,4 +1321,3 @@ export async function canBindingReadAsset(
   if (!["description", "comment"].includes(asset.surface)) return false;
   return scope.tasks.some((candidate) => candidate.id === asset.taskId);
 }
-

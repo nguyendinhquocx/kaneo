@@ -6,8 +6,14 @@ import type { ProjectBoardTask, ProjectWithTasks } from "@/types/project";
 import type Task from "@/types/task";
 import useUpdateWorkMarkers from "./use-update-work-markers";
 
-const { saveMarkers } = vi.hoisted(() => ({ saveMarkers: vi.fn() }));
+const { saveMarkers, readTask } = vi.hoisted(() => ({
+  saveMarkers: vi.fn(),
+  readTask: vi.fn(),
+}));
 
+vi.mock("@/fetchers/task/get-task", () => ({
+  default: (...args: unknown[]) => readTask(...args),
+}));
 vi.mock("@/fetchers/task/update-work-markers", () => ({
   default: (...args: unknown[]) => saveMarkers(...args),
 }));
@@ -88,6 +94,7 @@ describe("useUpdateWorkMarkers optimistic projections", () => {
       },
     });
     saveMarkers.mockReset();
+    readTask.mockReset();
     child = task("child-1", "project-1");
     parent = {
       ...task("parent-1", "project-1"),
@@ -98,11 +105,13 @@ describe("useUpdateWorkMarkers optimistic projections", () => {
       },
     };
     taskDetail = child;
+    readTask.mockResolvedValue({ ...taskDetail, contentRevision: 1 });
     queryClient.setQueryData(["task", child.id], taskDetail);
     queryClient.setQueryData(["tasks", "project-1"], projectWith(parent));
-    queryClient.setQueryData(["task-relations", parent.id], [
-      { id: "relation-1", sourceTask: parent, targetTask: child },
-    ]);
+    queryClient.setQueryData(
+      ["task-relations", parent.id],
+      [{ id: "relation-1", sourceTask: parent, targetTask: child }],
+    );
   });
 
   afterEach(() => {
@@ -133,22 +142,58 @@ describe("useUpdateWorkMarkers optimistic projections", () => {
         "tasks",
         "project-1",
       ])!;
-      expect(updatedProject.columns[0]?.tasks[0]?.nextSubtaskPreview?.workMarkerCounts).toEqual(nextCounts);
-      const relations = queryClient.getQueryData<
-        Array<{ targetTask: Task }>
-      >(["task-relations", parent.id]);
+      expect(
+        updatedProject.columns[0]?.tasks[0]?.nextSubtaskPreview
+          ?.workMarkerCounts,
+      ).toEqual(nextCounts);
+      const relations = queryClient.getQueryData<Array<{ targetTask: Task }>>([
+        "task-relations",
+        parent.id,
+      ]);
       expect(relations?.[0]?.targetTask.workMarkerCounts).toEqual(nextCounts);
     });
-    expect(saveMarkers).toHaveBeenCalledWith(
-      child.id,
-      nextCounts,
-      taskDetail.contentRevision ?? 1,
-    );
+    expect(readTask).toHaveBeenCalledWith(child.id);
+    expect(saveMarkers).toHaveBeenCalledWith(child.id, nextCounts, 1);
 
     await act(async () => {
       resolveSave?.();
       await mutation;
     });
+  });
+
+  it("uses the fresh server revision when the cached card is stale", async () => {
+    const staleCache = { ...taskDetail, contentRevision: 7 };
+    queryClient.setQueryData(["task", child.id], staleCache);
+    readTask.mockResolvedValue({ ...taskDetail, contentRevision: 8 });
+    saveMarkers.mockResolvedValue({ ...zeroCounts, greenCheck: 3 });
+    const { result } = renderHook(
+      () => useUpdateWorkMarkers(child.id, "project-1"),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({ ...zeroCounts, greenCheck: 3 });
+    });
+
+    expect(readTask).toHaveBeenCalledWith(child.id);
+    expect(saveMarkers).toHaveBeenCalledWith(
+      child.id,
+      { ...zeroCounts, greenCheck: 3 },
+      8,
+    );
+  });
+
+  it("fails closed when the fresh revision cannot be read", async () => {
+    readTask.mockRejectedValue(new Error("read failed"));
+    const { result } = renderHook(
+      () => useUpdateWorkMarkers(child.id, "project-1"),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await expect(
+      act(() => result.current.mutateAsync({ ...zeroCounts, redCircle: 3 })),
+    ).rejects.toThrow("read failed");
+    expect(saveMarkers).not.toHaveBeenCalled();
   });
 
   it("restores every cached projection when the server rejects the marker write", async () => {
@@ -163,9 +208,12 @@ describe("useUpdateWorkMarkers optimistic projections", () => {
       act(() => result.current.mutateAsync(nextCounts)),
     ).rejects.toThrow("write rejected");
 
-    expect(queryClient.getQueryData<Task>(["task", child.id])?.workMarkerCounts).toEqual(zeroCounts);
     expect(
-      queryClient.getQueryData<ProjectWithTasks>(["tasks", "project-1"])?.columns[0]?.tasks[0]?.nextSubtaskPreview?.workMarkerCounts,
+      queryClient.getQueryData<Task>(["task", child.id])?.workMarkerCounts,
+    ).toEqual(zeroCounts);
+    expect(
+      queryClient.getQueryData<ProjectWithTasks>(["tasks", "project-1"])
+        ?.columns[0]?.tasks[0]?.nextSubtaskPreview?.workMarkerCounts,
     ).toEqual(zeroCounts);
     const relations = queryClient.getQueryData<Array<{ targetTask: Task }>>([
       "task-relations",

@@ -1,5 +1,5 @@
 import { Send } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,11 +7,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSendCommentToPi } from "@/hooks/mutations/agent-session/use-send-comment-to-pi";
-import { useGetTaskBindingStatus } from "@/hooks/queries/agent-session/use-get-task-binding-status";
-import { useGetCommentDeliveryStatus } from "@/hooks/queries/agent-session/use-get-comment-delivery-status";
-import { useGetCommentDeliveryByComment } from "@/hooks/queries/agent-session/use-get-comment-delivery-by-comment";
 import type { CommentDeliveryState } from "@/fetchers/agent-session/comment-delivery";
+import { useSendCommentToPi } from "@/hooks/mutations/agent-session/use-send-comment-to-pi";
+import { useGetCommentDeliveryByComment } from "@/hooks/queries/agent-session/use-get-comment-delivery-by-comment";
+import { useGetCommentDeliveryStatus } from "@/hooks/queries/agent-session/use-get-comment-delivery-status";
+import { useGetTaskBindingStatus } from "@/hooks/queries/agent-session/use-get-task-binding-status";
 
 export default function SendCommentToPiAction({
   taskId,
@@ -24,6 +24,8 @@ export default function SendCommentToPiAction({
   const binding = useGetTaskBindingStatus(taskId);
   const [deliveryId, setDeliveryId] = useState<string>();
   const [lastState, setLastState] = useState<CommentDeliveryState>();
+  const [transientState, setTransientState] = useState<CommentDeliveryState>();
+  const transientTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showUnknownWarning, setShowUnknownWarning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const actionKey = useRef<string | null>(null);
@@ -50,6 +52,29 @@ export default function SendCommentToPiAction({
   const hostId = bindingData?.hostId ?? "";
   const isActive = state === "queued" || state === "claimed";
   const isUnknown = state === "unknown";
+  const isPending = send.isPending || isActive;
+  const dotState =
+    state === "enqueued"
+      ? "reached"
+      : isPending || state === "unknown"
+        ? "waiting"
+        : null;
+
+  useEffect(
+    () => () => {
+      if (transientTimer.current) clearTimeout(transientTimer.current);
+    },
+    [],
+  );
+
+  const showTransientNotice = (nextState: CommentDeliveryState) => {
+    if (transientTimer.current) clearTimeout(transientTimer.current);
+    setTransientState(nextState);
+    transientTimer.current = setTimeout(() => {
+      setTransientState(undefined);
+      transientTimer.current = null;
+    }, 3_000);
+  };
 
   // R1-T4: the affordance must stay visible even without a live binding —
   // a hidden button reads as "the feature does not exist" during UAT.
@@ -103,6 +128,9 @@ export default function SendCommentToPiAction({
     }
     const key = actionKey.current ?? globalThis.crypto.randomUUID();
     actionKey.current = key;
+    if (transientTimer.current) clearTimeout(transientTimer.current);
+    transientTimer.current = null;
+    setTransientState(undefined);
     setError(null);
     try {
       const result = await send.mutateAsync({
@@ -114,6 +142,7 @@ export default function SendCommentToPiAction({
       });
       setDeliveryId(result.receipt.deliveryId);
       setLastState(result.receipt.state);
+      showTransientNotice(result.receipt.state);
       // A successful receipt ends this intent. Any later click is an explicit
       // resend with a new action key; transport errors keep this key for retry.
       actionKey.current = null;
@@ -127,8 +156,14 @@ export default function SendCommentToPiAction({
     }
   };
 
-  const statusText = state ? t(`activity:comment.delivery.${state}`) : null;
-  const isPending = send.isPending || isActive;
+  const statusText = state
+    ? t(`activity:comment.delivery.${state}`)
+    : send.isPending
+      ? t("activity:comment.sendingToPi")
+      : null;
+  const transientText = transientState
+    ? t(`activity:comment.delivery.${transientState}`)
+    : null;
   const label = isPending
     ? t("activity:comment.sendingToPi")
     : deliveryId || state
@@ -137,41 +172,65 @@ export default function SendCommentToPiAction({
 
   return (
     <span className="inline-flex flex-col items-end gap-1">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="size-11 p-0 sm:size-8"
-            aria-label={`${label} — ${targetLabel}`}
-            title={`${label} — ${targetLabel}`}
-            aria-busy={isPending}
-            disabled={isPending}
-            onClick={() => void handleSend()}
-          >
-            <Send className="size-3.5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <span className="block">{label}</span>
-          <span className="block text-[10px] text-muted-foreground">
-            {targetLabel}
-          </span>
-        </TooltipContent>
-      </Tooltip>
+      <span className="inline-flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="size-11 p-0 sm:size-8"
+              aria-label={`${label} — ${targetLabel}`}
+              title={`${label} — ${targetLabel}${statusText ? ` — ${statusText}` : ""}`}
+              aria-busy={isPending}
+              disabled={isPending}
+              onClick={() => void handleSend()}
+            >
+              <Send className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <span className="block">{label}</span>
+            <span className="block text-[10px] text-muted-foreground">
+              {targetLabel}
+            </span>
+          </TooltipContent>
+        </Tooltip>
+        {dotState ? (
+          <span
+            aria-hidden="true"
+            title={statusText ?? undefined}
+            data-delivery-dot={dotState}
+            className={`inline-flex size-2 shrink-0 rounded-full ${dotState === "reached" ? "bg-success" : "bg-foreground"}`}
+          />
+        ) : null}
+      </span>
       {showUnknownWarning ? (
-        <span className="max-w-56 text-right text-[10px] text-warning-foreground" role="alert">
+        <span
+          className="max-w-56 text-right text-[10px] text-warning-foreground"
+          role="alert"
+        >
           {t("activity:comment.unknownResendWarning")}
         </span>
       ) : null}
       {statusText ? (
-        <span className="max-w-56 text-right text-[10px] text-muted-foreground" role="status" aria-live="polite">
+        <span className="sr-only" role="status" aria-live="polite">
           {statusText}
         </span>
       ) : null}
+      {transientText ? (
+        <span
+          className="max-w-56 text-right text-[10px] text-muted-foreground"
+          aria-hidden="true"
+        >
+          {transientText}
+        </span>
+      ) : null}
       {error ? (
-        <span className="max-w-56 text-right text-[10px] text-destructive" role="alert">
+        <span
+          className="max-w-56 text-right text-[10px] text-destructive"
+          role="alert"
+        >
           {error}
         </span>
       ) : null}

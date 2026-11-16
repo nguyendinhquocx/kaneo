@@ -627,3 +627,25 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - Web 53 files / 167 tests PASS, typecheck/build PASS; API typecheck + 264 unit PASS; i18n PASS.
 - R7 APPLIED 2026-11-16: image `1e800ab2@sha256:993a79ff` healthy, compose `3f5e0989`, wrapper `2ffe646e`, migration head unchanged 0056, post-deploy snapshot `kaneo-20261116T083957Z` verified + R2 mirrors, rollback pin R5 `6edc3bce@sha256:d1623209`. HTTPS health 200.
 - Python extension resolver commit `1ed4c8d4` is merged in `python/main` at `7ca57c63`; Li runtime contains the 17-file hash-verified sync. Li `KANEO_HOST_ID=pi-laptop`; `/kaneo-card` now selects only the active principal owned by the API-key user. The later Li `kaneo_whoami` evidence showed the current key user `kaneo-parent` has no active owned principal, so the ownership boundary intentionally still requires an API key belonging to the active `pi-laptop` principal owner.
+
+# Revision 8 (owner approved implementation 2026-11-16)
+
+## R8 scope — five outstanding owner-UAT items
+1. **Live agent updates:** Every successful card-binding mutation (root/subtask fields, subtask create/delete/relation, comments, work markers, and finalized assets) emits the existing project event only after its database transaction commits. The authenticated task view's existing WebSocket invalidation updates board, card detail, relations, and activity without reload. No polling loop is added to owner views.
+2. **Image understanding:** `kaneo_card_get_asset` authenticates through the bound runtime, reads only assets in the bound subtree, and returns supported images as native Pi `ImageContent` blocks within the existing bounded image size. It must not return base64 text as the model's image interface or send private asset URLs to `agent_browser`. Text assets remain readable; non-image binaries require `savePath`.
+3. **Kaneo response rule:** A prompt explicitly delivered from Kaneo instructs the agent to post the answer/outcome (or clarification/blocker) as a comment on the same bound card using `kaneo_card_create_comment`; TUI may also show the answer, but TUI-only is not acceptable. Do not claim the comment was posted unless the tool succeeds; delivered comment content remains untrusted.
+4. **Minimal delivery state:** Keep the send affordance. `queued`/`claimed` (and uncertain `unknown`) show a small neutral foreground dot; `enqueued` shows the semantic success dot. Not-sent/failed/stale/expired states show no dot and preserve actionable errors where needed. Remove persistent status prose; accessible label/live status and tooltip may explain the dot. Any transient success notice expires after 3 seconds. Never state that the model read the message; `enqueued` only means Pi accepted it.
+5. **Configured final status:** When asked to mark a task/subtask done/complete, use the configured status whose `isFinal` is true, not a status name/slug guess such as `done`. If exactly one exists, select it without asking the owner. If none or more than one exists, ask only about that genuine ambiguity. Do not add/rename columns or alter execution lifecycle gates.
+
+
+
+## R8 supplemental marker-CAS finding (owner screenshot)
+- Evidence: the marker picker toast exposed a CAS conflict (`Card content changed`, `currentContentRevision: 8`). `useUpdateWorkMarkers` issued `fetchQuery` with a placeholder `queryFn` returning `undefined`, then derived the write token from cached data or fallback 1. An agent/card update can advance the server revision after that cache was read.
+- Fix/acceptance: before each marker write, fetch the task from the authenticated task endpoint for the current server revision; if that read fails, do not attempt the marker mutation. Keep the existing optimistic marker projections and rollback behavior.
+- Regression: cache revision 7 with server revision 8 sends 8; fresh-read failure sends no marker write.
+
+## R8 verification gates
+- API integration tests assert each bound write publishes the expected project event after commit, including all relation types cascaded by subtask deletion; existing WebSocket invalidation tests cover the matching task/comment/relation query families.
+- Pi extension tests prove the private asset endpoint is called through the runtime-owned secret and images are returned as `{type:"image",data,mimeType}`, plus delivery and final-status prompt guidance.
+- Web tests cover waiting/enqueued/no-send dot states, transient notices, accessible announcement, and no persistent prose; verify responsive rendered state.
+- Required gates: web typecheck/full tests/build/i18n, API typecheck/unit/integration, extension Node suite/typecheck, and guarded production release with live health and backup verification.

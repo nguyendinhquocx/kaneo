@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SendCommentToPiAction from "./send-comment-to-pi-action";
 
@@ -6,20 +13,30 @@ const state = vi.hoisted(() => ({
   binding: null as unknown,
   delivery: null as unknown,
   restoredDelivery: null as unknown,
+  isPending: false,
   mutateAsync: vi.fn(),
 }));
 
 vi.mock("@/hooks/queries/agent-session/use-get-task-binding-status", () => ({
   useGetTaskBindingStatus: () => ({ data: state.binding }),
 }));
-vi.mock("@/hooks/queries/agent-session/use-get-comment-delivery-status", () => ({
-  useGetCommentDeliveryStatus: () => ({ data: state.delivery }),
-}));
-vi.mock("@/hooks/queries/agent-session/use-get-comment-delivery-by-comment", () => ({
-  useGetCommentDeliveryByComment: () => ({ data: state.restoredDelivery }),
-}));
+vi.mock(
+  "@/hooks/queries/agent-session/use-get-comment-delivery-status",
+  () => ({
+    useGetCommentDeliveryStatus: () => ({ data: state.delivery }),
+  }),
+);
+vi.mock(
+  "@/hooks/queries/agent-session/use-get-comment-delivery-by-comment",
+  () => ({
+    useGetCommentDeliveryByComment: () => ({ data: state.restoredDelivery }),
+  }),
+);
 vi.mock("@/hooks/mutations/agent-session/use-send-comment-to-pi", () => ({
-  useSendCommentToPi: () => ({ mutateAsync: state.mutateAsync, isPending: false }),
+  useSendCommentToPi: () => ({
+    mutateAsync: state.mutateAsync,
+    isPending: state.isPending,
+  }),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -29,12 +46,15 @@ vi.mock("react-i18next", () => ({
         "activity:comment.resendToPi": "Send again",
         "activity:comment.sendingToPi": "Sending to Pi",
         "activity:comment.sendToPiFailed": "Could not queue",
-        "activity:comment.sendToPiUnbound": "No agent is bound to this card yet.",
+        "activity:comment.sendToPiUnbound":
+          "No agent is bound to this card yet.",
         "activity:comment.sendToPiOffline": "The bound agent is offline.",
-        "activity:comment.unknownResendWarning": "Previous attempt may already have arrived.",
+        "activity:comment.unknownResendWarning":
+          "Previous attempt may already have arrived.",
         "activity:comment.delivery.queued": "Queued for Pi",
         "activity:comment.delivery.claimed": "Pi is receiving it",
-        "activity:comment.delivery.enqueued": "Queued to Pi, not confirmed read",
+        "activity:comment.delivery.enqueued":
+          "Queued to Pi, not confirmed read",
         "activity:comment.delivery.stale": "Comment is stale",
         "activity:comment.delivery.expired": "Delivery expired",
         "activity:comment.delivery.failed_before_send": "Delivery failed",
@@ -49,8 +69,12 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 function liveBinding() {
@@ -66,6 +90,7 @@ function liveBinding() {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -73,6 +98,7 @@ beforeEach(() => {
   state.binding = null;
   state.delivery = null;
   state.restoredDelivery = null;
+  state.isPending = false;
   state.mutateAsync.mockReset();
   let next = 0;
   vi.stubGlobal("crypto", { randomUUID: () => `client-key-${++next}` });
@@ -91,7 +117,9 @@ describe("SendCommentToPiAction", () => {
     }));
     render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
 
-    const send = screen.getByRole("button", { name: /Send to Pi.*pi-session-exact.*pi-prodesk/ });
+    const send = screen.getByRole("button", {
+      name: /Send to Pi.*pi-session-exact.*pi-prodesk/,
+    });
     fireEvent.click(send);
     await waitFor(() => expect(state.mutateAsync).toHaveBeenCalledTimes(1));
     expect(state.mutateAsync).toHaveBeenLastCalledWith({
@@ -126,9 +154,80 @@ describe("SendCommentToPiAction", () => {
       },
     };
     render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
-    expect(screen.getByText(/Queued to Pi, not confirmed read/)).toBeVisible();
+    expect(
+      screen.queryByText(/Queued to Pi, not confirmed read/, {
+        selector: 'span[aria-hidden="true"]',
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByText(/Queued to Pi, not confirmed read/, {
+        selector: "span.sr-only",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-delivery-dot="reached"]')?.className,
+    ).toContain("bg-success");
     expect(screen.getByRole("button", { name: /Send again/ })).toBeVisible();
     expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("shows a waiting dot while queued, then hides the notice after three seconds", async () => {
+    liveBinding();
+    vi.useFakeTimers();
+    state.mutateAsync.mockResolvedValue({
+      duplicate: false,
+      receipt: { deliveryId: "delivery-new", state: "queued" },
+    });
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Send to Pi/ }));
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText("Queued for Pi", {
+        selector: 'span[aria-hidden="true"]',
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Queued for Pi", { selector: "span.sr-only" }),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-delivery-dot="waiting"]')?.className,
+    ).toContain("bg-foreground");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+
+    expect(
+      screen.queryByText("Queued for Pi", {
+        selector: 'span[aria-hidden="true"]',
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByText("Queued for Pi", { selector: "span.sr-only" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the waiting dot while the send request is pending", () => {
+    liveBinding();
+    state.isPending = true;
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+    expect(
+      document.querySelector('[data-delivery-dot="waiting"]'),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Sending to Pi", { selector: "span.sr-only" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no delivery dot before the comment has a receipt", () => {
+    liveBinding();
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("button", { name: /Send to Pi/ })).toBeVisible();
   });
 
   it("requires an explicit warned resend after an unknown attempt", async () => {
@@ -140,8 +239,16 @@ describe("SendCommentToPiAction", () => {
     });
     render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
 
+    expect(
+      screen.getByText("Outcome unknown", { selector: "span.sr-only" }),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-delivery-dot="waiting"]')?.className,
+    ).toContain("bg-foreground");
     fireEvent.click(screen.getByRole("button", { name: /Send again/ }));
-    expect(await screen.findByText(/Previous attempt may already have arrived/)).toBeVisible();
+    expect(
+      await screen.findByText(/Previous attempt may already have arrived/),
+    ).toBeVisible();
     expect(state.mutateAsync).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /Send again/ }));

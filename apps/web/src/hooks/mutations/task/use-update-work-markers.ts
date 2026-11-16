@@ -3,11 +3,12 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import getTask from "@/fetchers/task/get-task";
 import updateWorkMarkers from "@/fetchers/task/update-work-markers";
-import type Task from "@/types/task";
 import { getExpectedContentRevision } from "@/lib/task-content-revision";
-import type { TaskMarkerCounts } from "@/types/task";
 import type { ProjectBoardTask, ProjectWithTasks } from "@/types/project";
+import type Task from "@/types/task";
+import type { TaskMarkerCounts } from "@/types/task";
 
 const taskRelationsQueryKey = ["task-relations"] as const;
 
@@ -31,8 +32,7 @@ function updateBoardTaskMarkers(
   taskId: string,
   workMarkerCounts: TaskMarkerCounts,
 ): ProjectBoardTask {
-  const nextTask =
-    task.id === taskId ? { ...task, workMarkerCounts } : task;
+  const nextTask = task.id === taskId ? { ...task, workMarkerCounts } : task;
   const preview = nextTask.nextSubtaskPreview;
   if (!preview || preview.id !== taskId) return nextTask;
   return {
@@ -65,16 +65,14 @@ export function useUpdateWorkMarkers(taskId: string, projectId: string) {
   >({
     mutationKey,
     mutationFn: async (workMarkerCounts) => {
-      // SPEC-2026-11-10 T3: markers are content edits — CAS the map.
-      const cached = await queryClient.fetchQuery({
-        queryKey: ["task", taskId],
-        queryFn: () => Promise.resolve(undefined as Task | undefined),
-        staleTime: 0,
-      }).catch(() => undefined);
+      // Markers share the task content CAS token with agent edits. Read the
+      // authoritative revision directly; a stale query cache must never turn
+      // a user's marker click into a 409 or silently fall back to revision 1.
+      const currentTask = await getTask(taskId);
       return updateWorkMarkers(
         taskId,
         workMarkerCounts,
-        getExpectedContentRevision(cached),
+        getExpectedContentRevision(currentTask),
       );
     },
     onMutate: async (workMarkerCounts) => {
@@ -95,7 +93,9 @@ export function useUpdateWorkMarkers(taskId: string, projectId: string) {
         "tasks",
         projectId,
       ]);
-      const previousRelations = queryClient.getQueriesData<TaskRelationCacheRow[]>({
+      const previousRelations = queryClient.getQueriesData<
+        TaskRelationCacheRow[]
+      >({
         queryKey: taskRelationsQueryKey,
       });
 

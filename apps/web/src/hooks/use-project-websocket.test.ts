@@ -91,6 +91,47 @@ describe("getWsUrl", () => {
     );
   });
 
+  it("invalidates card, comment, and relation caches for project events", () => {
+    const { unmount } = render(createElement(WebSocketHarness));
+    const ws = FakeWebSocket.instances[0];
+
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: "TASK_UPDATED",
+        projectId: "project-1",
+        taskId: "task-1",
+      }),
+    });
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: "COMMENT_UPDATED",
+        projectId: "project-1",
+        taskId: "task-1",
+      }),
+    });
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: "TASK_RELATION_UPDATED",
+        projectId: "project-1",
+        sourceTaskId: "task-1",
+        targetTaskId: "task-2",
+      }),
+    });
+
+    const queryKeys = mocks.invalidateQueries.mock.calls.map(
+      ([input]) => input.queryKey,
+    );
+    expect(queryKeys).toContainEqual(["tasks", "project-1"]);
+    expect(queryKeys).toContainEqual(["task", "task-1"]);
+    expect(queryKeys).toContainEqual(["activities", "task-1"]);
+    expect(queryKeys).toContainEqual(["comments", "task-1"]);
+    expect(queryKeys).toContainEqual(["task-relations", "task-1"]);
+    expect(queryKeys).toContainEqual(["task", "task-2"]);
+    expect(queryKeys).toContainEqual(["task-relations", "task-2"]);
+
+    unmount();
+  });
+
   it("invalidates task runs and evidence when a run update arrives", () => {
     const { unmount } = render(createElement(WebSocketHarness));
     const ws = FakeWebSocket.instances[0];

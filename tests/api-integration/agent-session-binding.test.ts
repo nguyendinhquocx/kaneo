@@ -1,13 +1,18 @@
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import db, { schema } from "../../apps/api/src/database";
+import { subscribeToEvent } from "../../apps/api/src/events";
 import { createApp } from "../../apps/api/src/index";
-import { mockAnonymousSession, mockAuthenticatedSession, mockAuthenticatedSessions } from "./helpers/auth";
+import {
+  mockAnonymousSession,
+  mockAuthenticatedSession,
+  mockAuthenticatedSessions,
+} from "./helpers/auth";
 import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
 } from "./helpers/fixtures";
-import db, { schema } from "../../apps/api/src/database";
-import { eq } from "drizzle-orm";
 
 // SPEC-2026-11-10-kaneo-card-agent-collaboration T4: session binding +
 // card-scoped tool contract.
@@ -26,7 +31,11 @@ async function seedPrincipal(userId: string) {
   return principal;
 }
 
-async function bindCard(app: ReturnType<typeof createApp>["app"], taskId: string, userId: string) {
+async function bindCard(
+  app: ReturnType<typeof createApp>["app"],
+  taskId: string,
+  userId: string,
+) {
   const principal = await seedPrincipal(userId);
   const response = await app.request("/api/agent-session/bindings", {
     method: "POST",
@@ -41,7 +50,9 @@ async function bindCard(app: ReturnType<typeof createApp>["app"], taskId: string
     }),
   });
   if (response.status !== 200) {
-    throw new Error(`bind failed ${response.status}: '${await response.text()}'`);
+    throw new Error(
+      `bind failed ${response.status}: '${await response.text()}'`,
+    );
   }
   return (await response.json()) as {
     bindingId: string;
@@ -99,7 +110,12 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     });
     const [task] = await db
       .insert(schema.taskTable)
-      .values({ projectId: project.id, title: "Bound card", status: "to-do", number: null })
+      .values({
+        projectId: project.id,
+        title: "Bound card",
+        status: "to-do",
+        number: null,
+      })
       .returning();
 
     mockAuthenticatedSession(admin.user);
@@ -140,7 +156,10 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       `/api/agent-session/tasks/${task.id}/binding-status`,
     );
     expect(ownerStatus.status).toBe(200);
-    const ownerStatusPayload = (await ownerStatus.json()) as Record<string, unknown>;
+    const ownerStatusPayload = (await ownerStatus.json()) as Record<
+      string,
+      unknown
+    >;
     expect(ownerStatusPayload).toEqual({
       bound: true,
       online: true,
@@ -178,7 +197,12 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     });
     const [task] = await db
       .insert(schema.taskTable)
-      .values({ projectId: project.id, title: "Rebound card", status: "to-do", number: null })
+      .values({
+        projectId: project.id,
+        title: "Rebound card",
+        status: "to-do",
+        number: null,
+      })
       .returning();
 
     mockAuthenticatedSession(admin.user);
@@ -246,8 +270,18 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     const [firstTask, secondTask] = await db
       .insert(schema.taskTable)
       .values([
-        { projectId: project.id, title: "First bound card", status: "to-do", number: null },
-        { projectId: project.id, title: "Second bound card", status: "to-do", number: null },
+        {
+          projectId: project.id,
+          title: "First bound card",
+          status: "to-do",
+          number: null,
+        },
+        {
+          projectId: project.id,
+          title: "Second bound card",
+          status: "to-do",
+          number: null,
+        },
       ])
       .returning();
 
@@ -288,7 +322,12 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     });
     const [task] = await db
       .insert(schema.taskTable)
-      .values({ projectId: project.id, title: "Root", status: "to-do", number: null })
+      .values({
+        projectId: project.id,
+        title: "Root",
+        status: "to-do",
+        number: null,
+      })
       .returning();
 
     mockAuthenticatedSession(admin.user);
@@ -360,6 +399,32 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       sessionId: "pi-session-a",
       generation: binding.bindingGeneration,
     };
+    const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+    for (const type of [
+      "task.updated",
+      "task.created",
+      "task-relation.created",
+      "comment.created",
+    ]) {
+      await subscribeToEvent(type, async (data) => {
+        events.push({ type, data: data as Record<string, unknown> });
+      });
+    }
+
+    const rootUpdate = await app.request("/api/agent-session/card/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...ctx,
+        patch: { title: "Updated by bound agent" },
+        expectedContentRevision: 1,
+      }),
+    });
+    expect(rootUpdate.status).toBe(200);
+    expect(events).toContainEqual({
+      type: "task.updated",
+      data: expect.objectContaining({ taskId: root.id, projectId: project.id }),
+    });
 
     const created = await app.request("/api/agent-session/card/subtasks", {
       method: "POST",
@@ -367,7 +432,7 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       body: JSON.stringify({
         ...ctx,
         title: "Created through card tool",
-        expectedParentContentRevision: 1,
+        expectedParentContentRevision: 2,
       }),
     });
     expect(created.status).toBe(200);
@@ -376,7 +441,23 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       parentContentRevision: number;
     };
     expect(createBody.subtask.contentRevision).toBe(1);
-    expect(createBody.parentContentRevision).toBe(2);
+    expect(createBody.parentContentRevision).toBe(3);
+    expect(events).toContainEqual({
+      type: "task.created",
+      data: expect.objectContaining({
+        taskId: createBody.subtask.id,
+        projectId: project.id,
+      }),
+    });
+    expect(events).toContainEqual({
+      type: "task-relation.created",
+      data: expect.objectContaining({
+        taskId: root.id,
+        sourceTaskId: root.id,
+        targetTaskId: createBody.subtask.id,
+        projectId: project.id,
+      }),
+    });
 
     const updated = await app.request(
       `/api/agent-session/card/subtasks/${createBody.subtask.id}/update`,
@@ -395,6 +476,13 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       title: "Updated through card tool",
       contentRevision: 2,
     });
+    expect(events).toContainEqual({
+      type: "task.updated",
+      data: expect.objectContaining({
+        taskId: createBody.subtask.id,
+        projectId: project.id,
+      }),
+    });
 
     const comment = await app.request(
       "/api/agent-session/card/comments/create",
@@ -406,6 +494,10 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     );
     expect(comment.status).toBe(200);
     const commentBody = (await comment.json()) as { id: string };
+    expect(events).toContainEqual({
+      type: "comment.created",
+      data: expect.objectContaining({ taskId: root.id, projectId: project.id }),
+    });
 
     const comments = await app.request("/api/agent-session/card/comments", {
       method: "POST",
@@ -414,7 +506,12 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     });
     expect(comments.status).toBe(200);
     expect(await comments.json()).toMatchObject({
-      items: [expect.objectContaining({ id: commentBody.id, content: "Bound-session comment" })],
+      items: [
+        expect.objectContaining({
+          id: commentBody.id,
+          content: "Bound-session comment",
+        }),
+      ],
       nextCursor: null,
     });
 
@@ -429,7 +526,7 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
           redCircle: 0,
           greenCheck: 0,
         },
-        expectedContentRevision: 2,
+        expectedContentRevision: 3,
       }),
     });
     expect(markers.status).toBe(200);
@@ -440,7 +537,11 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
         redCircle: 0,
         greenCheck: 0,
       },
-      contentRevision: 3,
+      contentRevision: 4,
+    });
+    expect(events).toContainEqual({
+      type: "task.updated",
+      data: expect.objectContaining({ taskId: root.id, projectId: project.id }),
     });
   });
 
@@ -455,11 +556,21 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     });
     const [root] = await db
       .insert(schema.taskTable)
-      .values({ projectId: project.id, title: "Parent", status: "to-do", number: null })
+      .values({
+        projectId: project.id,
+        title: "Parent",
+        status: "to-do",
+        number: null,
+      })
       .returning();
     const [child] = await db
       .insert(schema.taskTable)
-      .values({ projectId: project.id, title: "Child", status: "to-do", number: null })
+      .values({
+        projectId: project.id,
+        title: "Child",
+        status: "to-do",
+        number: null,
+      })
       .returning();
     const [foreign] = await db
       .insert(schema.taskTable)
@@ -470,12 +581,29 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
         number: null,
       })
       .returning();
-    await db.insert(schema.taskRelationTable).values({
-      sourceTaskId: root.id,
-      targetTaskId: child.id,
-      relationType: "subtask",
-      position: 0,
-    });
+    const [related] = await db
+      .insert(schema.taskTable)
+      .values({
+        projectId: project.id,
+        title: "Related outside the subtask tree",
+        status: "to-do",
+        number: null,
+      })
+      .returning();
+    await db.insert(schema.taskRelationTable).values([
+      {
+        sourceTaskId: root.id,
+        targetTaskId: child.id,
+        relationType: "subtask",
+        position: 0,
+      },
+      {
+        sourceTaskId: child.id,
+        targetTaskId: related.id,
+        relationType: "blocks",
+        position: 0,
+      },
+    ]);
 
     mockAuthenticatedSession(admin.user);
     const { app } = createApp();
@@ -485,6 +613,13 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       sessionId: "pi-session-a",
       generation: 1,
     };
+    const deleteEvents: Array<{ type: string; data: Record<string, unknown> }> =
+      [];
+    for (const type of ["task.deleted", "task-relation.deleted"]) {
+      await subscribeToEvent(type, async (data) => {
+        deleteEvents.push({ type, data: data as Record<string, unknown> });
+      });
+    }
 
     // The root binding owns its whole live subtree; no second session may
     // bind directly to a descendant and race the root writer.
@@ -545,6 +680,32 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       parentContentRevision: number;
     };
     expect(result.parentContentRevision).toBe(2);
+    expect(deleteEvents).toContainEqual({
+      type: "task.deleted",
+      data: expect.objectContaining({
+        taskId: child.id,
+        projectId: project.id,
+      }),
+    });
+    expect(deleteEvents).toContainEqual({
+      type: "task-relation.deleted",
+      data: expect.objectContaining({
+        taskId: root.id,
+        sourceTaskId: root.id,
+        targetTaskId: child.id,
+        relationType: "subtask",
+        projectId: project.id,
+      }),
+    });
+    expect(deleteEvents).toContainEqual({
+      type: "task-relation.deleted",
+      data: expect.objectContaining({
+        sourceTaskId: child.id,
+        targetTaskId: related.id,
+        relationType: "blocks",
+        projectId: project.id,
+      }),
+    });
     const [gone] = await db
       .select()
       .from(schema.taskTable)
@@ -559,7 +720,12 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     });
     const [task] = await db
       .insert(schema.taskTable)
-      .values({ projectId: project.id, title: "Run card", status: "to-do", number: null })
+      .values({
+        projectId: project.id,
+        title: "Run card",
+        status: "to-do",
+        number: null,
+      })
       .returning();
 
     mockAuthenticatedSession(admin.user);
@@ -568,23 +734,26 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
 
     // A queued formal run is "live" for new binds.
     const principalAdmin = await seedPrincipal(admin.user.id);
-    const liveRun = await db.insert(schema.taskRunTable).values({
-      taskId: task.id,
-      manifestVersion: 1,
-      protocolVersion: 1,
-      repositoryOwner: "owner",
-      repositoryName: "repo",
-      baseBranch: "main",
-      state: "queued",
-      hostId: "test-host",
-      branchName: "test-branch",
-      scope: [],
-      requestKey: "live-run-key",
-      requestHash: "live-run-hash",
-      leaseTokenHash: "live-lease-hash",
-      leaseExpiresAt: new Date(Date.now() + 3_600_000),
-      agentPrincipalId: principalAdmin.id,
-    }).returning({ id: schema.taskRunTable.id });
+    const liveRun = await db
+      .insert(schema.taskRunTable)
+      .values({
+        taskId: task.id,
+        manifestVersion: 1,
+        protocolVersion: 1,
+        repositoryOwner: "owner",
+        repositoryName: "repo",
+        baseBranch: "main",
+        state: "queued",
+        hostId: "test-host",
+        branchName: "test-branch",
+        scope: [],
+        requestKey: "live-run-key",
+        requestHash: "live-run-hash",
+        leaseTokenHash: "live-lease-hash",
+        leaseExpiresAt: new Date(Date.now() + 3_600_000),
+        agentPrincipalId: principalAdmin.id,
+      })
+      .returning({ id: schema.taskRunTable.id });
     const livePrincipal = await seedPrincipal(admin.user.id);
     const bindDuringRun = await app.request("/api/agent-session/bindings", {
       method: "POST",
@@ -650,11 +819,21 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     });
     const [parent] = await db
       .insert(schema.taskTable)
-      .values({ projectId: project.id, title: "Parent card", status: "to-do", number: null })
+      .values({
+        projectId: project.id,
+        title: "Parent card",
+        status: "to-do",
+        number: null,
+      })
       .returning();
     const [child] = await db
       .insert(schema.taskTable)
-      .values({ projectId: project.id, title: "Child card", status: "to-do", number: null })
+      .values({
+        projectId: project.id,
+        title: "Child card",
+        status: "to-do",
+        number: null,
+      })
       .returning();
     await db.insert(schema.taskRelationTable).values({
       sourceTaskId: parent.id,
