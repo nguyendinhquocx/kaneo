@@ -46,7 +46,7 @@ import updateTaskPriority from "./controllers/update-task-priority";
 import updateTaskStatus from "./controllers/update-task-status";
 import updateTaskTitle from "./controllers/update-task-title";
 import updateWorkMarkers from "./controllers/update-work-markers";
-import { VALID_PRIORITIES } from "./validate-task-fields";
+import { parseTaskDateInput, VALID_PRIORITIES } from "./validate-task-fields";
 import { normalizeWorkMarkerCounts } from "./work-marker-counts";
 
 const workMarkerCountSchema = v.pipe(
@@ -485,8 +485,8 @@ const task = new Hono<{
         id,
         title,
         status,
-        startDate ? new Date(startDate) : undefined,
-        dueDate ? new Date(dueDate) : undefined,
+        startDate ? parseTaskDateInput("startDate", startDate) : undefined,
+        dueDate ? parseTaskDateInput("dueDate", dueDate) : undefined,
         projectId,
         c.get("workspaceId"),
         description,

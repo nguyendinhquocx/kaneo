@@ -71,3 +71,16 @@ export function coercePriority(priority: string): {
     warning: `Unknown priority "${priority}" mapped to "no-priority"`,
   };
 }
+
+// UAT bug iss_20261116113108: an unparsable client date (e.g. dd/mm/yyyy)
+// previously reached the driver as an Invalid Date and surfaced as a raw 500.
+// Reject it here so bad input is a 400 and nothing is applied.
+export function parseTaskDateInput(field: string, value: string): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new HTTPException(400, {
+      message: `${field} must be a valid date string (ISO 8601); received "${value}"`,
+    });
+  }
+  return date;
+}

@@ -34,6 +34,7 @@ import { lockProjectTaskLanes } from "../task/lock-project-task-lanes";
 import {
   assertValidPriority,
   assertValidTaskStatus,
+  parseTaskDateInput,
   VIRTUAL_STATUSES,
 } from "../task/validate-task-fields";
 import { normalizeWorkMarkerCounts } from "../task/work-marker-counts";
@@ -324,11 +325,13 @@ export async function bindingCardUpdate(
   }
   if (body.patch.startDate !== undefined) {
     updates.startDate = body.patch.startDate
-      ? new Date(body.patch.startDate)
+      ? parseTaskDateInput("startDate", body.patch.startDate)
       : null;
   }
   if (body.patch.dueDate !== undefined) {
-    updates.dueDate = body.patch.dueDate ? new Date(body.patch.dueDate) : null;
+    updates.dueDate = body.patch.dueDate
+      ? parseTaskDateInput("dueDate", body.patch.dueDate)
+      : null;
   }
   if (Object.keys(updates).length === 0) {
     throw new HTTPException(400, { message: "No valid card fields to update" });
@@ -565,11 +568,13 @@ export async function bindingCardUpdateSubtask(
   }
   if (body.patch.startDate !== undefined) {
     updates.startDate = body.patch.startDate
-      ? new Date(body.patch.startDate)
+      ? parseTaskDateInput("startDate", body.patch.startDate)
       : null;
   }
   if (body.patch.dueDate !== undefined) {
-    updates.dueDate = body.patch.dueDate ? new Date(body.patch.dueDate) : null;
+    updates.dueDate = body.patch.dueDate
+      ? parseTaskDateInput("dueDate", body.patch.dueDate)
+      : null;
   }
   if (Object.keys(updates).length === 0) {
     throw new HTTPException(400, {
@@ -1042,6 +1047,44 @@ async function resolveUploadOwner(
   ownerType: "task_description" | "task_comment",
   ownerId: string,
 ) {
+  if (ownerType === "task_comment") {
+    // UAT bug iss_20261116113109: a comment-scoped upload carries the comment
+    // (activity) id, not the task id. Resolve the owning task from the comment
+    // first; fall back to the raw task id for the established task-level form.
+    const [comment] = await db
+      .select({
+        commentId: schema.activityTable.id,
+        taskId: schema.activityTable.taskId,
+        projectId: schema.taskTable.projectId,
+        workspaceId: schema.projectTable.workspaceId,
+      })
+      .from(schema.activityTable)
+      .innerJoin(
+        schema.taskTable,
+        eq(schema.activityTable.taskId, schema.taskTable.id),
+      )
+      .innerJoin(
+        schema.projectTable,
+        eq(schema.taskTable.projectId, schema.projectTable.id),
+      )
+      .where(
+        and(
+          eq(schema.activityTable.id, ownerId),
+          eq(schema.activityTable.type, "comment"),
+        ),
+      )
+      .limit(1);
+    if (comment) {
+      return {
+        workspaceId: comment.workspaceId,
+        projectId: comment.projectId,
+        taskId: comment.taskId,
+        ownerType,
+        ownerId: comment.commentId,
+        surface: "comment",
+      };
+    }
+  }
   const [task] = await db
     .select({
       id: schema.taskTable.id,
@@ -1055,7 +1098,14 @@ async function resolveUploadOwner(
     )
     .where(eq(schema.taskTable.id, ownerId))
     .limit(1);
-  if (!task) throw notFound();
+  if (!task) {
+    throw new HTTPException(404, {
+      message:
+        ownerType === "task_comment"
+          ? "No comment or task matches the provided ownerId."
+          : "Task not found for the provided ownerId.",
+    });
+  }
   return {
     workspaceId: task.workspaceId,
     projectId: task.projectId,
@@ -1077,7 +1127,8 @@ export async function bindingCardCreateUploadTicket(
   },
 ) {
   const { scope } = await loadScopedBinding(ctx);
-  assertInScope(scope, input.ownerId);
+  const owner = await resolveUploadOwner(input.ownerType, input.ownerId);
+  assertInScope(scope, owner.taskId);
   const [manifest] = await db
     .select({ id: schema.executionManifestTable.id })
     .from(schema.executionManifestTable)
@@ -1088,7 +1139,6 @@ export async function bindingCardCreateUploadTicket(
       message: "Descriptions are read-only in manifest projects.",
     });
   }
-  const owner = await resolveUploadOwner(input.ownerType, input.ownerId);
   try {
     validateFullLinkUploadInput(input.contentType, input.size);
   } catch (error) {
@@ -1136,7 +1186,8 @@ export async function bindingCardFinalizeUpload(
   },
 ) {
   const { binding, scope } = await loadScopedBinding(ctx);
-  assertInScope(scope, input.ownerId);
+  const owner = await resolveUploadOwner(input.ownerType, input.ownerId);
+  assertInScope(scope, owner.taskId);
   const [manifest] = await db
     .select({ id: schema.executionManifestTable.id })
     .from(schema.executionManifestTable)
@@ -1147,7 +1198,6 @@ export async function bindingCardFinalizeUpload(
       message: "Descriptions are read-only in manifest projects.",
     });
   }
-  const owner = await resolveUploadOwner(input.ownerType, input.ownerId);
 
   const normalizedKey = input.key.trim();
   if (
@@ -1224,7 +1274,7 @@ export async function bindingCardFinalizeUpload(
         tx,
         ctx,
         binding,
-        input.ownerId,
+        owner.taskId,
       );
       if (
         !freshScope.tasks.some((candidate) => candidate.id === owner.taskId)
