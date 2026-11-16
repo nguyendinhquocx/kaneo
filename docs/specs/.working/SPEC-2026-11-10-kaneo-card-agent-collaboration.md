@@ -649,3 +649,10 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - Pi extension tests prove the private asset endpoint is called through the runtime-owned secret and images are returned as `{type:"image",data,mimeType}`, plus delivery and final-status prompt guidance.
 - Web tests cover waiting/enqueued/no-send dot states, transient notices, accessible announcement, and no persistent prose; verify responsive rendered state.
 - Required gates: web typecheck/full tests/build/i18n, API typecheck/unit/integration, extension Node suite/typecheck, and guarded production release with live health and backup verification.
+
+## R8 applied state
+- Verified locally: web typecheck + 53 files / 173 tests + build + i18n PASS; API typecheck + 264 unit PASS; focused API binding/asset integration 11/11 PASS on a disposable local DB; Pi extension suite 89/89 + TypeScript check PASS.
+- Independent review found deletion-cascade events missed non-subtask relation types; R8 now captures and broadcasts every cascaded relation. Regression asserts a `blocks` relation and subtask edge are both published.
+- Source commits pushed: Kaneo `c3df945b8c0b5678c7a4ce3da0358f03e4cf68e0` (`kaneo/prodesk-production`); Pi extension `00678df3ca212602689d231a2cfcc2fcf0483022` (`python/main`).
+- Production APPLIED 2026-11-16: image `c3df945b@sha256:dbb32fe5` healthy, Compose `4e88ce7b`, wrapper `37689be8`, migration head unchanged 0056, post-deploy snapshot `kaneo-20261116T103317Z` verified and private R2 mirror PASS; HTTPS `/api/health` 200 and home 200. Rollback pin R7 `1e800ab2@sha256:993a79ff`.
+- Local Pi runtime synced from the committed source: 19 files hash-match; previous copy retained as `kaneo-mcp-r8-pre-20261116T174606`. An already-running Li session still needs `/reload` or a restart. Real Pi vision + owner browser UAT are pending; do not archive until those are checked.
