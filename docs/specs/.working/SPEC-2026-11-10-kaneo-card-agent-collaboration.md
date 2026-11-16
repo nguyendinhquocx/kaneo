@@ -655,5 +655,12 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - Verified locally: web typecheck + 53 files / 173 tests + build + i18n PASS; API typecheck + 264 unit PASS; focused API binding/asset integration 11/11 PASS on a disposable local DB; Pi extension suite 89/89 + TypeScript check PASS.
 - Independent review found deletion-cascade events missed non-subtask relation types; R8 now captures and broadcasts every cascaded relation. Regression asserts a `blocks` relation and subtask edge are both published.
 - Source commits pushed: Kaneo `c3df945b8c0b5678c7a4ce3da0358f03e4cf68e0` (`kaneo/prodesk-production`); Pi extension `00678df3ca212602689d231a2cfcc2fcf0483022` (`python/main`).
-- Production APPLIED 2026-11-16: image `c3df945b@sha256:dbb32fe5` healthy, Compose `4e88ce7b`, wrapper `37689be8`, migration head unchanged 0056, post-deploy snapshot `kaneo-20261116T103317Z` verified and private R2 mirror PASS; HTTPS `/api/health` 200 and home 200. Rollback pin R7 `1e800ab2@sha256:993a79ff`.
+- R8 was APPLIED 2026-11-16, then superseded by the R9 marker-error UX follow-up. R8 image `c3df945b@sha256:dbb32fe5`; post-snapshot `kaneo-20261116T103317Z` verified + private R2 mirror PASS.
 - Local Pi runtime synced from the committed source: 19 files hash-match; previous copy retained as `kaneo-mcp-r8-pre-20261116T174606`. An already-running Li session still needs `/reload` or a restart. Real Pi vision + owner browser UAT are pending; do not archive until those are checked.
+
+## R9 marker-conflict UX follow-up
+- Marker mutation now GETs the current task before writing. If a genuine race still returns 409, the web fetcher displays the structured API `message`, not the raw JSON envelope shown in the owner's screenshot.
+- Regression: 6 focused marker/fetcher tests PASS; full web 54 files / 175 tests, typecheck, Vite build and i18n PASS. API/extension source unchanged from R8 gates.
+- Source commit `071cb51c5d1882a7ebb48637e16c4547ab36a340` pushed to `kaneo/prodesk-production`.
+- Production APPLIED 2026-11-16: R9 image `071cb51c@sha256:dcdf49e6` healthy, Compose `676edc65`, wrapper `343c2656`, migration head unchanged 0056; post-deploy snapshot `kaneo-20261116T110608Z` verified + private R2 mirror PASS; HTTPS health 200, home 200. Rollback pin R8 `c3df945b@sha256:dbb32fe5`.
+- Remaining gate: reload/restart the active Li session, owner UAT the 5 requested behaviors + marker picker, then archive the working spec. Browser-rendered visual evidence and live Pi image/prompt behavior are not yet confirmed.
