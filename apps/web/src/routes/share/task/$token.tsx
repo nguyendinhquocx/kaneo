@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useMatchRoute } from "@tanstack/react-router";
 import TaskShareBoard from "@/components/share/task-share-board";
 import {
   ShareCapabilityProvider,
@@ -24,15 +24,26 @@ export const Route = createFileRoute("/share/task/$token")({
 
 function ShareTaskRoute() {
   const { token } = Route.useParams();
+  const matchRoute = useMatchRoute();
+  const isTaskDetail = matchRoute({
+    to: "/share/task/$token/task/$taskId",
+    fuzzy: false,
+  });
+
   const share = useQuery({
     queryKey: ["share-task", token, "root"],
     queryFn: () => getTaskShareRoot(token),
+    enabled: !isTaskDetail,
     retry: (failureCount, error) =>
       !(error instanceof ShareRequestError && error.kind !== "error") &&
       failureCount < 2,
     refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
+
+  // File-based routing nests /task/$taskId under this token route. Render the
+  // child route alone instead of leaving the landing board mounted above it.
+  if (isTaskDetail) return <Outlet />;
 
   // R3: background refetches (e.g. after a drag) must not flash the whole
   // route into a loading screen; only show it before any data exists.

@@ -597,3 +597,13 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - Web 50 files / 161 tests + focused suites 24/24 PASS, web typecheck/build PASS (route tree regenerated), API tsc + 264 unit PASS, i18n PASS, new integration `task-reorder-batch.test.ts` 3/3 PASS.
 - Wave `card-agent-collab-r4` APPLIED 2026-11-16: image `30499878@sha256:30857acc` healthy, compose `4b889a11`, wrapper `b8126998`, migration head unchanged 0056, post-deploy snapshot `kaneo-20261116T040443Z` verified + R2 mirrors, rollback pin `683c163c@sha256:798944e8`. HTTPS health 200.
 - Awaiting owner re-UAT.
+
+# Revision 5 (owner UAT 2026-11-16)
+
+## R5 root-cause correction
+- The R4 route rename did not flatten the route: TanStack still generated `/share/task/$token/task/$taskId` as a child of `$token`. The parent rendered no `<Outlet/>`, so the URL changed while the board remained visible. R5 keeps the nested route and renders `<Outlet/>` alone when the detail child matches; the landing query is disabled in that state.
+- R4's Better Auth interceptor used an unsupported top-level `fetch` option, so it was ignored. Better Auth 1.6.23 requires `fetchOptions.customFetchImpl`; R5 routes this through `shareAwareAuthFetch` and intercepts only organization lookups while a share capability is active.
+
+## R5 verification
+- Regression tests: route outlet 1/1, guest auth interception 3/3; full web 52 files / 165 tests PASS, typecheck/build PASS; API typecheck + 264 unit PASS; i18n PASS.
+- Still to deploy: candidate build and guarded ProDesk wave. Production remains at R4 image until R5 apply PASS.

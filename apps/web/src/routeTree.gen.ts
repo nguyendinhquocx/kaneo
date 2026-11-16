@@ -40,7 +40,7 @@ import { Route as LayoutAuthenticatedDashboardSettingsWorkspaceRouteImport } fro
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId'
 import { Route as LayoutAuthenticatedDashboardWorkspaceCreateRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/create'
 import { Route as ShareProjectTokenTaskTaskIdRouteImport } from './routes/share/project/$token/task/$taskId'
-import { Route as ShareTaskTokenTaskTaskIdRouteImport } from './routes/share/task/$token.task.$taskId'
+import { Route as ShareTaskTokenTaskTaskIdRouteImport } from './routes/share/task/$token/task/$taskId'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountDeveloperRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account/developer'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountInformationRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account/information'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountNotificationsRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account/notifications'
