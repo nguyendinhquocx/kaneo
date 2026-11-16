@@ -584,3 +584,16 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - Web 50 files / 161 tests PASS, share/kanban/mutation focused suites 24/24 PASS, web typecheck + build PASS, API tsc + 264 unit PASS, i18n PASS.
 - Wave `card-agent-collab-r3` APPLIED 2026-11-16: image `683c163c@sha256:798944e8` healthy, compose `b550c905`, wrapper `8a2d886e`, migration head unchanged 0056, post-deploy snapshot `kaneo-20261116T022643Z` verified + R2 mirrors, rollback pin `c12b6da5@sha256:e39f082f`. HTTPS health 200.
 - Branch pushed to github-main (e90c0ae1..683c163c). Awaiting owner re-UAT.
+
+# Revision 4 (owner UAT 2026-11-16, deployed same day)
+
+## R4 fixes (commit 30499878)
+- API: batch lane reorder `PUT /task/reorder/:projectId` — one transaction per drag (lane locks, final-column gates, CAS bumps, per-task events) instead of one full PATCH per changed card.
+- Web: board dragging no longer locks while writes are pending; each drag renders its own optimistic projection and the batch rolls back on failure — consecutive drags never wait 2-3s.
+- Web: guest task detail route flattened (`$token.task.$taskId.tsx`) — the nested route was a child of the landing route which never rendered an Outlet, so the URL changed while the board stayed and the detail never opened.
+- Web: share-aware better-auth fetch answers organization lookups locally while a share capability is active — no more guest 401 console noise.
+
+## R4 verification + deploy state
+- Web 50 files / 161 tests + focused suites 24/24 PASS, web typecheck/build PASS (route tree regenerated), API tsc + 264 unit PASS, i18n PASS, new integration `task-reorder-batch.test.ts` 3/3 PASS.
+- Wave `card-agent-collab-r4` APPLIED 2026-11-16: image `30499878@sha256:30857acc` healthy, compose `4b889a11`, wrapper `b8126998`, migration head unchanged 0056, post-deploy snapshot `kaneo-20261116T040443Z` verified + R2 mirrors, rollback pin `683c163c@sha256:798944e8`. HTTPS health 200.
+- Awaiting owner re-UAT.
