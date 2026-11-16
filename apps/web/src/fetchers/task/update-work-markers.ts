@@ -17,8 +17,15 @@ async function updateWorkMarkers(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error);
+    const errorText = await response.text();
+    let message = errorText;
+    try {
+      const payload = JSON.parse(errorText) as { message?: unknown };
+      if (typeof payload.message === "string") message = payload.message;
+    } catch {
+      // Keep plain-text API errors intact.
+    }
+    throw new Error(message);
   }
 
   const data = await response.json();

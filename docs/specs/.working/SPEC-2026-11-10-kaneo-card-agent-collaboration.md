@@ -643,6 +643,7 @@ Owner duyệt deploy production sau gates; các carry-over review items chốt n
 - Evidence: the marker picker toast exposed a CAS conflict (`Card content changed`, `currentContentRevision: 8`). `useUpdateWorkMarkers` issued `fetchQuery` with a placeholder `queryFn` returning `undefined`, then derived the write token from cached data or fallback 1. An agent/card update can advance the server revision after that cache was read.
 - Fix/acceptance: before each marker write, fetch the task from the authenticated task endpoint for the current server revision; if that read fails, do not attempt the marker mutation. Keep the existing optimistic marker projections and rollback behavior.
 - Regression: cache revision 7 with server revision 8 sends 8; fresh-read failure sends no marker write.
+- Conflict UX: if a genuine concurrent change still returns 409, display the API's `message` string rather than the raw JSON envelope. Fetcher test covers `{message,currentContentRevision}`.
 
 ## R8 verification gates
 - API integration tests assert each bound write publishes the expected project event after commit, including all relation types cascaded by subtask deletion; existing WebSocket invalidation tests cover the matching task/comment/relation query families.
