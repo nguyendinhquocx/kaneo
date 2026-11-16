@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
+import reorderProjectTasksBatch from "@/fetchers/task/reorder-project-tasks";
 import { toast } from "@/lib/toast";
 import useProjectStore from "@/store/project";
 import type { ProjectBoardTask, ProjectWithTasks } from "@/types/project";
@@ -18,28 +18,32 @@ type ReorderProjectTasksContext = {
 };
 
 /**
- * A lane reorder is rendered optimistically, then persisted with the existing
- * guarded task-update route. Requests persist sequentially so a large lane
- * never bursts N concurrent PATCHes into the Postgres pool (R3: concurrent
- * fan-out exhausted the pool and surfaced 500s mid-drag), and per-task
- * invalidations stay deferred until the whole group settles.
+ * A lane reorder is rendered optimistically, then persisted with the R4 batch
+ * endpoint — one request per drag instead of one full PATCH per changed card
+ * (the per-card fan-out exhausted the Postgres pool and serialized the next
+ * drag behind pending writes). Per-task invalidations are deferred until the
+ * whole group settles so a slow request cannot flash the old lane into view.
  */
 export function useReorderProjectTasks() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const { setProject } = useProjectStore();
-  const { mutateAsync: updateTask } = useUpdateTask({ deferInvalidation: true });
 
   return useMutation<
-    void,
+    unknown,
     Error,
     ReorderProjectTasksInput,
     ReorderProjectTasksContext
   >({
-    mutationFn: async ({ changedTasks }) => {
-      for (const task of changedTasks) {
-        await updateTask(task);
-      }
+    mutationFn: async ({ projectId, changedTasks }) => {
+      return reorderProjectTasksBatch(
+        projectId,
+        changedTasks.map((task) => ({
+          id: task.id,
+          status: task.status,
+          position: task.position ?? 0,
+        })),
+      );
     },
     onMutate: async ({ projectId, optimisticProject }) => {
       const queryKey = ["tasks", projectId] as const;

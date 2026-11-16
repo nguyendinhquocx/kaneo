@@ -35,6 +35,9 @@ import getTask from "./controllers/get-task";
 import getTasks from "./controllers/get-tasks";
 import importTasks from "./controllers/import-tasks";
 import moveTask from "./controllers/move-task";
+import reorderProjectTasks, {
+  type ReorderTaskDelta,
+} from "./controllers/reorder-project-tasks";
 import updateTask from "./controllers/update-task";
 import updateTaskAssignee from "./controllers/update-task-assignee";
 import updateTaskDescription from "./controllers/update-task-description";
@@ -354,6 +357,70 @@ const task = new Hono<{
         currentUserId,
         expectedContentRevision,
       });
+
+      return c.json(result);
+    },
+  )
+  .put(
+    "/reorder/:projectId",
+    describeRoute({
+      operationId: "reorderProjectTasks",
+      tags: ["Tasks"],
+      description:
+        "Batch lane reorder: persist status/position deltas for many tasks in one transaction",
+      responses: {
+        200: {
+          description: "Reordered tasks",
+          content: {
+            "application/json": {
+              schema: resolver(
+                v.object({
+                  updated: v.array(
+                    v.object({
+                      id: v.string(),
+                      status: v.string(),
+                      position: v.number(),
+                      contentRevision: v.number(),
+                    }),
+                  ),
+                }),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    validator(
+      "param",
+      v.object({ projectId: v.string() }),
+    ),
+    validator(
+      "json",
+      v.object({
+        tasks: v.pipe(
+          v.array(
+            v.object({
+              id: v.string(),
+              status: v.string(),
+              position: v.number(),
+            }),
+          ),
+          v.maxLength(200),
+        ),
+      }),
+    ),
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ task: ["update"] }),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const { tasks } = c.req.valid("json");
+      const currentUserId = c.get("userId");
+
+      const result = await reorderProjectTasks(
+        projectId,
+        tasks as ReorderTaskDelta[],
+        currentUserId,
+      );
 
       return c.json(result);
     },

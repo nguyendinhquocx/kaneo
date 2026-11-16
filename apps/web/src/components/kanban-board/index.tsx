@@ -46,12 +46,13 @@ function KanbanBoard({ project, disableDragDrop = false, onTaskClick }: KanbanBo
     clearFocus,
   } = useBulkSelectionStore();
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
-  const { mutate: moveShareTask, isPending: isShareMovePending } =
-    useMoveShareTask();
-  const { mutate: reorderTasks, isPending: isReorderPending } =
-    useReorderProjectTasks();
-  const isDragDisabled =
-    disableDragDrop || isReorderPending || (Boolean(getShareCapability()) && isShareMovePending);
+  const { mutate: moveShareTask } = useMoveShareTask();
+  const { mutate: reorderTasks } = useReorderProjectTasks();
+  // R4: pending writes no longer lock the board. Every drag renders its own
+  // optimistic projection and the batch persist rolls back on failure, so
+  // dragging the next card immediately is safe and the cursor never flips
+  // back to default mid-interaction.
+  const isDragDisabled = disableDragDrop;
   const navigate = useNavigate();
 
   useEffect(() => {

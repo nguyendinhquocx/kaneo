@@ -6,13 +6,13 @@ import type { ProjectBoardTask, ProjectWithTasks } from "@/types/project";
 import { reorderProjectTasks, resolveTaskReorderIntent } from "@/lib/task-reorder";
 import { useReorderProjectTasks } from "./use-reorder-project-tasks";
 
-const { updateTask, toastError } = vi.hoisted(() => ({
-  updateTask: vi.fn(),
+const { reorderBatch, toastError } = vi.hoisted(() => ({
+  reorderBatch: vi.fn(),
   toastError: vi.fn(),
 }));
 
-vi.mock("@/hooks/mutations/task/use-update-task", () => ({
-  useUpdateTask: () => ({ mutateAsync: updateTask }),
+vi.mock("@/fetchers/task/reorder-project-tasks", () => ({
+  default: reorderBatch,
 }));
 vi.mock("@/lib/toast", () => ({ toast: { error: toastError } }));
 vi.mock("react-i18next", () => ({
@@ -101,7 +101,7 @@ describe("useReorderProjectTasks", () => {
         mutations: { retry: false },
       },
     });
-    updateTask.mockReset();
+    reorderBatch.mockReset();
     toastError.mockReset();
   });
 
@@ -109,7 +109,7 @@ describe("useReorderProjectTasks", () => {
     queryClient.clear();
   });
 
-  it("updates the task-list projection before the network writes finish", async () => {
+  it("updates the task-list projection while the batch request is in flight", async () => {
     const previous = makeProject();
     queryClient.setQueryData(["tasks", previous.id], previous);
     const intent = resolveTaskReorderIntent(previous, "b", "doing");
@@ -117,17 +117,21 @@ describe("useReorderProjectTasks", () => {
       previous,
       intent!,
     );
-    // R3: writes persist sequentially, so each call only starts after the
-    // previous one resolves — no concurrent fan-out into the API pool.
-    const resolvers: Array<() => void> = [];
-    updateTask.mockImplementation(
-      () => new Promise<void>((resolve) => resolvers.push(resolve)),
+    // R4: the whole lane persists as ONE batch request; the optimistic
+    // projection applies immediately while the request is in flight.
+    let resolveBatch!: () => void;
+    reorderBatch.mockImplementation(
+      () =>
+        new Promise<unknown>((resolve) => {
+          resolveBatch = () =>
+            resolve({ updated: changedTasks.map((task) => ({ id: task.id })) });
+        }),
     );
     const { result } = renderHook(() => useReorderProjectTasks(), {
       wrapper: createWrapper(queryClient),
     });
 
-    let mutation!: Promise<void>;
+    let mutation!: Promise<unknown>;
     act(() => {
       mutation = result.current.mutateAsync({
         projectId: previous.id,
@@ -143,16 +147,18 @@ describe("useReorderProjectTasks", () => {
         ["b"],
       ]);
     });
-    expect(updateTask).toHaveBeenCalledTimes(1);
+    expect(reorderBatch).toHaveBeenCalledTimes(1);
+    expect(reorderBatch).toHaveBeenCalledWith(
+      "project-1",
+      changedTasks.map((task) => ({
+        id: task.id,
+        status: task.status,
+        position: task.position ?? 0,
+      })),
+    );
 
     await act(async () => {
-      resolvers[0]?.();
-      await Promise.resolve();
-    });
-    expect(updateTask).toHaveBeenCalledTimes(2);
-
-    await act(async () => {
-      resolvers[1]?.();
+      resolveBatch();
       await mutation;
     });
     expect(ids(queryClient.getQueryData<ProjectWithTasks>(["tasks", previous.id])!)).toEqual([
@@ -169,7 +175,7 @@ describe("useReorderProjectTasks", () => {
       previous,
       intent!,
     );
-    updateTask.mockRejectedValue(new Error("permission denied"));
+    reorderBatch.mockRejectedValue(new Error("permission denied"));
     const { result } = renderHook(() => useReorderProjectTasks(), {
       wrapper: createWrapper(queryClient),
     });
