@@ -1,0 +1,44 @@
+#!/bin/sh
+# Fixed read-only Kaneo migration-head and schema verifier.
+# SQL is static and SELECT-only; this adapter never runs migrations or writes data.
+set -eu
+
+PROJECT_DIR=/srv/kaneo
+COMPOSE_FILE=$PROJECT_DIR/compose.yml
+EXPECTED_COMPOSE_SHA256=79cd209d157af98f86f89515eb30788f9844859e2e21063ab67cafd28d8425d4
+EXPECTED_IMAGE='ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-a8cb40f3-share-originfix@sha256:70b01bab43c1db1e8fbf6c8d09ded0e8bc44e9751b53a835826a5d6bea53849a'
+EXPECTED_HEAD_ID=52
+EXPECTED_HEAD_HASH=97f40d5934ac516a8031c40ad8450ed866a4e092ed2c55acd9209ee4edde48b8
+EXPECTED_MIGRATION_COUNT=52
+EXPECTED_REQUIRED_COLUMNS=23
+EXPECTED_REQUIRED_CONSTRAINTS=2
+
+fail() { printf '%s\n' "Kaneo migration verify BLOCKED: $*" >&2; exit 2; }
+[ "$#" -eq 0 ] || fail 'no arguments are accepted'
+[ "$(id -u)" -eq 0 ] || fail 'root execution required'
+[ -f "$COMPOSE_FILE" ] && [ ! -L "$COMPOSE_FILE" ] || fail 'candidate Compose missing or symlinked'
+[ "$(sha256sum "$COMPOSE_FILE" | awk '{print $1}')" = "$EXPECTED_COMPOSE_SHA256" ] || fail 'candidate Compose hash mismatch'
+[ "$(docker inspect --format '{{.Config.Image}}' kaneo 2>/dev/null || true)" = "$EXPECTED_IMAGE" ] || fail 'running Kaneo image is not the candidate'
+(cd "$PROJECT_DIR" && docker compose config --quiet)
+docker compose -f "$COMPOSE_FILE" ps --status running --services | grep -Fxq postgres || fail 'postgres is not running'
+
+run_sql() {
+    sql=$1
+    docker compose -f "$COMPOSE_FILE" exec -T postgres sh -c 'exec psql -X -v ON_ERROR_STOP=1 -qAt -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' sh "$sql"
+}
+
+head_row=$(run_sql "SELECT id::text || '|' || hash FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 1;") || fail 'could not read Drizzle migration head'
+IFS='|' read -r head_id head_hash <<EOF
+$head_row
+EOF
+[ "$head_id" = "$EXPECTED_HEAD_ID" ] || fail "unexpected migration head id: $head_id"
+[ "$head_hash" = "$EXPECTED_HEAD_HASH" ] || fail "unexpected migration head hash: $head_hash"
+migration_count=$(run_sql "SELECT count(*)::text FROM drizzle.__drizzle_migrations;") || fail 'could not count Drizzle migrations'
+[ "$migration_count" = "$EXPECTED_MIGRATION_COUNT" ] || fail "unexpected migration count: $migration_count"
+required_columns=$(run_sql "WITH expected(table_name, column_name) AS (VALUES ('mcp_oauth_state','id'),('mcp_oauth_state','kind'),('mcp_oauth_state','key'),('mcp_oauth_state','payload'),('mcp_oauth_state','expires_at'),('mcp_oauth_state','created_at'),('mcp_oauth_state','updated_at'),('apikey','reference_id'),('workspace_member','user_id'),('session','active_organization_id'),('invitation','created_at'),('execution_flag','name'),('execution_flag','enabled'),('execution_flag','updated_at'),('github_integration','id'),('github_integration','project_id'),('github_integration','repository_owner'),('github_integration','repository_name'),('github_integration','installation_id'),('github_integration','is_active'),('github_integration','created_at'),('github_integration','updated_at'),('task_run','last_progress_at')) SELECT count(*)::text FROM expected WHERE EXISTS (SELECT 1 FROM information_schema.columns c WHERE c.table_schema='public' AND c.table_name=expected.table_name AND c.column_name=expected.column_name);") || fail 'could not inspect required schema columns'
+[ "$required_columns" = "$EXPECTED_REQUIRED_COLUMNS" ] || fail "required schema columns present: $required_columns/$EXPECTED_REQUIRED_COLUMNS"
+required_constraints=$(run_sql "SELECT count(*)::text FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname='public' AND t.relname='github_integration' AND c.conname IN ('github_integration_project_id_unique','github_integration_project_id_project_id_fk');") || fail 'could not inspect GitHub compatibility constraints'
+[ "$required_constraints" = "$EXPECTED_REQUIRED_CONSTRAINTS" ] || fail "GitHub compatibility constraints present: $required_constraints/$EXPECTED_REQUIRED_CONSTRAINTS"
+backfill_gaps=$(run_sql "SELECT count(*)::text FROM integration i WHERE i.type='github' AND NULLIF(i.config::jsonb ->> 'repositoryOwner', '') IS NOT NULL AND NULLIF(i.config::jsonb ->> 'repositoryName', '') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM github_integration g WHERE g.project_id=i.project_id);") || fail 'could not verify GitHub compatibility backfill'
+[ "$backfill_gaps" = "0" ] || fail "GitHub compatibility backfill gaps: $backfill_gaps"
+printf '%s\n' "Kaneo migration/schema PASS: head=0049_wise_loners id=$head_id migrations=$migration_count hash=$head_hash required_columns=$required_columns/$EXPECTED_REQUIRED_COLUMNS github_constraints=$required_constraints/$EXPECTED_REQUIRED_CONSTRAINTS backfill_gaps=$backfill_gaps (read-only)"
