@@ -226,4 +226,89 @@ describe("API integration: agent session subtask update (UAT bug A)", () => {
     expect(badSingle.status).toBe(400);
     expect(badSingle.bodyText).toContain("dueDate");
   });
+
+  // SPEC-2026-11-18-kaneo-glanceable-progress: the bound agent sets native
+  // ⭕/✅ marker cues on subtasks so the board reads at a glance. The patch
+  // field mirrors the root work-markers route: normalized map + CAS revision.
+  it("persists workMarkerCounts and returns the fresh revision", async () => {
+    const { subtaskId, updateSubtask, initialRevision } =
+      await setupBoundSubtask();
+
+    const inProgress = await updateSubtask(
+      { workMarkerCounts: { redCircle: 3 } },
+      initialRevision,
+    );
+
+    expect(inProgress.status).toBe(200);
+    expect(inProgress.body).toMatchObject({
+      contentRevision: initialRevision + 1,
+    });
+
+    const [row] = await db
+      .select()
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, subtaskId))
+      .limit(1);
+    expect(row?.workMarkerCounts).toMatchObject({ redCircle: 3 });
+
+    const done = await updateSubtask(
+      { workMarkerCounts: { greenCheck: 3 } },
+      initialRevision + 1,
+    );
+    expect(done.status).toBe(200);
+    expect(done.body).toMatchObject({ contentRevision: initialRevision + 2 });
+
+    const [after] = await db
+      .select()
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, subtaskId))
+      .limit(1);
+    expect(after?.workMarkerCounts).toMatchObject({
+      greenCheck: 3,
+      redCircle: 0,
+    });
+  });
+
+  it("rejects a stale revision for a marker-only patch with 409", async () => {
+    const { updateSubtask, initialRevision } = await setupBoundSubtask();
+
+    const first = await updateSubtask(
+      { workMarkerCounts: { redCircle: 3 } },
+      initialRevision,
+    );
+    expect(first.status).toBe(200);
+
+    const stale = await updateSubtask(
+      { workMarkerCounts: { greenCheck: 3 } },
+      initialRevision,
+    );
+    expect(stale.status).toBe(409);
+  });
+
+  it("normalizes unknown marker keys instead of persisting them", async () => {
+    const { subtaskId, updateSubtask, initialRevision } =
+      await setupBoundSubtask();
+
+    const weird = await updateSubtask(
+      {
+        workMarkerCounts: {
+          redCircle: 2,
+          nonsense: 9,
+        },
+      },
+      initialRevision,
+    );
+
+    expect(weird.status).toBe(200);
+    const [row] = await db
+      .select()
+      .from(schema.taskTable)
+      .where(eq(schema.taskTable.id, subtaskId))
+      .limit(1);
+    const counts = row?.workMarkerCounts as Record<string, number>;
+    expect(counts.redCircle).toBe(2);
+    expect(Object.keys(counts).sort()).toEqual(
+      ["boxedRedCross", "greenCheck", "redCircle", "redCross"].sort(),
+    );
+  });
 });

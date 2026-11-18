@@ -576,6 +576,7 @@ app.post(
         priority: v.optional(v.string()),
         startDate: v.optional(v.nullable(v.string())),
         dueDate: v.optional(v.nullable(v.string())),
+        workMarkerCounts: v.optional(v.record(v.string(), v.number())),
       }),
       expectedContentRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
     }),

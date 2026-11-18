@@ -257,6 +257,7 @@ export async function bindingCardGet(ctx: BindingContext) {
       status: task.status,
       statusLabel: labelMap.get(task.status) ?? null,
       contentRevision: task.contentRevision,
+      workMarkerCounts: normalizeWorkMarkerCounts(task.workMarkerCounts),
     })),
     subtaskCount,
   };
@@ -531,6 +532,7 @@ export async function bindingCardUpdateSubtask(
       priority?: string;
       startDate?: string | null;
       dueDate?: string | null;
+      workMarkerCounts?: unknown;
     };
     expectedContentRevision: number;
   },
@@ -575,6 +577,13 @@ export async function bindingCardUpdateSubtask(
     updates.dueDate = body.patch.dueDate
       ? parseTaskDateInput("dueDate", body.patch.dueDate)
       : null;
+  }
+  if (body.patch.workMarkerCounts !== undefined) {
+    // Same normalized field-only map the root work-markers route accepts;
+    // CAS below still guards against stale overwrites.
+    updates.workMarkerCounts = normalizeWorkMarkerCounts(
+      body.patch.workMarkerCounts,
+    );
   }
   if (Object.keys(updates).length === 0) {
     throw new HTTPException(400, {
