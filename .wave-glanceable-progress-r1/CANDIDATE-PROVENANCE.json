@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "spec": "SPEC-2026-11-18-kaneo-glanceable-progress",
+  "wave": "glanceable-progress-r1",
+  "source_sha": "7a8dc20ed9e558bc23d0d9f4d02bbc868c4793c9",
+  "base_source_sha": "da107aa4b7dbfb526bdbde20bfde9522afdb870a",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-7a8dc20e-glanceable-progress@sha256:8818eb60d14fdd15dedf8af57622b58f3c96fd7584e11cf3e912ff0ae1356b61",
+  "candidate_manifest_digest": "sha256:8818eb60d14fdd15dedf8af57622b58f3c96fd7584e11cf3e912ff0ae1356b61",
+  "candidate_compose_sha256": "0835ee222befc5a5f1a30a4020096ca20dcf382dc93abb1d4dab09aeb1c4f99f",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "Built from committed source 7a8dc20e; .wave-* dirs excluded by Dockerfile explicit COPY rules.",
+  "verify": [
+    "API integration 8/8 (agent-session-subtask-update incl. marker persist/CAS/unknown-key normalize) on disposable kaneo-pg-test",
+    "API tsc --noEmit exit 0; extension focused 22/22 + suite 85/85 (Node22 execution-runtime excluded, pre-existing)",
+    "Gemini Flash pre-deploy review APPROVED (0 blocker/major; NIT test-rename fixed 0fae538c)"
+  ],
+  "migration_head_before": {
+    "id": 59,
+    "count": 59,
+    "tag": "0056_agent_session_delivery_generation",
+    "hash": "a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f"
+  },
+  "migration_head_after": {
+    "id": 59,
+    "count": 59,
+    "tag": "0056_agent_session_delivery_generation",
+    "hash": "a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f"
+  },
+  "deployment_lane": "R10 guarded runbook: repin backup wrapper -> pre-flip guard -> atomic compose flip -> kaneo-sync-recovery-metadata (new pins) -> pre-apply snapshot kaneo-20261118T135202Z -> pull/up/health/digest -> migration-verify (new pins) -> post guard -> post snapshot kaneo-20261118T135500Z. Deploy log: deploy-run.log.",
+  "rollback": "previous R10 image ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-da107aa4-card-agent-collab-r10@sha256:ab61b5e07d903ef88bea0b797a8cdc72e0915192bea7eae7d92dfae311eece8f; no migrations in this wave; restore only via verified fresh-target workflow."
+}

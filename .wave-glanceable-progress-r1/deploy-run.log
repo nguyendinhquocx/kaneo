@@ -1,0 +1,141 @@
+== 1/8 repin backup wrapper pairs (previous=r10, candidate=glanceable)
+== 2/8 pre-flip backup guard (current release pair)
+Kaneo backup plan PASS: compose=f24c4851381ab13900a38d31fa11afa5c11807050c54a4c376a2ecd59d8da536 image=ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-da107aa4-card-agent-collab-r10@sha256:ab61b5e07d903ef88bea0b797a8cdc72e0915192bea7eae7d92dfae311eece8f (no mutation; R2 mirror and restore remain gated).
+== 3/8 compose flip (atomic stage + validate + wrapper pair check)
+== 4/8 install + run reviewed metadata sync (compose now = candidate)
+Kaneo recovery metadata PASS: source_revision=7a8dc20ed9e558bc23d0d9f4d02bbc868c4793c9 snapshot_sha256=3e553181ab2ae4e5a9c8a42fb56a0b7b0a9d890a3b4caf9714298b530b0e23dd
+== 5/8 pre-apply encrypted snapshot (candidate pair now valid)
+56c37e787e93f44dc9455b466061e11c7b435a1d42ea07d37744e0469059fbdf  /srv/.home-server-recovery-kaneo-staging/kaneo-20261118T135202Z/kaneo-20261118T135202Z.age
+bb706d47c025176fcc47c3723b48f26c59301186a789e77269ea00c7605cc31b  /srv/.home-server-recovery-kaneo-staging/kaneo-20261118T135202Z/kaneo-20261118T135202Z.receipt.json
+Kaneo encrypted backup created: kaneo-20261118T135202Z (local outbox only; R2 mirror still requires separate gate).
+== 6/8 pull + rolling restart + health + digest check
+ Image ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-7a8dc20e-glanceable-progress@sha256:8818eb60d14fdd15dedf8af57622b58f3c96fd7584e11cf3e912ff0ae1356b61 Pulling 
+ 4f4fb700ef54 Pulling fs layer 0B
+ 544f7db3da50 Pulling fs layer 0B
+ 85dba9651164 Pulling fs layer 0B
+ f72e6b089afa Pulling fs layer 0B
+ 5d256c6d44c8 Pulling fs layer 0B
+ 0e91febc9604 Pulling fs layer 0B
+ 7659c9de2c7e Pulling fs layer 0B
+ ccf0ef3c0a59 Pulling fs layer 0B
+ 6c22a1b463f1 Pulling fs layer 0B
+ 2db7e833e52a Pulling fs layer 0B
+ 4f4fb700ef54 Already exists 0B
+ f72e6b089afa Downloading 1.049MB
+ 85dba9651164 Download complete 0B
+ 7659c9de2c7e Download complete 0B
+ 6c22a1b463f1 Download complete 0B
+ 2db7e833e52a Download complete 0B
+ 0e91febc9604 Download complete 0B
+ f72e6b089afa Downloading 3.146MB
+ 544f7db3da50 Downloading 2.097MB
+ ccf0ef3c0a59 Download complete 0B
+ f72e6b089afa Download complete 0B
+ f72e6b089afa Pull complete 0B
+ 5d256c6d44c8 Downloading 3.257MB
+ 544f7db3da50 Downloading 2.097MB
+ 4f4fb700ef54 Pull complete 0B
+ 544f7db3da50 Downloading 5.243MB
+ 5d256c6d44c8 Download complete 0B
+ 544f7db3da50 Downloading 5.243MB
+ 544f7db3da50 Downloading 5.243MB
+ 544f7db3da50 Downloading 7.34MB
+ 544f7db3da50 Downloading 8.389MB
+ 544f7db3da50 Downloading 9.437MB
+ 544f7db3da50 Downloading 10.49MB
+ 544f7db3da50 Downloading 10.49MB
+ 544f7db3da50 Downloading 10.49MB
+ 544f7db3da50 Downloading 13.63MB
+ 544f7db3da50 Downloading 13.63MB
+ 544f7db3da50 Downloading 14.68MB
+ 544f7db3da50 Downloading 16.78MB
+ 544f7db3da50 Downloading 16.78MB
+ 544f7db3da50 Downloading 19.92MB
+ 544f7db3da50 Downloading 19.92MB
+ 544f7db3da50 Downloading 20.97MB
+ 544f7db3da50 Downloading 20.97MB
+ 544f7db3da50 Downloading 20.97MB
+ 544f7db3da50 Downloading 20.97MB
+ 544f7db3da50 Downloading 22.02MB
+ 544f7db3da50 Downloading 23.07MB
+ 544f7db3da50 Downloading 25.17MB
+ 544f7db3da50 Downloading 26.21MB
+ 544f7db3da50 Downloading 27.26MB
+ 544f7db3da50 Downloading 29.36MB
+ 544f7db3da50 Downloading 30.61MB
+ 544f7db3da50 Downloading 30.61MB
+ 544f7db3da50 Download complete 0B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 1B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 2B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 3B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 544f7db3da50 Extracting 4B
+ 5d256c6d44c8 Extracting 1B
+ 544f7db3da50 Pull complete 0B
+ 85dba9651164 Pull complete 0B
+ 5d256c6d44c8 Extracting 1B
+ 7659c9de2c7e Pull complete 0B
+ 6c22a1b463f1 Pull complete 0B
+ 7659c9de2c7e Pull complete 0B
+ 6c22a1b463f1 Pull complete 0B
+ 2db7e833e52a Pull complete 0B
+ 0e91febc9604 Pull complete 0B
+ ccf0ef3c0a59 Pull complete 0B
+ 5d256c6d44c8 Pull complete 0B
+ Image ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-7a8dc20e-glanceable-progress@sha256:8818eb60d14fdd15dedf8af57622b58f3c96fd7584e11cf3e912ff0ae1356b61 Pulled 
+ Container kaneo-postgres Running 
+ Container kaneo Recreate 
+ Container kaneo Recreated 
+ Container kaneo-postgres Waiting 
+ Container kaneo-postgres Healthy 
+ Container kaneo Starting 
+ Container kaneo Started 
+Kaneo migration verify BLOCKED: candidate Compose hash mismatch
+== 9/8 install + run migration/schema verifier (glanceable pins)
+Kaneo migration/schema PASS: head=0056_agent_session_delivery_generation id=59 migrations=59 hash=a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f required_columns=62/62 named_constraints=7/7 agent_session_indexes=5/5 integration_fk=1 backfill_gaps=0 project_default_gaps=0 marker_counts_valid=0 (read-only)
+== 10/8 backup wrapper --plan (NEW release pair)
+Kaneo backup plan PASS: compose=0835ee222befc5a5f1a30a4020096ca20dcf382dc93abb1d4dab09aeb1c4f99f image=ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-7a8dc20e-glanceable-progress@sha256:8818eb60d14fdd15dedf8af57622b58f3c96fd7584e11cf3e912ff0ae1356b61 (no mutation; R2 mirror and restore remain gated).
+== 11/8 post-apply encrypted snapshot
+7923cf13c939def9a420561ac66a1f033058d94f56d6a30c2ab18bcc07c5b739  /srv/.home-server-recovery-kaneo-staging/kaneo-20261118T135500Z/kaneo-20261118T135500Z.age
+ce91972305896d7358d678fd09a632d56b36d9b9ff2c9747b36749d1194cb26f  /srv/.home-server-recovery-kaneo-staging/kaneo-20261118T135500Z/kaneo-20261118T135500Z.receipt.json
+Kaneo encrypted backup created: kaneo-20261118T135500Z (local outbox only; R2 mirror still requires separate gate).
+== 12/8 final state
+kaneo|ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-7a8dc20e-glanceable-progress|Up 2 minutes (healthy)
+25:    image: ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-7a8dc20e-glanceable-progress@sha256:8818eb60d14fdd15dedf8af57622b58f3c96fd7584e11cf3e912ff0ae1356b61
+KANEO DEPLOY COMPLETE
