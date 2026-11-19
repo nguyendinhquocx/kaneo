@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "spec": "bug-fix: subtask reorder contentRevision (conversation 2026-11-19)",
+  "wave": "subtask-order-r1",
+  "source_sha": "4a4996a3ed680480fedf3c4b17b7850112840d96",
+  "base_source_sha": "8e02f92be1849e06f016c8ecbd45565d61b318cc",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-4a4996a3-subtask-order-r1@sha256:fd6569575a92f76101c5838034a90ad0f9d70d5240575733501c7729837bc282",
+  "candidate_manifest_digest": "sha256:fd6569575a92f76101c5838034a90ad0f9d70d5240575733501c7729837bc282",
+  "candidate_compose_sha256": "85fe2ccc5f8a31d5a9c83b268ec22992987a4910663e819d95917da1d3e37ecf",
+  "source_archive_sha256": "ddae118265a09ffc9a80a5b9c1d973e85a4ce9e766b62539b0a74e7e71b7bffb",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "Built from git archive of committed source 4a4996a3 only; local unrelated/untracked files were excluded. Source archive was SHA-256 verified on ProDesk before extraction.",
+  "build": {
+    "builder": "ProDesk native Docker Buildx v0.35.0",
+    "command": "docker buildx build --platform linux/amd64 --no-cache --push --label org.opencontainers.image.revision=4a4996a3ed680480fedf3c4b17b7850112840d96 --label org.opencontainers.image.source=https://github.com/nguyendinhquocx/kaneo -f Dockerfile.kaneo -t ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-4a4996a3-subtask-order-r1 .",
+    "result": "PASS; GHCR tag digest verified with imagetools inspect and exact digest pulled on ProDesk; image revision label matches source commit.",
+    "github_actions": "Dispatch was blocked because Actions is disabled for the repository; no unchanged retry. Candidate was built on the native ProDesk builder instead.",
+    "docker_scout": "not run"
+  },
+  "verify": [
+    "Regression test for useReorderSubtasks: 1/1 PASS; pre-fix test reproduced React Query undefined-data error and expected revision 1.",
+    "Subtask UI/order tests: 12/12 PASS.",
+    "Web typecheck: tsc --noEmit PASS.",
+    "Biome on changed files: PASS.",
+    "Full Kaneo Turbo build: PASS.",
+    "No database schema/migration change; expected head remains 0056_agent_session_delivery_generation id=59/count=59/hash a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f."
+  ],
+  "deployment_lane": "R10 guarded apply: current image 8818eb60 -> candidate fd656957; pre/post encrypted local-outbox snapshots; R2 mirror remains a separate owner gate.",
+  "rollback": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-7a8dc20e-glanceable-progress@sha256:8818eb60d14fdd15dedf8af57622b58f3c96fd7584e11cf3e912ff0ae1356b61; no migration introduced.",
+  "deployment_status": "prepared; production apply pending"
+}
