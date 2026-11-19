@@ -7,10 +7,10 @@ import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gt, inArray, lte } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
+import { resolveTaskSubtreeScope } from "../share/task-share-access";
 import { extractAssetIds } from "../storage/cleanup-assets";
 import { assertUserWorkspacePermission } from "../utils/require-workspace-permission";
 import { getOwnedAgentPrincipal } from "./binding-service";
-import { resolveTaskSubtreeScope } from "../share/task-share-access";
 
 const staleBinding = () =>
   new HTTPException(409, { message: "stale_binding" });
@@ -25,6 +25,7 @@ const POLL_INTERVAL_MS = 500;
 
 type Delivery = typeof schema.agentSessionDeliveryTable.$inferSelect;
 type DeliveryTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type DeliveryScope = Awaited<ReturnType<typeof resolveTaskSubtreeScope>>;
 
 type ScopedInput = {
   userId: string;
@@ -69,7 +70,7 @@ async function lockCurrentBinding(tx: DeliveryTransaction, input: ScopedInput) {
     .limit(1);
   if (!task || task.projectId !== candidate.projectId) throw staleBinding();
 
-  let scope;
+  let scope: DeliveryScope;
   try {
     scope = await resolveTaskSubtreeScope(candidate.taskId, candidate.projectId, tx);
     const lockedTaskIds = new Set<string>();
@@ -183,6 +184,7 @@ async function markQueuedCommentStale(
   tx: DeliveryTransaction,
   delivery: Delivery,
   now: Date,
+  scope: DeliveryScope | null,
 ) {
   if (!delivery.commentId) {
     const [row] = await tx
@@ -212,8 +214,12 @@ async function markQueuedCommentStale(
     .for("update")
     .limit(1);
   const content = comment?.content ?? "";
+  const taskStillInScope = Boolean(
+    scope?.tasks.some((task) => task.id === delivery.taskId),
+  );
   const unchanged = Boolean(
-    comment &&
+    taskStillInScope &&
+      comment &&
       comment.type === "comment" &&
       comment.taskId === delivery.taskId &&
       comment.externalSource !== "share-link" &&
@@ -267,7 +273,7 @@ export async function queueCommentDelivery(input: ScopedInput & {
       }
       const current =
         existing.state === "queued"
-          ? await markQueuedCommentStale(tx, existing, now)
+          ? await markQueuedCommentStale(tx, existing, now, scope)
           : existing;
       return { duplicate: true, receipt: receipt(current) };
     }
@@ -357,7 +363,7 @@ async function claimOneDelivery(input: ScopedInput) {
       .limit(1);
     if (!delivery) return { kind: "empty" as const };
 
-    const current = await markQueuedCommentStale(tx, delivery, now);
+    const current = await markQueuedCommentStale(tx, delivery, now, scope);
     if (current.state !== "queued") return { kind: "stale" as const };
     const [comment] = await tx
       .select({ content: schema.activityTable.content })
@@ -366,6 +372,9 @@ async function claimOneDelivery(input: ScopedInput) {
       .limit(1);
     if (!comment) return { kind: "stale" as const };
     const content = comment.content ?? "";
+    const parentTask = scope.tasks.find((task) => task.id === binding.taskId);
+    const commentTask = scope.tasks.find((task) => task.id === delivery.taskId);
+    if (!parentTask || !commentTask) return { kind: "stale" as const };
     const mentionedIds = [...extractAssetIds(content)];
     const attachments = mentionedIds.length
       ? await tx
@@ -406,6 +415,8 @@ async function claimOneDelivery(input: ScopedInput) {
         sessionId: binding.sessionId,
         hostId: binding.hostId,
         commentId: comment ? delivery.commentId : null,
+        parentTask: { id: parentTask.id, title: parentTask.title },
+        commentTask: { id: commentTask.id, title: commentTask.title },
         content,
         attachmentAssetIds: attachments.map((asset) => asset.id),
         claimedLeaseExpiresAt: claimed.claimedLeaseExpiresAt,
@@ -523,7 +534,33 @@ async function refreshDelivery(delivery: Delivery) {
       return updated ?? { ...current, state: "unknown" };
     }
     if (current.state === "queued") {
-      const refreshed = await markQueuedCommentStale(tx, current, now);
+      const [binding] = await tx
+        .select({
+          taskId: schema.agentSessionBindingTable.taskId,
+          projectId: schema.agentSessionBindingTable.projectId,
+          status: schema.agentSessionBindingTable.status,
+        })
+        .from(schema.agentSessionBindingTable)
+        .where(eq(schema.agentSessionBindingTable.id, current.bindingId))
+        .limit(1);
+      let scope: DeliveryScope | null = null;
+      if (binding?.status === "active") {
+        try {
+          scope = await resolveTaskSubtreeScope(
+            binding.taskId,
+            binding.projectId,
+            tx,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof HTTPException) ||
+            ![403, 404, 409].includes(error.status)
+          ) {
+            throw error;
+          }
+        }
+      }
+      const refreshed = await markQueuedCommentStale(tx, current, now, scope);
       return refreshed;
     }
     return current;

@@ -3,17 +3,19 @@
 // from the caller's local config (extension env), never from model args,
 // and the server re-proves ownership against the principal row.
 import { and, desc, eq } from "drizzle-orm";
-import { Hono } from "hono";
 import type { Context, Next } from "hono";
+import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { describeRoute, validator } from "hono-openapi";
 import * as v from "valibot";
 import db, { schema } from "../database";
-import { authenticateApiRequest } from "../utils/authenticate-api-request";
 import { requestActorIsAgent } from "../execution/phase-progress";
+import { isTaskAgentControlled } from "../share/full-access";
+import { buildAssetResponse } from "../storage/asset-response";
+import { getPrivateObject } from "../storage/s3";
+import { authenticateApiRequest } from "../utils/authenticate-api-request";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
-import { isTaskAgentControlled } from "../share/full-access";
 import {
   bindAgentSession,
   bindingTaskScope,
@@ -26,11 +28,14 @@ import {
 import {
   bindingCardCreateComment,
   bindingCardCreateSubtask,
+  bindingCardCreateSubtaskComment,
   bindingCardCreateUploadTicket,
   bindingCardDeleteSubtask,
   bindingCardFinalizeUpload,
   bindingCardGet,
+  bindingCardGetSubtask,
   bindingCardListComments,
+  bindingCardListSubtaskComments,
   bindingCardUpdate,
   bindingCardUpdateSubtask,
   bindingCardUpdateWorkMarkers,
@@ -40,11 +45,9 @@ import {
   acknowledgeCommentDelivery,
   claimNextCommentDelivery,
   getCommentDeliveryStatus,
-  queueCommentDelivery,
   getLatestDeliveryForComment,
+  queueCommentDelivery,
 } from "./delivery-service";
-import { getPrivateObject } from "../storage/s3";
-import { buildAssetResponse } from "../storage/asset-response";
 
 const app = new Hono();
 
@@ -555,6 +558,88 @@ app.post(
       priority: body.priority,
       expectedParentContentRevision: body.expectedParentContentRevision,
     });
+    return c.json(result);
+  },
+);
+
+app.post(
+  "/card/subtasks/:subtaskId/get",
+  describeRoute({
+    operationId: "kaneoCardGetSubtask",
+    tags: ["Agent Card"],
+  }),
+  validator("json", v.object({ ...bindingCtxEntries })),
+  async (c) => {
+    const body = c.req.valid("json");
+    const ctx = {
+      userId: getUserId(c),
+      bindingId: body.bindingId,
+      sessionId: body.sessionId,
+      generation: body.generation,
+    };
+    const result = await bindingCardGetSubtask(ctx, c.req.param("subtaskId"));
+    return c.json(result);
+  },
+);
+
+app.post(
+  "/card/subtasks/:subtaskId/comments",
+  describeRoute({
+    operationId: "kaneoCardListSubtaskComments",
+    tags: ["Agent Card"],
+  }),
+  validator(
+    "json",
+    v.object({
+      ...bindingCtxEntries,
+      limit: v.optional(v.pipe(v.number(), v.integer())),
+      cursor: v.optional(v.string()),
+    }),
+  ),
+  async (c) => {
+    const body = c.req.valid("json");
+    const ctx = {
+      userId: getUserId(c),
+      bindingId: body.bindingId,
+      sessionId: body.sessionId,
+      generation: body.generation,
+    };
+    const result = await bindingCardListSubtaskComments(
+      ctx,
+      c.req.param("subtaskId"),
+      body.limit,
+      body.cursor,
+    );
+    return c.json(result);
+  },
+);
+
+app.post(
+  "/card/subtasks/:subtaskId/comments/create",
+  describeRoute({
+    operationId: "kaneoCardCreateSubtaskComment",
+    tags: ["Agent Card"],
+  }),
+  validator(
+    "json",
+    v.object({
+      ...bindingCtxEntries,
+      content: v.pipe(v.string(), v.minLength(1)),
+    }),
+  ),
+  async (c) => {
+    const body = c.req.valid("json");
+    const ctx = {
+      userId: getUserId(c),
+      bindingId: body.bindingId,
+      sessionId: body.sessionId,
+      generation: body.generation,
+    };
+    const result = await bindingCardCreateSubtaskComment(
+      ctx,
+      c.req.param("subtaskId"),
+      body.content,
+    );
     return c.json(result);
   },
 );

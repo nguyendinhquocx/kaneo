@@ -1,5 +1,5 @@
 // SPEC-2026-11-10-kaneo-card-agent-collaboration T4: card-focused wrappers
-// behind the bound session. Exactly the ten tools the spec allows; root
+// behind the bound session. Only explicit scoped endpoints are exposed; root
 // actions accept no target id, child/asset/comment ids only flow through
 // their named helper, and the API rechecks subtree membership per call.
 // Every write CASes on contentRevision and returns the fresh revision.
@@ -15,6 +15,7 @@ import {
   lt,
   lte,
   or,
+  sql,
 } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
@@ -85,6 +86,16 @@ type ShareTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 function assertInScope(scope: BindingScope, taskId: string) {
   const task = scope.tasks.find((candidate) => candidate.id === taskId);
   if (!task) throw notFound();
+  return task;
+}
+
+function assertSubtaskInScope(scope: BindingScope, taskId: string) {
+  const task = assertInScope(scope, taskId);
+  if (task.id === scope.rootTaskId) {
+    throw new HTTPException(400, {
+      message: "use the root card tools for the bound card itself",
+    });
+  }
   return task;
 }
 
@@ -263,8 +274,62 @@ export async function bindingCardGet(ctx: BindingContext) {
   };
 }
 
-async function loadColumns(projectId: string) {
-  return db
+export async function bindingCardGetSubtask(
+  ctx: BindingContext,
+  subtaskId: string,
+) {
+  const { binding, scope } = await loadScopedBinding(ctx);
+  const task = assertSubtaskInScope(scope, subtaskId);
+  return db.transaction(async (tx) => {
+    const freshScope = await lockBindingScope(tx, ctx, binding, task.id);
+    const freshTask = assertSubtaskInScope(freshScope, task.id);
+    const columns = await loadColumns(freshScope.projectId, tx);
+    const labelMap = new Map(columns.map((column) => [column.slug, column.name]));
+    const directEdges = await tx
+      .select({ targetTaskId: schema.taskRelationTable.targetTaskId })
+      .from(schema.taskRelationTable)
+      .where(
+        and(
+          eq(schema.taskRelationTable.sourceTaskId, freshTask.id),
+          eq(schema.taskRelationTable.relationType, "subtask"),
+        ),
+      )
+      .orderBy(asc(schema.taskRelationTable.position));
+    const directSubtasks = directEdges
+      .map((edge) => freshScope.tasks.find((candidate) => candidate.id === edge.targetTaskId))
+      .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
+
+    return {
+      subtask: {
+        id: freshTask.id,
+        title: freshTask.title,
+        description: freshTask.description,
+        status: freshTask.status,
+        statusLabel: labelMap.get(freshTask.status) ?? null,
+        priority: freshTask.priority,
+        startDate: freshTask.startDate,
+        dueDate: freshTask.dueDate,
+        contentRevision: freshTask.contentRevision,
+        workMarkerCounts: normalizeWorkMarkerCounts(freshTask.workMarkerCounts),
+      },
+      subtasks: directSubtasks.map((child) => ({
+        id: child.id,
+        title: child.title,
+        status: child.status,
+        statusLabel: labelMap.get(child.status) ?? null,
+        contentRevision: child.contentRevision,
+        workMarkerCounts: normalizeWorkMarkerCounts(child.workMarkerCounts),
+      })),
+      subtaskCount: directSubtasks.length,
+    };
+  });
+}
+
+async function loadColumns(
+  projectId: string,
+  executor: ShareTransaction | typeof db = db,
+) {
+  return executor
     .select({
       slug: schema.columnTable.slug,
       name: schema.columnTable.name,
@@ -760,47 +825,66 @@ export async function bindingCardDeleteSubtask(
 
 const COMMENTS_DEFAULT_LIMIT = 10;
 const COMMENTS_MAX_LIMIT = 50;
+const MIN_PG_BIGINT = -(1n << 63n);
+const MAX_PG_BIGINT = (1n << 63n) - 1n;
 
-export async function bindingCardListComments(
-  ctx: BindingContext,
+function parseCommentCursor(cursor?: string) {
+  if (!cursor || cursor.length > 256) return null;
+  const separator = cursor.indexOf("|");
+  const rawTimestamp = separator >= 0 ? cursor.slice(0, separator) : cursor;
+  const id = separator >= 0 ? cursor.slice(separator + 1) : "";
+  if (/^-?\d{1,20}$/.test(rawTimestamp)) {
+    const timestampMicros = BigInt(rawTimestamp);
+    if (
+      timestampMicros < MIN_PG_BIGINT ||
+      timestampMicros > MAX_PG_BIGINT
+    ) {
+      return null;
+    }
+    return { timestampMicros: timestampMicros.toString(), id };
+  }
+
+  // Accept the previous ISO-millisecond cursor format during rolling upgrades.
+  const timestampMs = Date.parse(rawTimestamp);
+  if (Number.isNaN(timestampMs)) return null;
+  return { timestampMicros: (BigInt(timestampMs) * 1000n).toString(), id };
+}
+
+async function listCommentsForTask(
+  taskId: string,
   rawLimit?: number,
   cursor?: string,
+  executor: ShareTransaction | typeof db = db,
 ) {
-  const { scope } = await loadScopedBinding(ctx);
-  assertInScope(scope, scope.rootTaskId);
   const limit = Math.min(
     Math.max(Math.floor(rawLimit ?? COMMENTS_DEFAULT_LIMIT), 1),
     COMMENTS_MAX_LIMIT,
   );
   const conditions = [
-    eq(schema.activityTable.taskId, scope.rootTaskId),
+    eq(schema.activityTable.taskId, taskId),
     eq(schema.activityTable.type, "comment"),
   ];
-  if (cursor) {
-    const separator = cursor.indexOf("|");
-    const cursorDate = new Date(
-      separator >= 0 ? cursor.slice(0, separator) : cursor,
-    );
-    const cursorId = separator >= 0 ? cursor.slice(separator + 1) : "";
-    if (!Number.isNaN(cursorDate.getTime())) {
-      conditions.push(
-        cursorId
-          ? or(
-              lt(schema.activityTable.createdAt, cursorDate),
-              and(
-                eq(schema.activityTable.createdAt, cursorDate),
-                lt(schema.activityTable.id, cursorId),
-              ),
-            )!
-          : lt(schema.activityTable.createdAt, cursorDate),
-      );
-    }
+  const parsedCursor = parseCommentCursor(cursor);
+  if (parsedCursor) {
+    const createdAtMicros = sql`floor(extract(epoch from ${schema.activityTable.createdAt}) * 1000000)::bigint`;
+    const cursorMicros = sql`${parsedCursor.timestampMicros}::bigint`;
+    const cursorCondition = parsedCursor.id
+      ? or(
+          lt(createdAtMicros, cursorMicros),
+          and(
+            eq(createdAtMicros, cursorMicros),
+            lt(schema.activityTable.id, parsedCursor.id),
+          ),
+        )
+      : lt(createdAtMicros, cursorMicros);
+    if (cursorCondition) conditions.push(cursorCondition);
   }
-  const rows = await db
+  const rows = await executor
     .select({
       id: schema.activityTable.id,
       content: schema.activityTable.content,
       createdAt: schema.activityTable.createdAt,
+      cursorCreatedAtMicros: sql<string>`floor(extract(epoch from ${schema.activityTable.createdAt}) * 1000000)::bigint`,
       authorName: schema.userTable.name,
       externalUserName: schema.activityTable.externalUserName,
     })
@@ -826,8 +910,74 @@ export async function bindingCardListComments(
       authorName: row.authorName ?? row.externalUserName ?? "Unknown",
     })),
     nextCursor:
-      hasMore && last ? `${last.createdAt.toISOString()}|${last.id}` : null,
+      hasMore && last
+        ? `${last.cursorCreatedAtMicros}|${last.id}`
+        : null,
   };
+}
+
+export async function bindingCardListComments(
+  ctx: BindingContext,
+  rawLimit?: number,
+  cursor?: string,
+) {
+  const { scope } = await loadScopedBinding(ctx);
+  assertInScope(scope, scope.rootTaskId);
+  return listCommentsForTask(scope.rootTaskId, rawLimit, cursor);
+}
+
+export async function bindingCardListSubtaskComments(
+  ctx: BindingContext,
+  subtaskId: string,
+  rawLimit?: number,
+  cursor?: string,
+) {
+  const { binding, scope } = await loadScopedBinding(ctx);
+  const task = assertSubtaskInScope(scope, subtaskId);
+  return db.transaction(async (tx) => {
+    const freshScope = await lockBindingScope(tx, ctx, binding, task.id);
+    const freshTask = assertSubtaskInScope(freshScope, task.id);
+    return listCommentsForTask(freshTask.id, rawLimit, cursor, tx);
+  });
+}
+
+export async function bindingCardCreateSubtaskComment(
+  ctx: BindingContext,
+  subtaskId: string,
+  content: string,
+) {
+  const { binding, scope } = await loadScopedBinding(ctx);
+  const task = assertSubtaskInScope(scope, subtaskId);
+  const comment = await db.transaction(async (tx) => {
+    const freshScope = await lockBindingScope(tx, ctx, binding, task.id);
+    const scopedTask = assertSubtaskInScope(freshScope, task.id);
+    const [row] = await tx
+      .insert(schema.activityTable)
+      .values({
+        taskId: scopedTask.id,
+        type: "comment",
+        userId: null,
+        content,
+        externalUserName: `Bound session ${binding.sessionId.slice(0, 8)}`,
+        externalSource: "agent-binding",
+      })
+      .returning();
+    if (!row) {
+      throw new HTTPException(500, { message: "Failed to create comment" });
+    }
+    return {
+      id: row.id,
+      content: row.content ?? "",
+      createdAt: row.createdAt,
+    };
+  });
+  await publishEvent("comment.created", {
+    taskId: task.id,
+    projectId: scope.projectId,
+    userId: ctx.userId,
+    id: comment.id,
+  });
+  return comment;
 }
 
 export async function bindingCardCreateComment(
