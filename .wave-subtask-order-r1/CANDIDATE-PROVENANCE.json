@@ -26,9 +26,9 @@
     "Full Kaneo Turbo build: PASS.",
     "No database schema/migration change; expected head remains 0056_agent_session_delivery_generation id=59/count=59/hash a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f."
   ],
-  "deployment_lane": "R10 guarded apply PASS 2026-11-19: H7 ready; Compose 0835ee22 -> 85fe2ccc; image fd656957 healthy; DB head unchanged; HTTPS /api/health returned status ok. Pre/post snapshots kaneo-20261119T100216Z and kaneo-20261119T100244Z passed low-level verifier + identity/freshness checks. R2 mirror was not run (separate owner gate). Live drag UAT is pending owner because moving the real task changes its order.",
+  "deployment_lane": "R10 guarded apply PASS 2026-11-19: H7 ready; Compose 0835ee22 -> 85fe2ccc; image fd656957 healthy; DB head unchanged; HTTPS /api/health returned status ok. Pre/post snapshots kaneo-20261119T100216Z and kaneo-20261119T100244Z passed low-level verifier + identity/freshness checks. R2 mirror was not run (separate owner gate). Live drag UAT PASS same day on a throwaway card in project maiii (keyboard dnd-kit drag, order persisted server-side, parent revision bumped without any 409, 0 failed network entries); real card #217 untouched; all UAT tasks deleted after verify.",
   "rollback": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-7a8dc20e-glanceable-progress@sha256:8818eb60d14fdd15dedf8af57622b58f3c96fd7584e11cf3e912ff0ae1356b61; no migration introduced.",
   "pre_snapshot": {"id":"kaneo-20261119T100216Z","ciphertext_sha256":"112b1aef8756818a93e10c6c766260367e3dbc7d1d923f6e6264a016ba7cf255","receipt_sha256":"67913b41ebfcc5f3297d92078db500cf9e6e36299be34982fca7b2f1f975256b"},
   "post_snapshot": {"id":"kaneo-20261119T100244Z","ciphertext_sha256":"4ee9073bc6beb2bcae7ad7890782f9d2c7498b5f8b4707cb6d3b909854c2fa6a","receipt_sha256":"0ccfc0af33b46f0ffa10854bb7e5247c99bf5685755fb6552453fb4b5deac2e7"},
-  "deployment_status": "APPLIED; terminal runner returned exit=2 after the script logged PASS, but independent live Compose/image/health readback confirmed the apply; no retry was run. Owner drag UAT pending."
+  "deployment_status": "APPLIED + live drag UAT PASS; container healthy; no open verification debt for this wave (R2 mirror stays a separate owner gate)."
 }
