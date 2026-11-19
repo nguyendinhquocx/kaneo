@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { reorderSubtasks } from "@/fetchers/task-relation/reorder-subtasks";
-import { reorderShareFullSubtasks } from "@/fetchers/share/share-full-api";
 import { getShareCapability } from "@/components/share/share-capability";
+import { reorderShareFullSubtasks } from "@/fetchers/share/share-full-api";
+import getTask from "@/fetchers/task/get-task";
+import { reorderSubtasks } from "@/fetchers/task-relation/reorder-subtasks";
 import {
   type ProjectTasksCache,
   reorderSubtaskRelations,
@@ -39,17 +40,17 @@ export function useReorderSubtasks() {
         ) as unknown as ReturnType<typeof reorderSubtasks>;
       }
       // SPEC-2026-11-10 T3: subtask reorder is CAS-guarded on the parent.
-      const cachedParent = await queryClient
+      const parentTask = await queryClient
         .fetchQuery({
           queryKey: ["task", taskId],
-          queryFn: () => Promise.resolve(undefined),
+          queryFn: () => getTask(taskId),
           staleTime: 0,
         })
         .catch(() => undefined);
       return reorderSubtasks({
         taskId,
         orderedTargetTaskIds,
-        expectedParentContentRevision: getExpectedContentRevision(cachedParent),
+        expectedParentContentRevision: getExpectedContentRevision(parentTask),
       });
     },
     onMutate: async ({ taskId, projectId, orderedTargetTaskIds }) => {
