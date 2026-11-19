@@ -50,6 +50,18 @@ export default function SendCommentToPiAction({
   const sessionId = bindingData?.sessionId;
   const bindingGeneration = bindingData?.bindingGeneration;
   const hostId = bindingData?.hostId ?? "";
+  const targetLabel =
+    bindingData?.bound === true && sessionId && hostId
+      ? t("activity:comment.sendToPiTarget", { sessionId, host: hostId })
+      : undefined;
+  const activeBinding =
+    bindingData?.bound === true &&
+    bindingData.online === true &&
+    bindingId &&
+    sessionId &&
+    bindingGeneration !== undefined
+      ? { bindingId, sessionId, generation: bindingGeneration }
+      : null;
   const isActive = state === "queued" || state === "claimed";
   const isUnknown = state === "unknown";
   const isPending = send.isPending || isActive;
@@ -76,20 +88,34 @@ export default function SendCommentToPiAction({
     }, 3_000);
   };
 
-  // R1-T4: the affordance must stay visible even without a live binding —
-  // a hidden button reads as "the feature does not exist" during UAT.
-  // Disabled with a direct hint instead of vanishing.
-  if (
-    !bindingData?.bound ||
-    !bindingData.online ||
+  // Keep the existing affordance visible, but never turn a query failure into
+  // a false "unbound" claim. If the target is known, include it in the name.
+  let disabledHint: string | undefined;
+  if (binding.isError) {
+    disabledHint = t("activity:comment.sendToPiStatusUnavailable");
+  } else if (!bindingData && binding.isLoading) {
+    disabledHint = t("activity:comment.sendToPiCheckingBinding");
+  } else if (!bindingData) {
+    disabledHint = t("activity:comment.sendToPiStatusUnavailable");
+  } else if (bindingData.bound === false) {
+    disabledHint = t("activity:comment.sendToPiUnbound");
+  } else if (bindingData.bound === true && bindingData.online === false) {
+    disabledHint = t("activity:comment.sendToPiOffline");
+  } else if (
+    bindingData.bound !== true ||
+    bindingData.online !== true ||
     !bindingId ||
     !sessionId ||
     bindingGeneration === undefined
   ) {
-    const hintKey = bindingData?.bound
-      ? "activity:comment.sendToPiOffline"
-      : "activity:comment.sendToPiUnbound";
-    const hint = t(hintKey);
+    disabledHint = t("activity:comment.sendToPiStatusUnavailable");
+  }
+  if (disabledHint || !activeBinding) {
+    const hint =
+      disabledHint ?? t("activity:comment.sendToPiStatusUnavailable");
+    const accessibleName = [t("activity:comment.sendToPi"), targetLabel, hint]
+      .filter(Boolean)
+      .join(" — ");
     return (
       <span className="inline-flex flex-col items-end gap-1">
         <Tooltip>
@@ -99,9 +125,10 @@ export default function SendCommentToPiAction({
               variant="ghost"
               size="icon-xs"
               className="size-11 p-0 opacity-40 sm:size-8"
-              aria-label={hint}
-              title={hint}
+              aria-label={accessibleName}
+              title={accessibleName}
               aria-disabled="true"
+              aria-busy={!bindingData && binding.isLoading}
               disabled
             >
               <Send className="size-3.5" />
@@ -109,17 +136,16 @@ export default function SendCommentToPiAction({
           </TooltipTrigger>
           <TooltipContent>
             <span className="block max-w-64 text-[10px] text-muted-foreground">
-              {hint}
+              {accessibleName}
             </span>
           </TooltipContent>
         </Tooltip>
+        <span className="sr-only" role="status" aria-live="polite">
+          {hint}
+        </span>
       </span>
     );
   }
-  const targetLabel = t("activity:comment.sendToPiTarget", {
-    sessionId,
-    host: hostId,
-  });
 
   const handleSend = async () => {
     if (isUnknown && !showUnknownWarning) {
@@ -134,9 +160,9 @@ export default function SendCommentToPiAction({
     setError(null);
     try {
       const result = await send.mutateAsync({
-        bindingId,
-        sessionId,
-        generation: bindingGeneration,
+        bindingId: activeBinding.bindingId,
+        sessionId: activeBinding.sessionId,
+        generation: activeBinding.generation,
         commentId,
         clientActionKey: key,
       });

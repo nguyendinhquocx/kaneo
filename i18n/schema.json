@@ -6378,6 +6378,12 @@
 						"sendToPiFailed": {
 							"type": "string"
 						},
+						"sendToPiCheckingBinding": {
+							"type": "string"
+						},
+						"sendToPiStatusUnavailable": {
+							"type": "string"
+						},
 						"unknownResendWarning": {
 							"type": "string"
 						},
@@ -6416,6 +6422,12 @@
 								"failed_before_send",
 								"unknown"
 							]
+						},
+						"sendToPiUnbound": {
+							"type": "string"
+						},
+						"sendToPiOffline": {
+							"type": "string"
 						}
 					},
 					"required": [
@@ -6440,8 +6452,12 @@
 						"sendToPiTarget",
 						"sendingToPi",
 						"sendToPiFailed",
+						"sendToPiCheckingBinding",
+						"sendToPiStatusUnavailable",
 						"unknownResendWarning",
-						"delivery"
+						"delivery",
+						"sendToPiUnbound",
+						"sendToPiOffline"
 					]
 				}
 			},

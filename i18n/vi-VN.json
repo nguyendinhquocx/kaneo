@@ -1564,6 +1564,8 @@
       "sendToPiTarget": "Gửi tới phiên {{sessionId}} trên {{host}}",
       "sendingToPi": "Đang gửi cho Pi…",
       "sendToPiFailed": "Không thể xếp bình luận vào hàng gửi cho Pi.",
+      "sendToPiCheckingBinding": "Đang kiểm tra binding của agent…",
+      "sendToPiStatusUnavailable": "Chưa kiểm tra được trạng thái agent. Đợi kết nối rồi thử lại.",
       "unknownResendWarning": "Lần gửi trước có thể đã tới Pi. Gửi lại có thể tạo bản trùng.",
       "delivery": {
         "queued": "Đã xếp hàng chờ Pi.",

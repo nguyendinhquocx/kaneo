@@ -127,7 +127,9 @@ vi.mock("@/components/ui/tooltip", async () => {
   };
 });
 
-function renderCommentCard(options: Partial<typeof uiState> = {}) {
+function renderCommentCard(
+  options: Partial<typeof uiState> & { externalSource?: string | null } = {},
+) {
   uiState.canShare = options.canShare ?? false;
   uiState.canUpdate = options.canUpdate ?? false;
   uiState.capability = options.capability ?? null;
@@ -147,6 +149,7 @@ function renderCommentCard(options: Partial<typeof uiState> = {}) {
         taskId="task-1"
         content="Test comment"
         createdAt="2026-04-05T09:38:50.000Z"
+        externalSource={options.externalSource}
         user={{
           id: "user-1",
           name: "Tin",
@@ -182,7 +185,24 @@ describe("CommentCard", () => {
     ).toBeVisible();
   });
 
-  it("hides Send to Pi on a share-capability surface and when no binding is live", () => {
+  it("hides Send to Pi on agent-authored comments that the server cannot send again", () => {
+    renderCommentCard({
+      currentUser: { id: "user-1" },
+      canUpdate: true,
+      externalSource: "agent-binding",
+      binding: {
+        bound: true,
+        online: true,
+        bindingId: "binding-1",
+        bindingGeneration: 2,
+        sessionId: "pi-session-exact",
+        hostId: "pi-prodesk",
+      },
+    });
+    expect(screen.queryByRole("button", { name: /Send to Pi/ })).toBeNull();
+  });
+
+  it("hides Send to Pi on share-capability surfaces and keeps a disabled offline action", () => {
     const { rerender } = renderCommentCard({
       currentUser: { id: "user-1" },
       canUpdate: true,
@@ -217,7 +237,10 @@ describe("CommentCard", () => {
         />
       </QueryClientProvider>,
     );
-    expect(screen.queryByRole("button", { name: /Send to Pi/ })).toBeNull();
+    const offlineAction = screen.getByRole("button", {
+      name: /Send to Pi.*offline/i,
+    });
+    expect(offlineAction).toBeDisabled();
   });
 
   it("shows full date+short time in tooltip on hover/focus", async () => {

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import CommentEditor from "@/components/activity/comment-editor";
 import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
 import { CopyShareLinkButton } from "@/components/share/copy-share-link-button";
+import { getShareCapability } from "@/components/share/share-capability";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,11 +22,10 @@ import {
 import useDeleteComment from "@/hooks/mutations/comment/use-delete-comment";
 import useUpdateComment from "@/hooks/mutations/comment/use-update-comment";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
-import { getShareCapability } from "@/components/share/share-capability";
-import SendCommentToPiAction from "./send-comment-to-pi-action";
 import { formatDateTime, formatRelativeTime } from "@/lib/format";
 import { getInitials } from "@/lib/get-initials";
 import { toast } from "@/lib/toast";
+import SendCommentToPiAction from "./send-comment-to-pi-action";
 
 type CommentCardProps = {
   commentId: string;
@@ -57,7 +57,11 @@ export default function CommentCard({
   const shareCapability = getShareCapability();
   const [isEditing, setIsEditing] = useState(false);
   const canSendToPi = Boolean(
-    currentUser?.id && !shareCapability && canManageTasks() && !isEditing,
+    currentUser?.id &&
+      !shareCapability &&
+      canManageTasks() &&
+      !isEditing &&
+      externalSource !== "agent-binding",
   );
   const [editedContent, setEditedContent] = useState(content);
   const { mutateAsync: updateComment, isPending } = useUpdateComment();

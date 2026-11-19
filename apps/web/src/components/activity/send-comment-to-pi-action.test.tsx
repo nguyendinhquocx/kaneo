@@ -11,6 +11,8 @@ import SendCommentToPiAction from "./send-comment-to-pi-action";
 
 const state = vi.hoisted(() => ({
   binding: null as unknown,
+  bindingIsLoading: false,
+  bindingIsError: false,
   delivery: null as unknown,
   restoredDelivery: null as unknown,
   isPending: false,
@@ -18,7 +20,11 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/queries/agent-session/use-get-task-binding-status", () => ({
-  useGetTaskBindingStatus: () => ({ data: state.binding }),
+  useGetTaskBindingStatus: () => ({
+    data: state.binding,
+    isLoading: state.bindingIsLoading,
+    isError: state.bindingIsError,
+  }),
 }));
 vi.mock(
   "@/hooks/queries/agent-session/use-get-comment-delivery-status",
@@ -46,6 +52,9 @@ vi.mock("react-i18next", () => ({
         "activity:comment.resendToPi": "Send again",
         "activity:comment.sendingToPi": "Sending to Pi",
         "activity:comment.sendToPiFailed": "Could not queue",
+        "activity:comment.sendToPiCheckingBinding": "Checking binding",
+        "activity:comment.sendToPiStatusUnavailable":
+          "Agent status unavailable",
         "activity:comment.sendToPiUnbound":
           "No agent is bound to this card yet.",
         "activity:comment.sendToPiOffline": "The bound agent is offline.",
@@ -96,6 +105,8 @@ afterEach(() => {
 
 beforeEach(() => {
   state.binding = null;
+  state.bindingIsLoading = false;
+  state.bindingIsError = false;
   state.delivery = null;
   state.restoredDelivery = null;
   state.isPending = false;
@@ -255,16 +266,19 @@ describe("SendCommentToPiAction", () => {
     await waitFor(() => expect(state.mutateAsync).toHaveBeenCalledOnce());
   });
 
-  it("R1-T4: stays visible and disabled with a bind hint when no agent is bound", () => {
+  it("stays visible and disabled with a truthful hint when the task is confirmed unbound", () => {
+    state.binding = { bound: false, online: false };
     render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
 
-    const button = screen.getByRole("button", { name: /No agent is bound/ });
+    const button = screen.getByRole("button", {
+      name: /Send to Pi.*No agent is bound/,
+    });
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(state.mutateAsync).not.toHaveBeenCalled();
   });
 
-  it("R1-T4: stays visible and disabled with an offline hint while bound but offline", () => {
+  it("keeps the Send-to-Pi action and known target in its accessible name while offline", () => {
     state.binding = {
       bound: true,
       online: false,
@@ -275,7 +289,60 @@ describe("SendCommentToPiAction", () => {
     };
     render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
 
-    expect(screen.getByRole("button", { name: /offline/ })).toBeDisabled();
+    const button = screen.getByRole("button", {
+      name: /Send to Pi.*session pi-session-exact on pi-prodesk.*offline/i,
+    });
+    expect(button).toBeDisabled();
     expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("does not misreport a binding-status query error as unbound", () => {
+    state.bindingIsError = true;
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+
+    const button = screen.getByRole("button", {
+      name: /Send to Pi.*Agent status unavailable/,
+    });
+    expect(button).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Agent status unavailable",
+    );
+    expect(screen.queryByText(/No agent is bound/)).toBeNull();
+  });
+
+  it("announces binding lookup as checking, not as a confirmed unbound state", () => {
+    state.bindingIsLoading = true;
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+
+    const button = screen.getByRole("button", {
+      name: /Send to Pi.*Checking binding/,
+    });
+    expect(button).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking binding");
+    expect(screen.queryByText(/No agent is bound/)).toBeNull();
+  });
+
+  it("shows send errors without success and keeps the same idempotency key for retry", async () => {
+    liveBinding();
+    state.mutateAsync.mockRejectedValue(new Error("network unavailable"));
+    render(<SendCommentToPiAction taskId="task-1" commentId="comment-1" />);
+
+    const send = screen.getByRole("button", {
+      name: /Send to Pi.*pi-session-exact/,
+    });
+    fireEvent.click(send);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "network unavailable",
+    );
+    expect(screen.queryByText(/Queued to Pi/)).toBeNull();
+
+    fireEvent.click(send);
+    await waitFor(() => expect(state.mutateAsync).toHaveBeenCalledTimes(2));
+    expect(state.mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+      clientActionKey: "client-key-1",
+    });
+    expect(state.mutateAsync.mock.calls[1]?.[0]).toMatchObject({
+      clientActionKey: "client-key-1",
+    });
   });
 });

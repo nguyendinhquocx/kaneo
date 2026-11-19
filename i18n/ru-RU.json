@@ -1572,6 +1572,8 @@
       "sendToPiTarget": "Send to session {{sessionId}} on {{host}}",
       "sendingToPi": "Sending to Pi…",
       "sendToPiFailed": "Could not queue this comment for Pi.",
+      "sendToPiCheckingBinding": "Checking agent binding…",
+      "sendToPiStatusUnavailable": "Agent status is unavailable. Try again when the connection returns.",
       "unknownResendWarning": "The previous attempt may already have reached Pi. Sending again could duplicate it.",
       "delivery": {
         "queued": "Queued for Pi.",
