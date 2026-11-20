@@ -1,0 +1,34 @@
+{
+  "schema_version": 3,
+  "spec": "SPEC-2026-11-19-kaneo-child-activity-context",
+  "wave": "child-activity-context-r1",
+  "source_sha": "59d0905b14a50f98aaa7558875f8d43003719a00",
+  "base_source_sha": "3bd6169e",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1@sha256:089e604ea365212a6525043ea3e59c5284a2c94698110bf3a7a404e74eca3258",
+  "candidate_manifest_digest": "sha256:089e604ea365212a6525043ea3e59c5284a2c94698110bf3a7a404e74eca3258",
+  "candidate_compose_sha256": "d06808c581ffbe7904873a24325eac7239369a4069ec9dd002201b5c02c8fd58",
+  "source_archive_sha256": "3683a6c26ba5b5965129be7d8613cf34c68e321f8e4e53f4ddf47f26d2e76fe0",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "Built from git archive of committed source 59d0905b only; local unrelated/untracked files excluded. Source archive SHA-256 verified byte-identical on ProDesk before extraction.",
+  "build": {
+    "builder": "ProDesk native Docker Buildx",
+    "command": "docker buildx build --platform linux/amd64 --no-cache --push --label org.opencontainers.image.revision=59d0905b14a50f98aaa7558875f8d43003719a00 --label org.opencontainers.image.source=https://github.com/nguyendinhquocx/kaneo -f Dockerfile.kaneo -t ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1 .",
+    "result": "PASS; GHCR tag digest 089e604e… verified by pull-on-ProDesk + image revision label matches source commit; image ID = digest pin verified post-apply.",
+    "github_actions": "Actions remains disabled for the repository (HTTP 422); candidate built on the native ProDesk builder as in previous waves.",
+    "docker_scout": "not run"
+  },
+  "verify": [
+    "Independent review: 2 GLM reviewers (adversarial full-diff + scope/security lens). 2 P3 cursor findings fixed (BIGINT range guard in parseCommentCursor; legacy ISO cursor regression test); re-run API integration 31/31 + API tsc PASS; scope lens APPROVED; 0 P1/P2.",
+    "API integration 31/31 across 4 files incl. new agent-session-subtask-activity.test.ts (root 400, out-of-tree 404, cross-project 404, stale generation 409, agent-binding queue 404, pagination clamp, cursor round-trip + legacy ISO + BIGINT-range + garbage cursor, attachment scope, move-out stale, claim-time titles).",
+    "Web 15/15 + extension node 23/23; API + web tsc; full Turbo build PASS; i18n check PASS (15 locales).",
+    "No database schema/migration change; expected head 0056_agent_session_delivery_generation id=59/count=59/hash a4b63b1a… verified unchanged after deploy."
+  ],
+  "deployment_lane": "R10 guarded apply 2026-11-19: PLAN PASS; apply steps 1-5 PASS, SSH-TTY session died mid step-6 health-wait AFTER container recreate with exact digest pin (healthy); read-only survey confirmed candidate live; RESUME PASS via pinned run-resume.sh (image ID pin match, migration verifier install+PASS, wrapper --plan PASS, post-snapshot PASS, HTTPS health ok). Compose 85fe2ccc -> d06808c5; pre/post snapshots kaneo-20261119T150729Z / kaneo-20261119T150956Z both verify PASS. R2 mirror remains a separate owner gate.",
+  "live_uat": "PASS 2026-11-20 on production bundle: scoped child read/create/delete via 3 new tools; fail-closed live (root 400, out-of-tree 404, cross-project 404 x3 endpoints); UI gating (agent comment no Send-to-Pi, user comment button with target accessible name); Send-to-Pi child delivery message with parent + comment-task lines (IDs + titles), root comment single Task line; reply loop via root card. Throwaway cards TOD-235/TOD-236/TOD-237 deleted after verify (sub via scoped tool, roots via real UI); binding returned to #227.",
+  "extension_sync": "Laptop runtime D->C 6 files with .pre-child-activity-20261119T151157 backups; Pi session restart loaded new code (3 scoped tools verified); python origin/main f8787a73 (rebased onto 9a5231c1). ProDesk Pi parity sync pending.",
+  "rollback": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-4a4996a3-subtask-order-r1@sha256:fd6569575a92f76101c5838034a90ad0f9d70d5240575733501c7729837bc282 + Compose 85fe2ccc5f8a31d5a9c83b268ec22992987a4910663e819d95917da1d3e37ecf; no migration introduced.",
+  "pre_snapshot": {"id":"kaneo-20261119T150729Z","ciphertext_sha256":"5e69271b3535dbd0f4bd00e6a5472b0fdc4f57cdf5d2cd393e005d157f138afa","receipt_sha256":"cd7076d668b1e59b98e4b93752d4a63922d21870068086a797d472595bfaf3a0"},
+  "post_snapshot": {"id":"kaneo-20261119T150956Z","ciphertext_sha256":"06e5bffa25e57dc8ad35a55e6fa33a011beb058e3e15fc9dc3b2a1aa1a77b6a9","receipt_sha256":"e39ff9e0042f8eccb73b6963f0013e4974b8ff90d4e0af99fd4c1c7bc9ccc441"},
+  "deployment_status": "APPLIED + live UAT PASS; container healthy on digest pin; no open verification debt for this wave (R2 mirror + ProDesk parity sync stay as separate follow-ups)."
+}

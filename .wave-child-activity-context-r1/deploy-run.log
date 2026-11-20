@@ -1,0 +1,26 @@
+== 1/8 read-only baseline and candidate config checks
+Kaneo migration/schema PASS: head=0056_agent_session_delivery_generation id=59 migrations=59 hash=a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f required_columns=62/62 named_constraints=7/7 agent_session_indexes=5/5 integration_fk=1 backfill_gaps=0 project_default_gaps=0 marker_counts_valid=0 (read-only)
+Kaneo backup plan PASS: compose=85fe2ccc5f8a31d5a9c83b268ec22992987a4910663e819d95917da1d3e37ecf image=ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-4a4996a3-subtask-order-r1@sha256:fd6569575a92f76101c5838034a90ad0f9d70d5240575733501c7729837bc282 (no mutation; R2 mirror and restore remain gated).
+{"backup_id": "kaneo-20261119T100244Z", "ciphertext_sha256": "4ee9073bc6beb2bcae7ad7890782f9d2c7498b5f8b4707cb6d3b909854c2fa6a", "project": "kaneo", "receipt_sha256": "0ccfc0af33b46f0ffa10854bb7e5247c99bf5685755fb6552453fb4b5deac2e7", "require_current": false, "status": "PASS"}
+Kaneo backup receipt identity/freshness PASS: kaneo-20261119T100244Z
+== 2/8 install reviewed backup wrapper and verify both current and candidate pins
+Kaneo backup plan PASS: compose=85fe2ccc5f8a31d5a9c83b268ec22992987a4910663e819d95917da1d3e37ecf image=ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-4a4996a3-subtask-order-r1@sha256:fd6569575a92f76101c5838034a90ad0f9d70d5240575733501c7729837bc282 (no mutation; R2 mirror and restore remain gated).
+== 3/8 atomically flip Compose to the digest-pinned candidate
+== 4/8 sync candidate recovery metadata before the pre-apply snapshot
+Kaneo recovery metadata PASS: source_revision=59d0905b14a50f98aaa7558875f8d43003719a00 snapshot_sha256=3d06edf6294376e2d5b51e76743805819fade8f814f635e26aec9baaed1f57a6
+== 5/8 create the pre-apply encrypted snapshot (R2 mirror remains a separate gate)
+5e69271b3535dbd0f4bd00e6a5472b0fdc4f57cdf5d2cd393e005d157f138afa  /srv/.home-server-recovery-kaneo-staging/kaneo-20261119T150729Z/kaneo-20261119T150729Z.age
+cd7076d668b1e59b98e4b93752d4a63922d21870068086a797d472595bfaf3a0  /srv/.home-server-recovery-kaneo-staging/kaneo-20261119T150729Z/kaneo-20261119T150729Z.receipt.json
+Kaneo encrypted backup created: kaneo-20261119T150729Z (local outbox only; R2 mirror still requires separate gate).
+{"backup_id": "kaneo-20261119T150729Z", "ciphertext_sha256": "5e69271b3535dbd0f4bd00e6a5472b0fdc4f57cdf5d2cd393e005d157f138afa", "project": "kaneo", "receipt_sha256": "cd7076d668b1e59b98e4b93752d4a63922d21870068086a797d472595bfaf3a0", "require_current": false, "status": "PASS"}
+Kaneo backup receipt identity/freshness PASS: kaneo-20261119T150729Z
+== 6/8 pull exact candidate, restart Kaneo, and verify image health/digest
+ Image ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1@sha256:089e604ea365212a6525043ea3e59c5284a2c94698110bf3a7a404e74eca3258 Pulling
+ Image ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1@sha256:089e604ea365212a6525043ea3e59c5284a2c94698110bf3a7a404e74eca3258 Pulled
+ Container kaneo-postgres Running
+ Container kaneo Recreate
+ Container kaneo Recreated
+ Container kaneo-postgres Waiting
+ Container kaneo-postgres Healthy
+ Container kaneo Starting
+ Container kaneo Started

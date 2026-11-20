@@ -1,0 +1,14 @@
+== 6/8 resume: verify image ID matches the digest pin
+== 7/8 verify unchanged migration/schema state and candidate recovery pair
+Kaneo migration/schema PASS: head=0056_agent_session_delivery_generation id=59 migrations=59 hash=a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f required_columns=62/62 named_constraints=7/7 agent_session_indexes=5/5 integration_fk=1 backfill_gaps=0 project_default_gaps=0 marker_counts_valid=0 (read-only)
+Kaneo backup plan PASS: compose=d06808c581ffbe7904873a24325eac7239369a4069ec9dd002201b5c02c8fd58 image=ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1@sha256:089e604ea365212a6525043ea3e59c5284a2c94698110bf3a7a404e74eca3258 (no mutation; R2 mirror and restore remain gated).
+== 8/8 create post-apply encrypted snapshot and report receipt IDs
+06e5bffa25e57dc8ad35a55e6fa33a011beb058e3e15fc9dc3b2a1aa1a77b6a9  /srv/.home-server-recovery-kaneo-staging/kaneo-20261119T150956Z/kaneo-20261119T150956Z.age
+e39ff9e0042f8eccb73b6963f0013e4974b8ff90d4e0af99fd4c1c7bc9ccc441  /srv/.home-server-recovery-kaneo-staging/kaneo-20261119T150956Z/kaneo-20261119T150956Z.receipt.json
+Kaneo encrypted backup created: kaneo-20261119T150956Z (local outbox only; R2 mirror still requires separate gate).
+{"backup_id": "kaneo-20261119T150956Z", "ciphertext_sha256": "06e5bffa25e57dc8ad35a55e6fa33a011beb058e3e15fc9dc3b2a1aa1a77b6a9", "project": "kaneo", "receipt_sha256": "e39ff9e0042f8eccb73b6963f0013e4974b8ff90d4e0af99fd4c1c7bc9ccc441", "require_current": false, "status": "PASS"}
+Kaneo backup receipt identity/freshness PASS: kaneo-20261119T150956Z
+Kaneo backup plan PASS: compose=d06808c581ffbe7904873a24325eac7239369a4069ec9dd002201b5c02c8fd58 image=ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1@sha256:089e604ea365212a6525043ea3e59c5284a2c94698110bf3a7a404e74eca3258 (no mutation; R2 mirror and restore remain gated).
+{"status":"ok","executionMetrics":{}}KANEO R10 CHILD-ACTIVITY-CONTEXT RESUME PASS: image=ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1@sha256:089e604ea365212a6525043ea3e59c5284a2c94698110bf3a7a404e74eca3258 rollback=ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-4a4996a3-subtask-order-r1@sha256:fd6569575a92f76101c5838034a90ad0f9d70d5240575733501c7729837bc282 post_backup=kaneo-20261119T150956Z compose_sha256=d06808c581ffbe7904873a24325eac7239369a4069ec9dd002201b5c02c8fd58
+kaneo|ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1|Up 2 minutes (healthy)
+/home/quoc/kaneo/staging/kaneo-child-activity-context-r1/run-resume.sh: 1: cleanup_verify: not found
