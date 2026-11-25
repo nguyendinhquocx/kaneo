@@ -22,9 +22,17 @@ export const PRESENCE_SWEEP_AFTER_MS = 7 * 24 * 60 * 60_000;
 // job is needed. Injected in tests; Math.random() in production.
 export const PRESENCE_SWEEP_PROBABILITY = 0.02;
 
-type PresenceExecutor =
-  | typeof db
-  | Parameters<Parameters<typeof db.transaction>[0]>[0];
+type PresenceTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type PresenceExecutor = typeof db | PresenceTransaction;
+
+async function lockSessionIdentity(
+  tx: PresenceTransaction,
+  sessionId: string,
+) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`session:${sessionId}`}))`,
+  );
+}
 
 export type AnnouncedBinding = ReturnType<typeof presentBinding> & {
   taskTitle: string | null;
@@ -111,55 +119,80 @@ export async function announceAgentSessionPresence(input: {
   cwd?: string;
   model?: string;
 }): Promise<{ binding: AnnouncedBinding | null }> {
-  // Auth agent-session rule: the principal id is proved against the caller's
-  // own active principal rows, never trusted from the body alone.
-  await getOwnedAgentPrincipal(input.userId, input.agentPrincipalId);
+  // Serialize every writer for this globally unique sessionId. Bind and
+  // heartbeat use this same lock before their task/binding row locks, so the
+  // ownership check and UPSERT below cannot race across accounts.
+  await db.transaction(async (tx) => {
+    await lockSessionIdentity(tx, input.sessionId);
 
-  // Ownership isolation (self-review 2026-11-25): session_id is a global
-  // key. A row owned by ANOTHER user's principal may never be overwritten —
-  // that would forge presence and re-route the bound-card lookup. Re-owning
-  // a row with a different principal of the SAME user stays allowed.
-  const [existing] = await db
-    .select({
-      agentPrincipalId: schema.agentSessionPresenceTable.agentPrincipalId,
-    })
-    .from(schema.agentSessionPresenceTable)
-    .where(eq(schema.agentSessionPresenceTable.sessionId, input.sessionId))
-    .limit(1);
-  if (existing && existing.agentPrincipalId !== input.agentPrincipalId) {
-    const [existingPrincipal] = await db
-      .select({ userId: schema.agentPrincipalTable.userId })
-      .from(schema.agentPrincipalTable)
-      .where(eq(schema.agentPrincipalTable.id, existing.agentPrincipalId))
+    // Auth agent-session rule: the principal id is proved against the caller's
+    // own active principal rows, never trusted from the body alone.
+    await getOwnedAgentPrincipal(input.userId, input.agentPrincipalId, tx);
+
+    // Ownership isolation: a row owned by ANOTHER user's principal may never
+    // be overwritten. Same-user principal refresh remains allowed when the
+    // session has no active binding.
+    const [existing] = await tx
+      .select({
+        agentPrincipalId: schema.agentSessionPresenceTable.agentPrincipalId,
+      })
+      .from(schema.agentSessionPresenceTable)
+      .where(eq(schema.agentSessionPresenceTable.sessionId, input.sessionId))
       .limit(1);
-    if (!existingPrincipal || existingPrincipal.userId !== input.userId) {
+    if (existing && existing.agentPrincipalId !== input.agentPrincipalId) {
+      const [existingPrincipal] = await tx
+        .select({ userId: schema.agentPrincipalTable.userId })
+        .from(schema.agentPrincipalTable)
+        .where(eq(schema.agentPrincipalTable.id, existing.agentPrincipalId))
+        .limit(1);
+      if (!existingPrincipal || existingPrincipal.userId !== input.userId) {
+        throw new HTTPException(409, {
+          message: "session is already announced under another account",
+        });
+      }
+    }
+
+    // A bound session's principal is part of its identity. Do not let an
+    // announce by another principal create a roster row that cannot be joined
+    // to (or safely adopt) the active binding.
+    const [activeBinding] = await tx
+      .select({ agentPrincipalId: schema.agentSessionBindingTable.agentPrincipalId })
+      .from(schema.agentSessionBindingTable)
+      .where(
+        and(
+          eq(schema.agentSessionBindingTable.sessionId, input.sessionId),
+          eq(schema.agentSessionBindingTable.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (activeBinding && activeBinding.agentPrincipalId !== input.agentPrincipalId) {
       throw new HTTPException(409, {
-        message: "session is already announced under another account",
+        message: "session is bound under another agent principal",
       });
     }
-  }
 
-  await db
-    .insert(schema.agentSessionPresenceTable)
-    .values({
-      sessionId: input.sessionId,
-      agentPrincipalId: input.agentPrincipalId,
-      host: input.host,
-      title: input.title ?? "",
-      cwd: input.cwd ?? "",
-      model: input.model ?? "",
-    })
-    .onConflictDoUpdate({
-      target: schema.agentSessionPresenceTable.sessionId,
-      set: {
+    await tx
+      .insert(schema.agentSessionPresenceTable)
+      .values({
+        sessionId: input.sessionId,
         agentPrincipalId: input.agentPrincipalId,
         host: input.host,
         title: input.title ?? "",
         cwd: input.cwd ?? "",
         model: input.model ?? "",
-        lastSeenAt: new Date(),
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: schema.agentSessionPresenceTable.sessionId,
+        set: {
+          agentPrincipalId: input.agentPrincipalId,
+          host: input.host,
+          title: input.title ?? "",
+          cwd: input.cwd ?? "",
+          model: input.model ?? "",
+          lastSeenAt: new Date(),
+        },
+      });
+  });
 
   if (shouldSweepPresence()) {
     await sweepStalePresence();
@@ -257,6 +290,7 @@ export async function listAgentSessionRoster(
 export async function assertSessionPresenceForWebBind(
   userId: string,
   sessionId: string,
+  agentPrincipalId: string,
 ): Promise<void> {
   const graceCutoff = new Date(Date.now() - PRESENCE_TTL_MS * 2);
   const [row] = await db
@@ -278,6 +312,7 @@ export async function assertSessionPresenceForWebBind(
     .where(
       and(
         eq(schema.agentSessionPresenceTable.sessionId, sessionId),
+        eq(schema.agentSessionPresenceTable.agentPrincipalId, agentPrincipalId),
         gte(schema.agentSessionPresenceTable.lastSeenAt, graceCutoff),
       ),
     )
@@ -335,7 +370,26 @@ export async function upsertPresenceFromHeartbeat(
     AgentSessionBinding,
     "sessionId" | "agentPrincipalId" | "hostId"
   >,
+  userId: string,
 ): Promise<void> {
+  const [existing] = await executor
+    .select({ agentPrincipalId: schema.agentSessionPresenceTable.agentPrincipalId })
+    .from(schema.agentSessionPresenceTable)
+    .where(eq(schema.agentSessionPresenceTable.sessionId, binding.sessionId))
+    .limit(1);
+  if (existing && existing.agentPrincipalId !== binding.agentPrincipalId) {
+    const [owner] = await executor
+      .select({ userId: schema.agentPrincipalTable.userId })
+      .from(schema.agentPrincipalTable)
+      .where(eq(schema.agentPrincipalTable.id, existing.agentPrincipalId))
+      .limit(1);
+    if (!owner || owner.userId !== userId) {
+      throw new HTTPException(409, {
+        message: "session presence is already owned by another account",
+      });
+    }
+  }
+
   await executor
     .insert(schema.agentSessionPresenceTable)
     .values({

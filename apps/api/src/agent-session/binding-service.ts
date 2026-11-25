@@ -4,7 +4,7 @@
 // every scoped call must present `bindingId + sessionId + generation`.
 // Mismatch or revocation is a typed stale-binding failure — never a silent
 // retarget to a replacement session.
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import { isTaskAgentControlled } from "../share/full-access";
@@ -81,6 +81,69 @@ async function assertTaskUpdateAllowed(userId: string, taskId: string) {
   return task;
 }
 
+async function lockSessionIdentity(
+  tx: BindingTransaction,
+  sessionId: string,
+) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`session:${sessionId}`}))`,
+  );
+}
+
+async function assertWebBindTargetOwnership(
+  tx: BindingTransaction,
+  input: {
+    userId: string;
+    agentPrincipalId: string;
+    sessionId: string;
+  },
+) {
+  const graceCutoff = new Date(Date.now() - 2 * 5 * 60_000);
+  const [presence] = await tx
+    .select({ agentPrincipalId: schema.agentSessionPresenceTable.agentPrincipalId })
+    .from(schema.agentSessionPresenceTable)
+    .where(
+      and(
+        eq(schema.agentSessionPresenceTable.sessionId, input.sessionId),
+        eq(schema.agentSessionPresenceTable.agentPrincipalId, input.agentPrincipalId),
+        gte(schema.agentSessionPresenceTable.lastSeenAt, graceCutoff),
+      ),
+    )
+    .limit(1);
+  if (!presence) {
+    throw new HTTPException(403, {
+      message:
+        "This session is not a known live agent session for your account; it cannot be bound from the web UI.",
+    });
+  }
+
+  // Session advisory lock serializes every bind/announce for this exact ID.
+  // Re-check here, inside the transaction, so a binding committed after the
+  // route's fast preflight cannot be revoked across account boundaries.
+  const [activeBinding] = await tx
+    .select({ agentPrincipalId: schema.agentSessionBindingTable.agentPrincipalId })
+    .from(schema.agentSessionBindingTable)
+    .where(
+      and(
+        eq(schema.agentSessionBindingTable.sessionId, input.sessionId),
+        eq(schema.agentSessionBindingTable.status, "active"),
+      ),
+    )
+    .limit(1);
+  if (activeBinding) {
+    const [owner] = await tx
+      .select({ userId: schema.agentPrincipalTable.userId })
+      .from(schema.agentPrincipalTable)
+      .where(eq(schema.agentPrincipalTable.id, activeBinding.agentPrincipalId))
+      .limit(1);
+    if (!owner || owner.userId !== input.userId) {
+      throw new HTTPException(409, {
+        message: "session is actively bound under another account",
+      });
+    }
+  }
+}
+
 async function assertNoLiveFormalRun(
   taskId: string,
   executor: BindingExecutor = db,
@@ -121,6 +184,7 @@ export async function bindAgentSession(input: {
   taskId: string;
   agentPrincipalId: string;
   sessionId: string;
+  isWebCaller: boolean;
 }) {
   const task = await assertTaskUpdateAllowed(input.userId, input.taskId);
   await assertNoLiveFormalRun(input.taskId);
@@ -130,9 +194,7 @@ export async function bindAgentSession(input: {
     // (advisory session -> advisory project -> task rows -> binding rows)
     // cannot form a lock cycle with claimTaskRun (task rows -> binding rows)
     // or with a concurrent bind, whichever tasks are involved.
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${`session:${input.sessionId}`}))`,
-    );
+    await lockSessionIdentity(tx, input.sessionId);
     // Serialize bindings within a project so two different roots cannot
     // concurrently claim overlapping subtask trees.
     await tx.execute(
@@ -159,6 +221,13 @@ export async function bindAgentSession(input: {
       input.agentPrincipalId,
       tx,
     );
+    if (input.isWebCaller) {
+      await assertWebBindTargetOwnership(tx, {
+        userId: input.userId,
+        agentPrincipalId: input.agentPrincipalId,
+        sessionId: input.sessionId,
+      });
+    }
     const candidateBindings = await tx
       .select()
       .from(schema.agentSessionBindingTable)
@@ -400,6 +469,7 @@ export async function unbindAgentSession(input: {
     input.generation,
   );
   await db.transaction(async (tx) => {
+    await lockSessionIdentity(tx, input.sessionId);
     await lockBindingIdentity(tx, binding, input.sessionId, input.generation);
     await tx
       .update(schema.agentSessionDeliveryTable)
@@ -457,6 +527,7 @@ export async function heartbeatAgentSessionBinding(input: {
     input.generation,
   );
   return db.transaction(async (tx) => {
+    await lockSessionIdentity(tx, input.sessionId);
     await lockBindingIdentity(tx, binding, input.sessionId, input.generation);
     const [row] = await tx
       .update(schema.agentSessionBindingTable)
@@ -478,7 +549,7 @@ export async function heartbeatAgentSessionBinding(input: {
     // stay in the roster without an announce loop. UPSERT covers a session
     // that resumed already bound (never announced); same transaction, so any
     // failure rolls back together with the heartbeat timestamp.
-    await upsertPresenceFromHeartbeat(tx, row);
+    await upsertPresenceFromHeartbeat(tx, row, input.userId);
     return presentBinding(row);
   });
 }

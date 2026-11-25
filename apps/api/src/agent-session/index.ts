@@ -238,14 +238,17 @@ app.post(
   async (c) => {
     const body = c.req.valid("json");
     // SPEC-2026-11-25 D3: a browser/session-cookie caller may only bind a
-    // session that its own extension announced recently — arbitrary session
-    // strings cannot be targeted from the web UI. API-key/extension callers
-    // (requestActorIsAgent) keep the old path so a cold-start /kaneo-card
-    // bind still works before the first announce tick lands.
-    if (!requestActorIsAgent(c)) {
-      await assertSessionPresenceForWebBind(getUserId(c), body.sessionId);
-      // And a web caller may never revoke someone else's active binding by
-      // rebinding a colliding session id (ownership isolation).
+    // session that its own extension announced recently. These preflight
+    // checks return fast errors; bindAgentSession repeats the ownership
+    // invariant under the session advisory lock before any prior binding is
+    // revoked, closing the check-then-act race.
+    const isWebCaller = !requestActorIsAgent(c);
+    if (isWebCaller) {
+      await assertSessionPresenceForWebBind(
+        getUserId(c),
+        body.sessionId,
+        body.agentPrincipalId,
+      );
       await assertSessionNotBoundToOtherPrincipal(getUserId(c), body.sessionId);
     }
     const binding = await bindAgentSession({
@@ -253,6 +256,7 @@ app.post(
       taskId: body.taskId,
       agentPrincipalId: body.agentPrincipalId,
       sessionId: body.sessionId,
+      isWebCaller,
     });
     return c.json(binding);
   },

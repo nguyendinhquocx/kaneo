@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
@@ -13,9 +13,11 @@ import {
   createWorkspaceMember,
 } from "./helpers/fixtures";
 import {
+  announceAgentSessionPresence,
   PRESENCE_TTL_MS,
   sweepStalePresence,
 } from "../../apps/api/src/agent-session/presence-service";
+import { bindAgentSession } from "../../apps/api/src/agent-session/binding-service";
 
 // SPEC-2026-11-25-kaneo-ui-agent-binding T1: presence announce/roster, the
 // web-caller bind ownership guard, and the heartbeat presence piggyback.
@@ -116,6 +118,17 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     expect(first.status).toBe(200);
     expect(((await first.json()) as { binding: null }).binding).toBeNull();
 
+    const [firstPresence] = await db
+      .select()
+      .from(schema.agentSessionPresenceTable)
+      .where(eq(schema.agentSessionPresenceTable.sessionId, body.sessionId));
+    expect(firstPresence).toBeDefined();
+    const deliberatelyOldLastSeenAt = new Date(Date.now() - 10_000);
+    await db
+      .update(schema.agentSessionPresenceTable)
+      .set({ lastSeenAt: deliberatelyOldLastSeenAt })
+      .where(eq(schema.agentSessionPresenceTable.sessionId, body.sessionId));
+
     // Bind through the API-key path so the session becomes bound, then
     // announce again to receive the full adopt-ready binding shape.
     const key = "test-api-key-announce";
@@ -134,7 +147,6 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     });
     expect(bindResponse.status).toBe(200);
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
     const second = await announce(app, body);
     expect(second.status).toBe(200);
     const payload = (await second.json()) as {
@@ -155,6 +167,7 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     const binding = payload.binding!;
     expect(binding.taskId).toBe(task.id);
     expect(binding.projectId).toBe(project.id);
+    expect(binding.sessionId).toBe(body.sessionId);
     expect(binding.hostId).toBe("pi-laptop");
     expect(binding.status).toBe("active");
     expect(binding.taskTitle).toBe("Bound card");
@@ -172,9 +185,256 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
       );
     expect(row).toBeDefined();
     expect(row!.title).toBe("fix build");
+    expect(row!.lastSeenAt.getTime()).toBeGreaterThan(
+      deliberatelyOldLastSeenAt.getTime(),
+    );
     expect(Date.now() - row!.lastSeenAt.getTime()).toBeLessThan(1000);
     const all = await db.select().from(schema.agentSessionPresenceTable);
     expect(all).toHaveLength(1);
+  });
+
+  it("serializes concurrent announcements so one account cannot take over a session id", async () => {
+    const firstOwner = await createWorkspaceMember({ role: "admin" });
+    const secondOwner = await createWorkspaceMember({ role: "admin" });
+    const firstPrincipal = await seedPrincipal(firstOwner.user.id, "pi-laptop");
+    const secondPrincipal = await seedPrincipal(secondOwner.user.id, "prodesk-home");
+    const sessionId = "pi-session-cross-account-announce";
+
+    const results = await Promise.allSettled([
+      announceAgentSessionPresence({
+        userId: firstOwner.user.id,
+        sessionId,
+        agentPrincipalId: firstPrincipal.id,
+        host: "pi-laptop",
+        title: "first account",
+      }),
+      announceAgentSessionPresence({
+        userId: secondOwner.user.id,
+        sessionId,
+        agentPrincipalId: secondPrincipal.id,
+        host: "prodesk-home",
+        title: "second account",
+      }),
+    ]);
+    const successes = results.filter(
+      (result): result is PromiseFulfilledResult<{ binding: null }> =>
+        result.status === "fulfilled",
+    );
+    const failures = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect((failures[0]!.reason as { status?: number }).status).toBe(409);
+
+    const [row] = await db
+      .select()
+      .from(schema.agentSessionPresenceTable)
+      .where(eq(schema.agentSessionPresenceTable.sessionId, sessionId));
+    expect(row).toBeDefined();
+    const winningPrincipalId =
+      row!.title === "first account" ? firstPrincipal.id : secondPrincipal.id;
+    expect(row!.agentPrincipalId).toBe(winningPrincipalId);
+  });
+
+  it("rechecks web-bind ownership if another account binds after route preflight", async () => {
+    const priorOwner = await createWorkspaceMember({ role: "admin" });
+    const webOwner = await createWorkspaceMember({ role: "admin" });
+    const { project: priorProject } = await createProjectFixture({
+      workspaceId: priorOwner.workspace.id,
+    });
+    const { project: webProject } = await createProjectFixture({
+      workspaceId: webOwner.workspace.id,
+    });
+    const priorTask = await createTask(priorProject.id, "Prior owner task");
+    const webTask = await createTask(webProject.id, "Web target task");
+    const priorPrincipal = await seedPrincipal(priorOwner.user.id, "pi-laptop");
+    const webPrincipal = await seedPrincipal(webOwner.user.id, "prodesk-home");
+    const sessionId = "pi-session-bind-preflight-race";
+    const { app } = createApp();
+    mockAuthenticatedSession(webOwner.user);
+
+    // This row lets the web request pass its route-level presence preflight.
+    await db.insert(schema.agentSessionPresenceTable).values({
+      sessionId,
+      agentPrincipalId: webPrincipal.id,
+      host: "prodesk-home",
+      title: "web target",
+    });
+
+    let releasePriorTransaction!: () => void;
+    let signalSessionLockHeld!: () => void;
+    const releaseGate = new Promise<void>((resolve) => {
+      releasePriorTransaction = resolve;
+    });
+    const lockHeld = new Promise<void>((resolve) => {
+      signalSessionLockHeld = resolve;
+    });
+    const competingTransaction = db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`session:${sessionId}`}))`,
+      );
+      signalSessionLockHeld();
+      await releaseGate;
+      await tx.insert(schema.agentSessionBindingTable).values({
+        taskId: priorTask.id,
+        projectId: priorProject.id,
+        agentPrincipalId: priorPrincipal.id,
+        hostId: "pi-laptop",
+        sessionId,
+      });
+    });
+    await lockHeld;
+
+    const webBindRequest = app.request("/api/agent-session/bindings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        taskId: webTask.id,
+        agentPrincipalId: webPrincipal.id,
+        sessionId,
+      }),
+    });
+
+    // Wait until the real route has passed both preflight checks and is blocked
+    // on the service's session lock. Then commit the competing binding before
+    // the route enters its transaction critical section.
+    let observedWait = false;
+    try {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const query = await db.execute(sql`
+          select count(*)::int as count
+          from pg_stat_activity
+          where datname = current_database()
+            and pid <> pg_backend_pid()
+            and wait_event_type = 'Lock'
+            and wait_event = 'advisory'
+        `);
+        const rows = (query as { rows?: Array<{ count: number | string }> }).rows ?? [];
+        if (Number(rows[0]?.count ?? 0) > 0) {
+          observedWait = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+    } finally {
+      releasePriorTransaction();
+    }
+    await competingTransaction;
+    const response = await webBindRequest;
+
+    expect(observedWait).toBe(true);
+    expect(response.status).toBe(409);
+    const [activeBinding] = await db
+      .select()
+      .from(schema.agentSessionBindingTable)
+      .where(
+        and(
+          eq(schema.agentSessionBindingTable.sessionId, sessionId),
+          eq(schema.agentSessionBindingTable.status, "active"),
+        ),
+      );
+    expect(activeBinding?.taskId).toBe(priorTask.id);
+    expect(activeBinding?.agentPrincipalId).toBe(priorPrincipal.id);
+  });
+
+  it("serializes concurrent announcements so one account cannot take over a session id", async () => {
+    const firstOwner = await createWorkspaceMember({ role: "admin" });
+    const secondOwner = await createWorkspaceMember({ role: "admin" });
+    const firstPrincipal = await seedPrincipal(firstOwner.user.id, "pi-laptop");
+    const secondPrincipal = await seedPrincipal(secondOwner.user.id, "prodesk-home");
+    const sessionId = "pi-session-cross-account-announce";
+
+    const results = await Promise.allSettled([
+      announceAgentSessionPresence({
+        userId: firstOwner.user.id,
+        sessionId,
+        agentPrincipalId: firstPrincipal.id,
+        host: "pi-laptop",
+        title: "first account",
+      }),
+      announceAgentSessionPresence({
+        userId: secondOwner.user.id,
+        sessionId,
+        agentPrincipalId: secondPrincipal.id,
+        host: "prodesk-home",
+        title: "second account",
+      }),
+    ]);
+    const successes = results.filter(
+      (result): result is PromiseFulfilledResult<{ binding: null }> =>
+        result.status === "fulfilled",
+    );
+    const failures = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect((failures[0]!.reason as { status?: number }).status).toBe(409);
+
+    const [row] = await db
+      .select()
+      .from(schema.agentSessionPresenceTable)
+      .where(eq(schema.agentSessionPresenceTable.sessionId, sessionId));
+    expect(row).toBeDefined();
+    const winningPrincipalId =
+      row!.title === "first account" ? firstPrincipal.id : secondPrincipal.id;
+    expect(row!.agentPrincipalId).toBe(winningPrincipalId);
+  });
+
+  it("rechecks web-bind ownership inside the locked transaction after route preflight", async () => {
+    const priorOwner = await createWorkspaceMember({ role: "admin" });
+    const webOwner = await createWorkspaceMember({ role: "admin" });
+    const { project: priorProject } = await createProjectFixture({
+      workspaceId: priorOwner.workspace.id,
+    });
+    const { project: webProject } = await createProjectFixture({
+      workspaceId: webOwner.workspace.id,
+    });
+    const priorTask = await createTask(priorProject.id, "Prior owner task");
+    const webTask = await createTask(webProject.id, "Web target task");
+    const priorPrincipal = await seedPrincipal(priorOwner.user.id, "pi-laptop");
+    const webPrincipal = await seedPrincipal(webOwner.user.id, "prodesk-home");
+    const sessionId = "pi-session-bind-preflight-race";
+
+    // Model the valid presence row observed by route preflight, then let a
+    // concurrent legacy/API-key bind commit under the same session id. The
+    // final web service call must reject before revoking that prior binding.
+    await db.insert(schema.agentSessionPresenceTable).values({
+      sessionId,
+      agentPrincipalId: webPrincipal.id,
+      host: "prodesk-home",
+      title: "web target",
+    });
+    await bindAgentSession({
+      userId: priorOwner.user.id,
+      taskId: priorTask.id,
+      agentPrincipalId: priorPrincipal.id,
+      sessionId,
+      isWebCaller: false,
+    });
+
+    await expect(
+      bindAgentSession({
+        userId: webOwner.user.id,
+        taskId: webTask.id,
+        agentPrincipalId: webPrincipal.id,
+        sessionId,
+        isWebCaller: true,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    const [stillActive] = await db
+      .select()
+      .from(schema.agentSessionBindingTable)
+      .where(
+        and(
+          eq(schema.agentSessionBindingTable.sessionId, sessionId),
+          eq(schema.agentSessionBindingTable.status, "active"),
+        ),
+      );
+    expect(stillActive?.taskId).toBe(priorTask.id);
+    expect(stillActive?.agentPrincipalId).toBe(priorPrincipal.id);
   });
 
   it("announce with a principal not owned by the caller is a 403", async () => {
@@ -557,7 +817,8 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     });
     expect(bindResponse.status).toBe(200);
 
-    // The stranger announces the SAME session id with their own principal.
+    // The stranger cannot announce a session that already has a binding
+    // owned by another account, even though no presence row exists yet.
     mockAuthenticatedSession(stranger.user);
     const strangerAnnounce = await announce(app, {
       sessionId: sharedSessionId,
@@ -565,21 +826,14 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
       host: "pi-laptop",
       title: "stranger session",
     });
-    expect(strangerAnnounce.status).toBe(200);
-    const strangerPayload = (await strangerAnnounce.json()) as {
-      binding: unknown;
-    };
-    // No foreign binding leaks through the announce response.
-    expect(strangerPayload.binding).toBeNull();
+    expect(strangerAnnounce.status).toBe(409);
 
-    // The stranger's roster shows the session but NEVER the owner's binding.
+    // The stranger's roster must not acquire a poisoned row for that session.
     const strangerRoster = await app.request("/api/agent-session/sessions/roster");
     const { sessions } = (await strangerRoster.json()) as {
       sessions: Array<{ sessionId: string; binding: unknown }>;
     };
-    const row = sessions.find((item) => item.sessionId === sharedSessionId);
-    expect(row).toBeDefined();
-    expect(row!.binding).toBeNull();
+    expect(sessions.some((item) => item.sessionId === sharedSessionId)).toBe(false);
 
     // The owner has no presence row yet (never announced) — their roster
     // shows nothing for this session id.
@@ -689,15 +943,15 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     });
     expect(bindResponse.status).toBe(200);
 
-    // The stranger announces the session id (owner never announced, so the
-    // presence insert succeeds) — then their web bind must be refused.
+    // Announce itself must not create a cross-account roster row, and the
+    // web bind remains blocked if the owner never announced this session.
     mockAuthenticatedSession(stranger.user);
     const strangerAnnounce = await announce(app, {
       sessionId: "pi-forcebind-target",
       agentPrincipalId: strangerPrincipal.id,
       host: "pi-laptop",
     });
-    expect(strangerAnnounce.status).toBe(200);
+    expect(strangerAnnounce.status).toBe(409);
 
     const forceBind = await app.request("/api/agent-session/bindings", {
       method: "POST",
@@ -708,7 +962,7 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
         sessionId: "pi-forcebind-target",
       }),
     });
-    expect(forceBind.status).toBe(409);
+    expect(forceBind.status).toBe(403);
 
     // The owner's binding survives untouched.
     const [binding] = await db

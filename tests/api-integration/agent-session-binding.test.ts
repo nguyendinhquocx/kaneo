@@ -36,20 +36,22 @@ async function bindCard(
   app: ReturnType<typeof createApp>["app"],
   taskId: string,
   userId: string,
+  existingPrincipalId?: string,
 ) {
-  const principal = await seedPrincipal(userId);
-  // SPEC-2026-11-25 D3: the session must have presence before a web bind.
+  const agentPrincipalId = existingPrincipalId ?? (await seedPrincipal(userId)).id;
+  // SPEC-2026-11-25 D3: the session must have presence for this exact
+  // principal before a web bind; rebinds reuse the same announced session.
   await seedSessionPresence({
     userId,
     sessionId: "pi-session-a",
-    agentPrincipalId: principal.id,
+    agentPrincipalId,
   });
   const response = await app.request("/api/agent-session/bindings", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       taskId,
-      agentPrincipalId: principal.id,
+      agentPrincipalId,
       sessionId: "pi-session-a",
       // The server must ignore client host metadata and derive it from the
       // active owned principal row.
@@ -61,11 +63,12 @@ async function bindCard(
       `bind failed ${response.status}: '${await response.text()}'`,
     );
   }
-  return (await response.json()) as {
+  const binding = (await response.json()) as {
     bindingId: string;
     bindingGeneration: number;
     hostId: string;
   };
+  return { ...binding, agentPrincipalId };
 }
 
 describe("API integration: agent session card binding (SPEC T4)", () => {
@@ -222,7 +225,12 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     );
     expect(wrongSession.status).toBe(409);
 
-    const rebound = await bindCard(app, task.id, admin.user.id);
+    const rebound = await bindCard(
+      app,
+      task.id,
+      admin.user.id,
+      first.agentPrincipalId,
+    );
     expect(rebound.bindingId).not.toBe(first.bindingId);
     expect(rebound.bindingGeneration).toBe(2);
 
@@ -295,13 +303,12 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     mockAuthenticatedSession(admin.user);
     const { app } = createApp();
     const first = await bindCard(app, firstTask.id, admin.user.id);
-    const secondPrincipal = await seedPrincipal(admin.user.id);
     const response = await app.request("/api/agent-session/bindings", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         taskId: secondTask.id,
-        agentPrincipalId: secondPrincipal.id,
+        agentPrincipalId: first.agentPrincipalId,
         sessionId: "pi-session-a",
       }),
     });
