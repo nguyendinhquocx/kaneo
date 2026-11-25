@@ -1836,7 +1836,31 @@
       "copyTaskBranch": "Копіювати гілку завдання",
       "start": "Початок",
       "startDate": "Дата початку",
-      "noDate": "Немає дати"
+      "noDate": "Немає дати",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Призначити агента",
+        "runningCount": "{{count}} запущено",
+        "empty": "Немає активних сесій",
+        "searchPlaceholder": "Пошук сесій…",
+        "loading": "Завантаження…",
+        "loadError": "Не вдалося завантажити активні сесії",
+        "retry": "Спробувати ще раз",
+        "connected": "Підключено",
+        "waiting": "Призначено · очікування сесії",
+        "disconnected": "Відключено",
+        "change": "Змінити сесію",
+        "unbind": "Відв'язати",
+        "rebindTitle": "Переприв'язати цю сесію?",
+        "rebindBody": "{{sessionId}} зараз прив'язана до картки #{{number}} «{{cardTitle}}». Перемістити її на цю картку?",
+        "unbindTitle": "Відв'язати агента від цієї картки?",
+        "unbindBody": "Сесія {{sessionId}} припинить синхронізацію цієї картки та її підзадач.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Заторкнута картка: #{{number}} {{title}}",
+        "bindFailed": "Не вдалося прив'язати сесію",
+        "unbindFailed": "Не вдалося відв'язати сесію",
+        "pickerLabel": "Активні сесії агентів"
+      }
     },
     "move": {
       "title": "Перемістити завдання",

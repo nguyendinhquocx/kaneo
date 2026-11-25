@@ -1834,7 +1834,31 @@
       "copyTaskBranch": "Copiar la rama de la tarea",
       "start": "Comenzar",
       "startDate": "Fecha de inicio",
-      "noDate": "Sin fecha"
+      "noDate": "Sin fecha",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Asignar agente",
+        "runningCount": "{{count}} en ejecución",
+        "empty": "No hay sesiones activas",
+        "searchPlaceholder": "Buscar sesiones…",
+        "loading": "Cargando…",
+        "loadError": "No se pudieron cargar las sesiones activas",
+        "retry": "Reintentar",
+        "connected": "Conectado",
+        "waiting": "Asignado · esperando la sesión",
+        "disconnected": "Desconectado",
+        "change": "Cambiar sesión",
+        "unbind": "Desvincular",
+        "rebindTitle": "¿Revincular esta sesión?",
+        "rebindBody": "{{sessionId}} está vinculada actualmente a la tarjeta #{{number}} \"{{cardTitle}}\". ¿Moverla a esta tarjeta?",
+        "unbindTitle": "¿Desvincular el agente de esta tarjeta?",
+        "unbindBody": "La sesión {{sessionId}} dejará de sincronizar esta tarjeta y sus subtareas.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Tarjeta afectada: #{{number}} {{title}}",
+        "bindFailed": "No se pudo vincular la sesión",
+        "unbindFailed": "No se pudo desvincular la sesión",
+        "pickerLabel": "Sesiones de agente activas"
+      }
     },
     "popover": {
       "assignee": {

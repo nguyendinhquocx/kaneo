@@ -8,6 +8,8 @@ import {
   Plus,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { getShareCapability } from "@/components/share/share-capability";
+import ShareDialog from "@/components/share/share-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,20 +30,18 @@ import useGetProject from "@/hooks/queries/project/use-get-project";
 import useGetProjects from "@/hooks/queries/project/use-get-projects";
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
+import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
 import { getColumnIcon } from "@/lib/column";
 import { dueDateStatusColors, getDueDateStatus } from "@/lib/due-date-status";
 import { formatDateShort } from "@/lib/format";
+import { generateLink } from "@/lib/generate-link";
 import { getInitials } from "@/lib/get-initials";
 import { getPriorityLabel, getStatusDisplayLabel } from "@/lib/i18n/domain";
 import { getPriorityIcon } from "@/lib/priority";
-import { generateLink } from "@/lib/generate-link";
 import { getTaskLinkPath } from "@/lib/task-link";
 import { toast } from "@/lib/toast";
-import { getShareCapability } from "@/components/share/share-capability";
-import ShareDialog from "@/components/share/share-dialog";
-import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
-import WorkMarkerPicker from "./work-marker-picker";
+import TaskAgentBindingPanel from "./task-agent-binding-panel";
 import TaskAssigneePopover from "./task-assignee-popover";
 import TaskDueDatePopover from "./task-due-date-popover";
 import TaskLabelsPopover from "./task-labels-popover";
@@ -49,6 +49,7 @@ import TaskMovePopover from "./task-move-popover";
 import TaskPriorityPopover from "./task-priority-popover";
 import TaskStartDatePopover from "./task-start-date-popover";
 import TaskStatusPopover from "./task-status-popover";
+import WorkMarkerPicker from "./work-marker-picker";
 
 function slugify(text: string | undefined): string {
   if (!text) return "";
@@ -97,15 +98,20 @@ export default function TaskPropertiesSidebar({
   const { data: giteaIntegration } = useGetGiteaIntegration(projectId);
   const { data: workspaceProjects = [] } = useGetProjects({ workspaceId });
   const shareCapability = getShareCapability();
-  const { canManageShareLinks, isCheckingPermissions } = useWorkspacePermission();
+  const { canManageShareLinks, isCheckingPermissions } =
+    useWorkspacePermission();
   // SPEC-2026-11-10 T3: the Copy slot upgrades into the task ShareDialog for
   // actors that may mint share links; everyone else keeps the plain URL copy.
   const canShareTask = Boolean(
-    !shareCapability && taskId && !isCheckingPermissions && canManageShareLinks(),
+    !shareCapability &&
+      taskId &&
+      !isCheckingPermissions &&
+      canManageShareLinks(),
   );
   const canMoveTask =
     !shareCapability &&
-    Boolean(task) && workspaceProjects.some((p) => p.id !== task?.projectId);
+    Boolean(task) &&
+    workspaceProjects.some((p) => p.id !== task?.projectId);
   const statusColumn = columns.find(
     (column) => column.slug === task?.status || column.id === task?.status,
   );
@@ -215,26 +221,26 @@ export default function TaskPropertiesSidebar({
                   </Tooltip>
                 )}
                 {shareCapability ? null : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-foreground rounded-l-none"
-                      aria-label={t("tasks:properties.copyTaskBranch")}
-                      onClick={() => handleCopyTaskBranch()}
-                    >
-                      <GitBranch className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <KbdSequence
-                      keys={["Ctrl", "Shift", "G"]}
-                      description={t("tasks:properties.copyTaskBranch")}
-                      separator=""
-                    />
-                  </TooltipContent>
-                </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-foreground rounded-l-none"
+                        aria-label={t("tasks:properties.copyTaskBranch")}
+                        onClick={() => handleCopyTaskBranch()}
+                      >
+                        <GitBranch className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <KbdSequence
+                        keys={["Ctrl", "Shift", "G"]}
+                        description={t("tasks:properties.copyTaskBranch")}
+                        separator=""
+                      />
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </TooltipProvider>
             </div>
@@ -376,6 +382,15 @@ export default function TaskPropertiesSidebar({
           </div>
         )}
 
+        {/* SPEC-2026-11-25: mobile agents row (S0 renders nothing). Full-page
+            layout hides it at lg where the desktop block takes over; the
+            compact modal keeps it at every width. display:contents keeps the
+            flex-wrap row behavior and lets S0 collapse to nothing. */}
+        {!shareCapability && task && (
+          <div className={compact ? "contents" : "contents lg:hidden"}>
+            <TaskAgentBindingPanel taskId={task.id} layout="row" />
+          </div>
+        )}
         {!compact && (
           <>
             {/* Mobile: Compact-style layout */}
@@ -435,26 +450,26 @@ export default function TaskPropertiesSidebar({
                     </Tooltip>
                   )}
                   {shareCapability ? null : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-foreground rounded-l-none"
-                        aria-label={t("tasks:properties.copyTaskBranch")}
-                        onClick={() => handleCopyTaskBranch()}
-                      >
-                        <GitBranch className="size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <KbdSequence
-                        keys={["Ctrl", "Shift", "G"]}
-                        description={t("tasks:properties.copyTaskBranch")}
-                        separator=""
-                      />
-                    </TooltipContent>
-                  </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-foreground rounded-l-none"
+                          aria-label={t("tasks:properties.copyTaskBranch")}
+                          onClick={() => handleCopyTaskBranch()}
+                        >
+                          <GitBranch className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <KbdSequence
+                          keys={["Ctrl", "Shift", "G"]}
+                          description={t("tasks:properties.copyTaskBranch")}
+                          separator=""
+                        />
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                 </TooltipProvider>
               </div>
@@ -870,8 +885,12 @@ export default function TaskPropertiesSidebar({
                 </TaskLabelsPopover>
               )}
             </div>
-          </div>
 
+            {/* SPEC-2026-11-25: desktop agents block after labels (S0 renders nothing). */}
+            {!shareCapability && task && (
+              <TaskAgentBindingPanel taskId={task.id} layout="block" />
+            )}
+          </div>
         </div>
       </div>
     </div>

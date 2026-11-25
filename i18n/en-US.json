@@ -1845,7 +1845,31 @@
       "copyTaskBranch": "Copy task branch",
       "start": "Start",
       "startDate": "Start date",
-      "noDate": "No date"
+      "noDate": "No date",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Assign agent",
+        "runningCount": "{{count}} running",
+        "empty": "No live sessions",
+        "searchPlaceholder": "Search sessions…",
+        "loading": "Loading…",
+        "loadError": "Couldn't load live sessions",
+        "retry": "Retry",
+        "connected": "Connected",
+        "waiting": "Assigned · waiting for the session",
+        "disconnected": "Disconnected",
+        "change": "Change session",
+        "unbind": "Unbind",
+        "rebindTitle": "Rebind this session?",
+        "rebindBody": "{{sessionId}} is currently bound to card #{{number}} \"{{cardTitle}}\". Move it to this card?",
+        "unbindTitle": "Unbind the agent from this card?",
+        "unbindBody": "Session {{sessionId}} will stop syncing this card and its subtasks.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Affected card: #{{number}} {{title}}",
+        "bindFailed": "Couldn't bind the session",
+        "unbindFailed": "Couldn't unbind the session",
+        "pickerLabel": "Live agent sessions"
+      }
     },
     "move": {
       "title": "Move task",

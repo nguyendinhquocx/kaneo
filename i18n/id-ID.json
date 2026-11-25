@@ -1834,7 +1834,31 @@
       "copyTaskBranch": "Salin branch tugas",
       "start": "Mulai",
       "startDate": "Tanggal mulai",
-      "noDate": "Tanpa tanggal"
+      "noDate": "Tanpa tanggal",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Tetapkan agen",
+        "runningCount": "{{count}} berjalan",
+        "empty": "Tidak ada sesi aktif",
+        "searchPlaceholder": "Cari sesi…",
+        "loading": "Memuat…",
+        "loadError": "Tidak dapat memuat sesi aktif",
+        "retry": "Coba lagi",
+        "connected": "Terhubung",
+        "waiting": "Ditetapkan · menunggu sesi",
+        "disconnected": "Terputus",
+        "change": "Ganti sesi",
+        "unbind": "Lepas",
+        "rebindTitle": "Pasang ulang sesi ini?",
+        "rebindBody": "{{sessionId}} saat ini terikat ke kartu #{{number}} \"{{cardTitle}}\". Pindahkan ke kartu ini?",
+        "unbindTitle": "Lepas agen dari kartu ini?",
+        "unbindBody": "Sesi {{sessionId}} akan berhenti menyinkronkan kartu ini dan subtask-nya.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Kartu terdampak: #{{number}} {{title}}",
+        "bindFailed": "Tidak dapat mengikat sesi",
+        "unbindFailed": "Tidak dapat melepas sesi",
+        "pickerLabel": "Sesi agen aktif"
+      }
     },
     "move": {
       "title": "Pindahkan tugas",

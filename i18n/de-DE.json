@@ -1834,7 +1834,31 @@
       "copyTaskBranch": "Aufgaben-Branch kopieren",
       "start": "Start",
       "startDate": "Startdatum",
-      "noDate": "Kein Datum"
+      "noDate": "Kein Datum",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Agent zuweisen",
+        "runningCount": "{{count}} läuft",
+        "empty": "Keine aktiven Sitzungen",
+        "searchPlaceholder": "Sitzungen suchen…",
+        "loading": "Wird geladen…",
+        "loadError": "Live-Sitzungen konnten nicht geladen werden",
+        "retry": "Erneut versuchen",
+        "connected": "Verbunden",
+        "waiting": "Zugewiesen · wartet auf die Sitzung",
+        "disconnected": "Verbindung getrennt",
+        "change": "Sitzung wechseln",
+        "unbind": "Trennen",
+        "rebindTitle": "Diese Sitzung neu zuordnen?",
+        "rebindBody": "{{sessionId}} ist derzeit an Karte #{{number}} \"{{cardTitle}}\" gebunden. Zu dieser Karte verschieben?",
+        "unbindTitle": "Agent von dieser Karte trennen?",
+        "unbindBody": "Sitzung {{sessionId}} synchronisiert diese Karte und ihre Unteraufgaben nicht mehr.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Betroffene Karte: #{{number}} {{title}}",
+        "bindFailed": "Sitzung konnte nicht gebunden werden",
+        "unbindFailed": "Sitzung konnte nicht getrennt werden",
+        "pickerLabel": "Aktive Agent-Sitzungen"
+      }
     },
     "move": {
       "title": "Aufgabe verschieben",

@@ -36,20 +36,45 @@ vi.mock("@/hooks/queries/project/use-get-project", () => ({
 vi.mock("@/hooks/queries/column/use-get-columns", () => ({
   useGetColumns: () => ({ data: [] }),
 }));
-vi.mock("@/hooks/queries/workspace-users/use-get-active-workspace-users", () => ({
-  useGetActiveWorkspaceUsers: () => ({ data: { members: [] } }),
-}));
+vi.mock(
+  "@/hooks/queries/workspace-users/use-get-active-workspace-users",
+  () => ({
+    useGetActiveWorkspaceUsers: () => ({ data: { members: [] } }),
+  }),
+);
 vi.mock("@/hooks/queries/label/use-get-labels-by-task", () => ({
   default: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/queries/gitea-integration/use-get-gitea-integration", () => ({
   default: () => ({ data: undefined }),
 }));
-vi.mock("@/hooks/queries/github-integration/use-get-github-integration", () => ({
-  default: () => ({ data: undefined }),
-}));
+vi.mock(
+  "@/hooks/queries/github-integration/use-get-github-integration",
+  () => ({
+    default: () => ({ data: undefined }),
+  }),
+);
 vi.mock("@/hooks/queries/project/use-get-projects", () => ({
   default: () => ({ data: [] }),
+}));
+// SPEC-2026-11-25: the agents panel needs a query client — the sidebar
+// tests assert layout, so the panel renders under S0 (empty roster).
+vi.mock("@/hooks/queries/agent-session/use-get-task-binding-status", () => ({
+  useGetTaskBindingStatus: () => ({ data: { bound: false, online: false } }),
+}));
+vi.mock("@/hooks/queries/agent-session/use-get-agent-session-roster", () => ({
+  useGetAgentSessionRoster: () => ({
+    data: { sessions: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("@/hooks/mutations/agent-session/use-bind-agent-session", () => ({
+  useBindAgentSession: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+vi.mock("@/hooks/mutations/agent-session/use-unbind-agent-session", () => ({
+  useUnbindAgentSession: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/hooks/use-workspace-permission", () => ({
   useWorkspacePermission: () => ({

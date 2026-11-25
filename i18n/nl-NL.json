@@ -1834,7 +1834,31 @@
       "copyTaskBranch": "Taakbranch kopiëren",
       "start": "Start",
       "startDate": "Startdatum",
-      "noDate": "Geen datum"
+      "noDate": "Geen datum",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Agent toewijzen",
+        "runningCount": "{{count}} actief",
+        "empty": "Geen actieve sessies",
+        "searchPlaceholder": "Sessies zoeken…",
+        "loading": "Laden…",
+        "loadError": "Kan actieve sessies niet laden",
+        "retry": "Opnieuw proberen",
+        "connected": "Verbonden",
+        "waiting": "Toegewezen · wachten op de sessie",
+        "disconnected": "Verbinding verbroken",
+        "change": "Sessie wisselen",
+        "unbind": "Ontkoppelen",
+        "rebindTitle": "Deze sessie opnieuw koppelen?",
+        "rebindBody": "{{sessionId}} is momenteel gekoppeld aan kaart #{{number}} \"{{cardTitle}}\". Naar deze kaart verplaatsen?",
+        "unbindTitle": "De agent van deze kaart loskoppelen?",
+        "unbindBody": "Sessie {{sessionId}} stopt met het synchroniseren van deze kaart en de subtaken.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Betroffen kaart: #{{number}} {{title}}",
+        "bindFailed": "Kan de sessie niet koppelen",
+        "unbindFailed": "Kan de sessie niet ontkoppelen",
+        "pickerLabel": "Actieve agent-sessies"
+      }
     },
     "popover": {
       "assignee": {

@@ -1844,7 +1844,31 @@
       "copyTaskBranch": "Скопировать ветку задачи",
       "start": "Начало",
       "startDate": "Дата начала",
-      "noDate": "Без даты"
+      "noDate": "Без даты",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Назначить агента",
+        "runningCount": "{{count}} запущено",
+        "empty": "Нет активных сессий",
+        "searchPlaceholder": "Поиск сессий…",
+        "loading": "Загрузка…",
+        "loadError": "Не удалось загрузить активные сессии",
+        "retry": "Повторить",
+        "connected": "Подключено",
+        "waiting": "Назначено · ожидание сессии",
+        "disconnected": "Отключено",
+        "change": "Сменить сессию",
+        "unbind": "Отвязать",
+        "rebindTitle": "Перепривязать эту сессию?",
+        "rebindBody": "{{sessionId}} сейчас привязана к карточке #{{number}} «{{cardTitle}}». Переместить её на эту карточку?",
+        "unbindTitle": "Отвязать агента от этой карточки?",
+        "unbindBody": "Сессия {{sessionId}} прекратит синхронизацию этой карточки и её подзадач.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Затронутая карточка: #{{number}} {{title}}",
+        "bindFailed": "Не удалось привязать сессию",
+        "unbindFailed": "Не удалось отвязать сессию",
+        "pickerLabel": "Активные сессии агентов"
+      }
     },
     "move": {
       "title": "Переместить задачу",

@@ -1834,7 +1834,31 @@
       "copyTaskBranch": "Copier la branche de la tâche",
       "start": "Début",
       "startDate": "Date de début",
-      "noDate": "Pas de date"
+      "noDate": "Pas de date",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Assigner un agent",
+        "runningCount": "{{count}} en cours",
+        "empty": "Aucune session active",
+        "searchPlaceholder": "Rechercher des sessions…",
+        "loading": "Chargement…",
+        "loadError": "Impossible de charger les sessions actives",
+        "retry": "Réessayer",
+        "connected": "Connecté",
+        "waiting": "Assigné · en attente de la session",
+        "disconnected": "Déconnecté",
+        "change": "Changer de session",
+        "unbind": "Détacher",
+        "rebindTitle": "Rattacher cette session ?",
+        "rebindBody": "{{sessionId}} est actuellement rattachée à la carte #{{number}} « {{cardTitle}} ». La déplacer vers cette carte ?",
+        "unbindTitle": "Détacher l'agent de cette carte ?",
+        "unbindBody": "La session {{sessionId}} cessera de synchroniser cette carte et ses sous-tâches.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Carte concernée : #{{number}} {{title}}",
+        "bindFailed": "Impossible de rattacher la session",
+        "unbindFailed": "Impossible de détacher la session",
+        "pickerLabel": "Sessions d'agent actives"
+      }
     },
     "move": {
       "title": "Déplacer la tâche",

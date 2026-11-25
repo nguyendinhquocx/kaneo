@@ -1834,7 +1834,31 @@
       "copyTaskBranch": "Talep dalını kopyala",
       "start": "Başlat",
       "startDate": "Başlangıç tarihi",
-      "noDate": "Tarih yok"
+      "noDate": "Tarih yok",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Ajan ata",
+        "runningCount": "{{count}} çalışıyor",
+        "empty": "Canlı oturum yok",
+        "searchPlaceholder": "Oturum ara…",
+        "loading": "Yükleniyor…",
+        "loadError": "Canlı oturumlar yüklenemedi",
+        "retry": "Tekrar dene",
+        "connected": "Bağlı",
+        "waiting": "Atandı · oturum bekleniyor",
+        "disconnected": "Bağlantı kesildi",
+        "change": "Oturumu değiştir",
+        "unbind": "Ayır",
+        "rebindTitle": "Bu oturum yeniden bağlansın mı?",
+        "rebindBody": "{{sessionId}} şu anda #{{number}} \"{{cardTitle}}\" kartına bağlı. Bu karta taşındı mı?",
+        "unbindTitle": "Ajan bu karttan ayrılsın mı?",
+        "unbindBody": "{{sessionId}} oturumu bu kartı ve alt görevlerini senkronize etmeyi bırakacak.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Etkilenen kart: #{{number}} {{title}}",
+        "bindFailed": "Oturum bağlanamadı",
+        "unbindFailed": "Oturum ayrılamadı",
+        "pickerLabel": "Canlı ajan oturumları"
+      }
     },
     "move": {
       "title": "Talebi taşı",

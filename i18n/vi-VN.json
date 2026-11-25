@@ -1834,7 +1834,31 @@
       "copyTaskBranch": "Sao chép nhánh công việc",
       "start": "Bắt đầu",
       "startDate": "Ngày bắt đầu",
-      "noDate": "Không có ngày"
+      "noDate": "Không có ngày",
+      "agents": {
+        "heading": "Agents",
+        "assign": "Gán agent",
+        "runningCount": "{{count}} đang chạy",
+        "empty": "Không có session nào đang chạy",
+        "searchPlaceholder": "Tìm session…",
+        "loading": "Đang tải…",
+        "loadError": "Không tải được danh sách session",
+        "retry": "Thử lại",
+        "connected": "Đã kết nối",
+        "waiting": "Đã gán · đang chờ session nhận",
+        "disconnected": "Mất kết nối",
+        "change": "Đổi session",
+        "unbind": "Gỡ",
+        "rebindTitle": "Đổi session cho card này?",
+        "rebindBody": "{{sessionId}} đang gắn card #{{number}} \"{{cardTitle}}\" — chuyển sang đây?",
+        "unbindTitle": "Gỡ agent khỏi card này?",
+        "unbindBody": "Session {{sessionId}} sẽ ngừng đồng bộ card này và các subtask.",
+        "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "affectedCard": "Card bị ảnh hưởng: #{{number}} {{title}}",
+        "bindFailed": "Không gán được session",
+        "unbindFailed": "Không gỡ được session",
+        "pickerLabel": "Session agent đang chạy"
+      }
     },
     "move": {
       "title": "Di chuyển công việc",
