@@ -234,13 +234,67 @@ describe("task properties in full share mode", () => {
           workspaceId="workspace-1"
         />,
       );
-      // Desktop block (after Labels) + mobile row both render in the DOM;
-      // CSS (lg:hidden / display contents) decides visibility per viewport.
+      // Mobile row and desktop block are responsive counterparts. The mobile
+      // row follows its horizontal properties; the desktop block follows Labels.
       // This suite's i18n mock resolves keys verbatim.
       const buttons = screen.getAllByRole("button", {
         name: "tasks:properties.agents.assign · tasks:properties.agents.runningCount",
       });
+      const markers = screen.getAllByRole("button", {
+        name: "marker:task-1",
+      });
       expect(buttons).toHaveLength(2);
+      expect(markers).toHaveLength(2);
+      expect(
+        markers[0].compareDocumentPosition(buttons[0]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        markers[1].compareDocumentPosition(buttons[1]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        screen
+          .getByText("tasks:properties.labels")
+          .compareDocumentPosition(buttons[1]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    } finally {
+      rosterSessions.list = [];
+    }
+  });
+
+  it("SPEC-2026-11-25: compact modal keeps one Agents row in its own property slot", () => {
+    rosterSessions.list = [
+      {
+        sessionId: "s-1",
+        host: "pi-laptop",
+        title: "live session",
+        cwd: "D:/work",
+        model: "glm",
+        lastSeenAt: new Date().toISOString(),
+        agentPrincipalId: "p1",
+        binding: null,
+      },
+    ];
+    try {
+      render(
+        <TaskPropertiesSidebar
+          taskId="task-1"
+          projectId="project-1"
+          workspaceId="workspace-1"
+          compact
+        />,
+      );
+      const agents = screen.getAllByRole("button", {
+        name: "tasks:properties.agents.assign · tasks:properties.agents.runningCount",
+      });
+      const marker = screen.getByRole("button", { name: "marker:task-1" });
+      expect(agents).toHaveLength(1);
+      expect(
+        marker.compareDocumentPosition(agents[0]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     } finally {
       rosterSessions.list = [];
     }
@@ -269,9 +323,7 @@ describe("task properties in full share mode", () => {
           />
         </ShareCapabilityProvider>,
       );
-      expect(
-        screen.queryByRole("button", { name: /Assign agent/ }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /Assign agent/ })).toBeNull();
     } finally {
       rosterSessions.list = [];
     }

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionRosterEntry } from "@/fetchers/agent-session/agent-session-roster";
 import TaskAgentBindingPanel, {
@@ -28,6 +34,7 @@ const rosterQuery = vi.hoisted(() => ({
   isLoading: false,
   isError: false,
   isStale: true,
+  enabled: undefined as boolean | undefined,
   refetch: vi.fn(async () => ({}) as never),
 }));
 
@@ -65,7 +72,10 @@ vi.mock("@/hooks/queries/task/use-get-task", () => ({
   default: () => ({ data: taskQuery.data }),
 }));
 vi.mock("@/hooks/queries/agent-session/use-get-agent-session-roster", () => ({
-  useGetAgentSessionRoster: () => rosterQuery,
+  useGetAgentSessionRoster: (options?: { enabled?: boolean }) => {
+    rosterQuery.enabled = options?.enabled;
+    return rosterQuery;
+  },
 }));
 vi.mock("@/hooks/mutations/agent-session/use-bind-agent-session", () => ({
   useBindAgentSession: () => bindMutation,
@@ -127,13 +137,14 @@ function session(
   };
 }
 
-const liveLaptop = () =>
+const liveLaptop = (overrides: Partial<AgentSessionRosterEntry> = {}) =>
   session({
     sessionId: "s-laptop-1",
     host: "pi-laptop",
     title: "fix kaneo build",
     cwd: "D:/work/kaneo",
     model: "glm-5.3-flash",
+    ...overrides,
   });
 
 const liveDeskBound = () =>
@@ -156,6 +167,7 @@ beforeEach(() => {
   rosterQuery.isLoading = false;
   rosterQuery.isError = false;
   rosterQuery.isStale = true;
+  rosterQuery.enabled = undefined;
   taskQuery.data = { id: "task-1", number: 1, title: "Panel card" };
   rosterQuery.refetch.mockClear();
   bindMutation.mutateAsync.mockClear();
@@ -165,6 +177,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   document.body.innerHTML = "";
 });
 
@@ -224,6 +237,30 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(screen.getByText("desk work")).toBeVisible();
   });
 
+  it("re-filters an open picker at the nearest local TTL expiry without polling", async () => {
+    vi.useFakeTimers();
+    const now = new Date("2026-11-25T12:00:00.000Z").getTime();
+    vi.setSystemTime(now);
+    rosterQuery.isStale = false;
+    rosterQuery.data = {
+      sessions: [
+        liveLaptop({
+          title: "expires soon",
+          lastSeenAt: new Date(now - 5 * 60_000 + 1_000).toISOString(),
+        }),
+      ],
+    };
+    render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    fireEvent.click(screen.getByRole("button", { name: /Assign agent/ }));
+    expect(screen.getByText("expires soon")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(screen.queryByText("expires soon")).toBeNull();
+    expect(rosterQuery.refetch).not.toHaveBeenCalled();
+  });
+
   it("S1 never offers an offline session for binding", async () => {
     rosterQuery.data = {
       sessions: [
@@ -239,6 +276,23 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Assign agent/ }));
     expect(await screen.findByText("fix kaneo build")).toBeVisible();
     expect(screen.queryByText("sleepy session")).toBeNull();
+  });
+
+  it("initial roster errors show an accessible retry, then preserve S0 on successful empty response", async () => {
+    rosterQuery.data = { sessions: [] };
+    rosterQuery.isError = true;
+    const { container, rerender } = render(
+      <TaskAgentBindingPanel taskId="task-1" layout="block" />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Couldn't load live sessions",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(rosterQuery.refetch).toHaveBeenCalledTimes(1);
+
+    rosterQuery.isError = false;
+    rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("S1 popover shows a spinner row while loading and an error row with retry", async () => {
@@ -335,6 +389,30 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(unbindMutation.mutateAsync).not.toHaveBeenCalled();
   });
 
+  it("bound session title is keyboard-focusable and has a visible focus cue", () => {
+    const title = "a long bound session title that can be truncated";
+    bindingQuery.data = {
+      bound: true,
+      online: true,
+      hostId: "pi-laptop",
+      bindingId: "binding-1",
+      sessionId: "s-laptop-1",
+      bindingGeneration: 1,
+    };
+    rosterQuery.data = { sessions: [liveLaptop({ title })] };
+    render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    const titleControl = screen.getByText(title);
+    expect(titleControl.tagName).toBe("BUTTON");
+    expect((titleControl as HTMLButtonElement).tabIndex).toBe(0);
+    expect(titleControl).toHaveAttribute("title", title);
+    expect(titleControl.className).toContain("focus-visible:outline");
+    expect(titleControl.querySelector("button, a, input")).toBeNull();
+
+    titleControl.focus();
+    fireEvent.keyDown(titleControl, { key: "Enter" });
+    expect(document.activeElement).toBe(titleControl);
+  });
+
   it("S2 shows dot, title, host badge, model, and the online status", () => {
     bindingQuery.data = {
       bound: true,
@@ -356,7 +434,33 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     ).toBeVisible();
   });
 
-  it("S2 falls back to the session id as title when the roster lacks the row", () => {
+  it("a bound card loads matching roster metadata on mount and uses it in the unbind confirm", async () => {
+    bindingQuery.data = {
+      bound: true,
+      online: false,
+      hostId: "pi-laptop",
+      bindingId: "binding-cold",
+      sessionId: "s-laptop-1",
+      bindingGeneration: 4,
+    };
+    rosterQuery.data = {
+      sessions: [
+        liveLaptop({ sessionId: "s-other", title: "wrong session" }),
+        liveLaptop(),
+      ],
+    };
+    render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    expect(rosterQuery.enabled).not.toBe(false);
+    expect(screen.getByText("fix kaneo build")).toBeVisible();
+    expect(screen.getByText("glm-5.3-flash")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unbind" }));
+    expect(
+      await screen.findByText("D:/work/kaneo · glm-5.3-flash · pi-laptop"),
+    ).toBeVisible();
+  });
+
+  it("S2 falls back explicitly when the bound session is absent from the live roster", () => {
     bindingQuery.data = {
       bound: true,
       online: false,
@@ -369,6 +473,12 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     expect(screen.getByText("s-unknown")).toBeVisible();
     expect(screen.getByText("Pi offline")).toBeVisible();
+    expect(screen.getByText("Session details unavailable")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unbind" }));
+    expect(
+      screen.getByText("Unavailable · Unavailable · prodesk-home"),
+    ).toBeVisible();
   });
 
   it("S2 unbind requires a confirm, then deletes with the exact binding identity", async () => {
@@ -414,13 +524,28 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     fireEvent.click(await screen.findByText("fix kaneo build"));
     await vi.waitFor(() => expect(bindMutation.mutateAsync).toHaveBeenCalled());
 
-    // The server flipped the binding but the session has not heartbeated yet.
+    // A stale, online pre-bind generation must not clear pending or claim the
+    // new session connected while the status query is catching up.
     bindingQuery.data = {
       bound: true,
-      online: false,
+      online: true,
       hostId: "pi-laptop",
-      bindingId: "binding-new",
+      bindingId: "binding-old",
       sessionId: "s-laptop-1",
+      bindingGeneration: 1,
+    };
+    rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    expect(
+      screen.getByText("Assigned · waiting for the session"),
+    ).toBeVisible();
+    expect(screen.queryByText("Pi connected")).toBeNull();
+
+    // The server flipped to the mutation's generation, but it has not yet
+    // heartbeated.
+    bindingQuery.data = {
+      ...bindingQuery.data,
+      online: false,
+      bindingId: "binding-new",
       bindingGeneration: 2,
     };
     rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
@@ -436,7 +561,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
   });
 
   it("the pending status ages: waiting until 2x TTL, then disconnected, null once connected", () => {
-    const pending = { bindingGeneration: 2, since: 1_000_000 };
+    const pending = { bindingGeneration: 2, since: 1_000_000, observed: false };
     const base = {
       pending,
       bound: true,
@@ -461,18 +586,28 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(
       resolvePendingStatus({ ...base, online: true, clock: 1_000_000 + 5000 }),
     ).toBeNull();
-    // Generation moved elsewhere — server truth wins, no intermediate state.
+    // A mismatching generation (even a newer one) is not proof that this bind
+    // was observed; a stale unbound cache must keep pending too.
     expect(
       resolvePendingStatus({
         ...base,
         bindingGeneration: 3,
+        online: true,
+        clock: 1_000_000 + 5000,
+      }),
+    ).toBe("waiting");
+    expect(
+      resolvePendingStatus({
+        ...base,
+        pending: { ...pending, observed: true },
+        bindingGeneration: 3,
+        online: true,
         clock: 1_000_000 + 5000,
       }),
     ).toBeNull();
-    // Not bound at all.
     expect(
       resolvePendingStatus({ ...base, bound: false, clock: 1_000_000 + 5000 }),
-    ).toBeNull();
+    ).toBe("waiting");
   });
 
   it("bind failure toasts and leaves the state untouched (S1 stays)", async () => {

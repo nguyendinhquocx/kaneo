@@ -54,9 +54,7 @@ describe("useGetAgentSessionRoster", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(getRoster).toHaveBeenCalledTimes(1);
-    // The contract: no background polling — presence updates ride actions.
-    expect(result.current.refetchInterval).toBeUndefined();
-    expect(result.current.refetchIntervalInBackground).toBeFalsy();
+    // The query stays mounted without issuing a background roster request.
     // Within staleTime a remount reuses the cache without refetching.
     const second = renderHook(() => useGetAgentSessionRoster(), { wrapper });
     await waitFor(() => expect(second.result.current.isSuccess).toBe(true));

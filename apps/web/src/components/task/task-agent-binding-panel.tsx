@@ -46,6 +46,7 @@ export const PENDING_DISCONNECT_MS = 2 * SESSION_TTL_MS;
 export type PendingBind = {
   bindingGeneration: number;
   since: number;
+  observed: boolean;
 };
 
 // Resolution of the intermediate post-bind state (D4): while the new
@@ -60,11 +61,17 @@ export function resolvePendingStatus(input: {
   clock: number;
 }): "waiting" | "disconnected" | null {
   const { pending, bound, bindingGeneration, online, clock } = input;
-  if (!pending || !bound) return null;
-  if (bindingGeneration !== pending.bindingGeneration) return null;
+  if (!pending) return null;
+  const expired = clock - pending.since > PENDING_DISCONNECT_MS;
+  // The status query may still hold the pre-bind generation (including its
+  // online bit) or an unbound cache entry. Keep waiting until it observes the
+  // generation returned by the bind mutation; old presence is not new presence.
+  if (!bound || bindingGeneration !== pending.bindingGeneration) {
+    if (pending.observed) return null;
+    return expired ? "disconnected" : "waiting";
+  }
   if (online) return null;
-  if (clock - pending.since > PENDING_DISCONNECT_MS) return "disconnected";
-  return "waiting";
+  return expired ? "disconnected" : "waiting";
 }
 
 type ConfirmState =
@@ -96,11 +103,9 @@ export default function TaskAgentBindingPanel({
 
   const bindMutation = useBindAgentSession();
   const unbindMutation = useUnbindAgentSession();
-  // Roster fetch policy (D4): eager-once while unbound (S0/S1 decision), and
-  // while the bound popover is open for "change session". No background poll.
-  const roster = useGetAgentSessionRoster({
-    enabled: !bound || pickerOpen,
-  });
+  // Fetch once on mount in both bound and unbound states: unbound needs S0/S1,
+  // while bound needs exact roster metadata for the current session. No poll.
+  const roster = useGetAgentSessionRoster();
 
   const pendingStatus = resolvePendingStatus({
     pending,
@@ -119,19 +124,29 @@ export default function TaskAgentBindingPanel({
     return () => clearInterval(timer);
   }, [pending, pendingStatus]);
 
-  // Retire the intermediate state the moment it resolves: the new generation
-  // reported online, moved on elsewhere, or the card became unbound again.
+  // Retire only after status has observed the mutation's generation. A stale
+  // old/unbound cache cannot resolve the intermediate state; after observation,
+  // a connected status or a later server-side change may retire it.
   useEffect(() => {
-    if (pending && pendingStatus === null) setPending(null);
-  }, [pending, pendingStatus]);
+    if (!pending) return;
+    if (bindingStatus?.bindingGeneration === pending.bindingGeneration) {
+      if (pendingStatus === null) {
+        setPending(null);
+      } else if (!pending.observed) {
+        setPending({ ...pending, observed: true });
+      }
+      return;
+    }
+    if (pending.observed && pendingStatus === null) setPending(null);
+  }, [pending, pendingStatus, bindingStatus?.bindingGeneration]);
 
   const sessions = useMemo(() => {
     const all = roster.data?.sessions ?? [];
     // The roster is TTL-filtered server-side; filter again so a stale cache
-    // can never offer an offline session for binding.
-    const cutoff = Date.now() - SESSION_TTL_MS;
+    // can never offer an offline session for binding or metadata.
+    const cutoff = clock - SESSION_TTL_MS;
     return all
-      .filter((session) => Date.parse(session.lastSeenAt) >= cutoff)
+      .filter((session) => Date.parse(session.lastSeenAt) > cutoff)
       .sort(
         (a, b) =>
           a.host.localeCompare(b.host) ||
@@ -140,15 +155,36 @@ export default function TaskAgentBindingPanel({
     // `clock` keeps the TTL filter honest between fetches.
   }, [roster.data, clock]);
 
+  // A bound session is only considered available when its exact session ID is
+  // still present in the live TTL-filtered roster. Never infer metadata from a
+  // different row or from the binding's host label.
   const boundSession = useMemo(
     () =>
       bindingStatus?.sessionId
-        ? roster.data?.sessions.find(
+        ? sessions.find(
             (session) => session.sessionId === bindingStatus.sessionId,
           )
         : undefined,
-    [roster.data, bindingStatus?.sessionId],
+    [sessions, bindingStatus?.sessionId],
   );
+
+  // Re-filter an open picker locally at the next roster TTL boundary. This is
+  // a one-shot timer, not network polling; changing `clock` schedules the next
+  // nearest expiry if more than one session remains.
+  useEffect(() => {
+    const now = clock;
+    const nextExpiry = (roster.data?.sessions ?? [])
+      .map((session) => Date.parse(session.lastSeenAt) + SESSION_TTL_MS)
+      .filter((expiresAt) => expiresAt > now)
+      .sort((a, b) => a - b)[0];
+    if (nextExpiry === undefined) return;
+    const timer = setTimeout(
+      () => setClock(Date.now()),
+      Math.max(0, nextExpiry - now),
+    );
+    timer.unref?.();
+    return () => clearTimeout(timer);
+  }, [roster.data, clock]);
 
   const filteredSessions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -183,6 +219,7 @@ export default function TaskAgentBindingPanel({
       setPending({
         bindingGeneration: binding.bindingGeneration,
         since: Date.now(),
+        observed: false,
       });
       setClock(Date.now());
     } catch (error) {
@@ -236,8 +273,26 @@ export default function TaskAgentBindingPanel({
     ? t(`tasks:properties.agents.${pendingStatus}`)
     : null;
 
-  // S0: no node at all — pixel-identical unbound card, both variants.
+  // S0: successful empty roster keeps the card pixel-identical. An initial
+  // load failure is different: expose an accessible retry so the empty cache
+  // does not hide a recoverable error.
   if (!bound && sessions.length === 0) {
+    if (roster.isError) {
+      return (
+        <div className="flex min-h-11 items-center justify-between gap-2 px-1.5 text-xs text-muted-foreground">
+          <span role="status">{t("tasks:properties.agents.loadError")}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2"
+            onClick={() => void roster.refetch()}
+          >
+            {t("tasks:properties.agents.retry")}
+          </Button>
+        </div>
+      );
+    }
     return null;
   }
 
@@ -446,12 +501,15 @@ export default function TaskAgentBindingPanel({
   }
 
   // S2: bound — dot/title/host/model + Unbind / Change (focus/tap reachable).
+  const metadataUnavailable = !roster.isLoading && !boundSession;
+  const unavailableLabel = "Unavailable";
   const statusText =
     pendingLabel ??
     (online
       ? t("tasks:detail.agentBinding.online")
       : t("tasks:detail.agentBinding.offline"));
-  const title = boundSession?.title || bindingStatus?.sessionId || "";
+  const title =
+    boundSession?.title || bindingStatus?.sessionId || unavailableLabel;
 
   const panel = (
     <div
@@ -476,12 +534,14 @@ export default function TaskAgentBindingPanel({
         />
         <Tooltip>
           <TooltipTrigger asChild>
-            <span
-              className="min-w-0 truncate text-xs font-semibold"
+            <button
+              type="button"
+              aria-label={title}
+              className="min-w-0 appearance-none truncate rounded-sm border-0 bg-transparent p-0 text-left text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
               title={title}
             >
               {title}
-            </span>
+            </button>
           </TooltipTrigger>
           <TooltipContent>
             <span className="block max-w-64 break-all">{title}</span>
@@ -498,6 +558,11 @@ export default function TaskAgentBindingPanel({
           </span>
         ) : null}
       </div>
+      {metadataUnavailable ? (
+        <span className="text-[10px] text-muted-foreground" role="status">
+          Session details unavailable
+        </span>
+      ) : null}
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <span className="text-[10px] text-muted-foreground" role="status">
           {statusText}
@@ -572,9 +637,9 @@ export default function TaskAgentBindingPanel({
             </span>
             <span>
               {t("tasks:properties.agents.sessionContext", {
-                cwd: boundSession?.cwd || "—",
-                model: boundSession?.model || "—",
-                host: bindingStatus?.hostId || "—",
+                cwd: boundSession?.cwd || unavailableLabel,
+                model: boundSession?.model || unavailableLabel,
+                host: bindingStatus?.hostId || unavailableLabel,
               })}
             </span>
           </div>

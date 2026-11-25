@@ -382,12 +382,9 @@ export default function TaskPropertiesSidebar({
           </div>
         )}
 
-        {/* SPEC-2026-11-25: mobile agents row (S0 renders nothing). Full-page
-            layout hides it at lg where the desktop block takes over; the
-            compact modal keeps it at every width. display:contents keeps the
-            flex-wrap row behavior and lets S0 collapse to nothing. */}
-        {!shareCapability && task && (
-          <div className={compact ? "contents" : "contents lg:hidden"}>
+        {/* Compact modal keeps the Agents row in its compact property slot. */}
+        {compact && !shareCapability && task && (
+          <div className="contents">
             <TaskAgentBindingPanel taskId={task.id} layout="row" />
           </div>
         )}
@@ -610,6 +607,14 @@ export default function TaskPropertiesSidebar({
                 )}
               </div>
             </div>
+
+            {/* Full-page mobile Agents row follows the horizontal property row;
+                desktop has its separate block after Labels below. */}
+            {!shareCapability && task && (
+              <div className="contents lg:hidden">
+                <TaskAgentBindingPanel taskId={task.id} layout="row" />
+              </div>
+            )}
 
             {/* Desktop: Title + stacked properties */}
             <div className="hidden lg:block">
@@ -887,7 +892,7 @@ export default function TaskPropertiesSidebar({
             </div>
 
             {/* SPEC-2026-11-25: desktop agents block after labels (S0 renders nothing). */}
-            {!shareCapability && task && (
+            {!compact && !shareCapability && task && (
               <TaskAgentBindingPanel taskId={task.id} layout="block" />
             )}
           </div>
