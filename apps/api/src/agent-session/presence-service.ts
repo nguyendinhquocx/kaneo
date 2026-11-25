@@ -46,7 +46,10 @@ export type AgentSessionRosterRow = {
   } | null;
 };
 
-async function findActiveBindingWithTask(sessionId: string) {
+async function findActiveBindingWithTask(
+  sessionId: string,
+  agentPrincipalId?: string,
+) {
   const [row] = await db
     .select({
       binding: schema.agentSessionBindingTable,
@@ -62,6 +65,11 @@ async function findActiveBindingWithTask(sessionId: string) {
       and(
         eq(schema.agentSessionBindingTable.sessionId, sessionId),
         eq(schema.agentSessionBindingTable.status, "active"),
+        // Ownership isolation: session ids are a global key space. A binding
+        // is only ever reported back to a caller whose own principal owns it.
+        agentPrincipalId
+          ? eq(schema.agentSessionBindingTable.agentPrincipalId, agentPrincipalId)
+          : undefined,
       ),
     )
     .limit(1);
@@ -107,6 +115,30 @@ export async function announceAgentSessionPresence(input: {
   // own active principal rows, never trusted from the body alone.
   await getOwnedAgentPrincipal(input.userId, input.agentPrincipalId);
 
+  // Ownership isolation (self-review 2026-11-25): session_id is a global
+  // key. A row owned by ANOTHER user's principal may never be overwritten —
+  // that would forge presence and re-route the bound-card lookup. Re-owning
+  // a row with a different principal of the SAME user stays allowed.
+  const [existing] = await db
+    .select({
+      agentPrincipalId: schema.agentSessionPresenceTable.agentPrincipalId,
+    })
+    .from(schema.agentSessionPresenceTable)
+    .where(eq(schema.agentSessionPresenceTable.sessionId, input.sessionId))
+    .limit(1);
+  if (existing && existing.agentPrincipalId !== input.agentPrincipalId) {
+    const [existingPrincipal] = await db
+      .select({ userId: schema.agentPrincipalTable.userId })
+      .from(schema.agentPrincipalTable)
+      .where(eq(schema.agentPrincipalTable.id, existing.agentPrincipalId))
+      .limit(1);
+    if (!existingPrincipal || existingPrincipal.userId !== input.userId) {
+      throw new HTTPException(409, {
+        message: "session is already announced under another account",
+      });
+    }
+  }
+
   await db
     .insert(schema.agentSessionPresenceTable)
     .values({
@@ -133,7 +165,10 @@ export async function announceAgentSessionPresence(input: {
     await sweepStalePresence();
   }
 
-  const found = await findActiveBindingWithTask(input.sessionId);
+  const found = await findActiveBindingWithTask(
+    input.sessionId,
+    input.agentPrincipalId,
+  );
   return { binding: found?.binding ?? null };
 }
 
@@ -176,6 +211,12 @@ export async function listAgentSessionRoster(
           schema.agentSessionPresenceTable.sessionId,
         ),
         eq(schema.agentSessionBindingTable.status, "active"),
+        // Ownership isolation: only surface a binding to a presence row
+        // held by the same principal that owns the binding.
+        eq(
+          schema.agentSessionBindingTable.agentPrincipalId,
+          schema.agentSessionPresenceTable.agentPrincipalId,
+        ),
       ),
     )
     .leftJoin(
@@ -245,6 +286,39 @@ export async function assertSessionPresenceForWebBind(
     throw new HTTPException(403, {
       message:
         "This session is not a known live agent session for your account; it cannot be bound from the web UI.",
+    });
+  }
+}
+
+// A web caller may never force-rebind a sessionId that is actively bound
+// under ANOTHER user's principal (that would revoke someone else's binding).
+// Same-user rebind stays allowed — that is the UI's change-session path.
+// API-key/extension callers keep the legacy behavior (out of T1 scope).
+export async function assertSessionNotBoundToOtherPrincipal(
+  userId: string,
+  sessionId: string,
+): Promise<void> {
+  const [binding] = await db
+    .select({
+      agentPrincipalId: schema.agentSessionBindingTable.agentPrincipalId,
+    })
+    .from(schema.agentSessionBindingTable)
+    .where(
+      and(
+        eq(schema.agentSessionBindingTable.sessionId, sessionId),
+        eq(schema.agentSessionBindingTable.status, "active"),
+      ),
+    )
+    .limit(1);
+  if (!binding) return;
+  const [principal] = await db
+    .select({ userId: schema.agentPrincipalTable.userId })
+    .from(schema.agentPrincipalTable)
+    .where(eq(schema.agentPrincipalTable.id, binding.agentPrincipalId))
+    .limit(1);
+  if (!principal || principal.userId !== userId) {
+    throw new HTTPException(409, {
+      message: "session is actively bound under another account",
     });
   }
 }

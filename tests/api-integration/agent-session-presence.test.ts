@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
@@ -527,6 +527,201 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     );
     expect(shouldSweepPresence(0.019)).toBe(true);
     expect(shouldSweepPresence(0.5)).toBe(false);
+  });
+
+  it("announce cannot take over another user's session id, and its roster never shows the foreign binding", async () => {
+    const owner = await createWorkspaceMember({ role: "admin" });
+    const stranger = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: owner.workspace.id,
+    });
+    const ownerTask = await createTask(project.id, "Owner card", 42);
+    const ownerPrincipal = await seedPrincipal(owner.user.id, "pi-laptop");
+    const strangerPrincipal = await seedPrincipal(stranger.user.id, "pi-laptop");
+    const sharedSessionId = "pi-shared-session-id";
+    const ownerKey = "test-api-key-owner-bind";
+    await createApiKeyForUser(owner.user.id, ownerKey);
+
+    // The owner binds the shared session id through the API-key path WITHOUT
+    // ever announcing it (no presence row for the owner).
+    mockAuthenticatedSessions(owner.user, {});
+    const { app } = createApp();
+    const bindResponse = await app.request("/api/agent-session/bindings", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": ownerKey },
+      body: JSON.stringify({
+        taskId: ownerTask.id,
+        agentPrincipalId: ownerPrincipal.id,
+        sessionId: sharedSessionId,
+      }),
+    });
+    expect(bindResponse.status).toBe(200);
+
+    // The stranger announces the SAME session id with their own principal.
+    mockAuthenticatedSession(stranger.user);
+    const strangerAnnounce = await announce(app, {
+      sessionId: sharedSessionId,
+      agentPrincipalId: strangerPrincipal.id,
+      host: "pi-laptop",
+      title: "stranger session",
+    });
+    expect(strangerAnnounce.status).toBe(200);
+    const strangerPayload = (await strangerAnnounce.json()) as {
+      binding: unknown;
+    };
+    // No foreign binding leaks through the announce response.
+    expect(strangerPayload.binding).toBeNull();
+
+    // The stranger's roster shows the session but NEVER the owner's binding.
+    const strangerRoster = await app.request("/api/agent-session/sessions/roster");
+    const { sessions } = (await strangerRoster.json()) as {
+      sessions: Array<{ sessionId: string; binding: unknown }>;
+    };
+    const row = sessions.find((item) => item.sessionId === sharedSessionId);
+    expect(row).toBeDefined();
+    expect(row!.binding).toBeNull();
+
+    // The owner has no presence row yet (never announced) — their roster
+    // shows nothing for this session id.
+    mockAuthenticatedSession(owner.user);
+    const ownerRosterBefore = await app.request("/api/agent-session/sessions/roster");
+    const ownerSessionsBefore = (await ownerRosterBefore.json()) as {
+      sessions: Array<{ sessionId: string }>;
+    };
+    expect(
+      ownerSessionsBefore.sessions.some((item) => item.sessionId === sharedSessionId),
+    ).toBe(false);
+
+    // Once the owner's extension heartbeats its binding, the piggyback
+    // upserts the presence row under the OWNER's principal (reclaiming the
+    // session-id slot) and the owner then sees their own binding.
+    mockAuthenticatedSessions(owner.user, {});
+    const bound = (await bindResponse.json()) as {
+      bindingId: string;
+      bindingGeneration: number;
+    };
+    const heartbeat = await app.request(
+      `/api/agent-session/bindings/${bound.bindingId}/heartbeat`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": ownerKey },
+        body: JSON.stringify({
+          sessionId: sharedSessionId,
+          generation: bound.bindingGeneration,
+        }),
+      },
+    );
+    expect(heartbeat.status).toBe(200);
+
+    mockAuthenticatedSession(owner.user);
+    const ownerRoster = await app.request("/api/agent-session/sessions/roster");
+    const ownerSessions = (await ownerRoster.json()) as {
+      sessions: Array<{ sessionId: string; binding: { taskId: string } | null }>;
+    };
+    const ownerRow = ownerSessions.sessions.find(
+      (item) => item.sessionId === sharedSessionId,
+    );
+    expect(ownerRow).toBeDefined();
+    expect(ownerRow!.binding).not.toBeNull();
+    expect(ownerRow!.binding!.taskId).toBe(ownerTask.id);
+  });
+
+  it("announce rejects overwriting a presence row owned by another account with 409", async () => {
+    const owner = await createWorkspaceMember({ role: "admin" });
+    const stranger = await createWorkspaceMember({ role: "admin" });
+    const ownerPrincipal = await seedPrincipal(owner.user.id, "pi-laptop");
+    const strangerPrincipal = await seedPrincipal(stranger.user.id, "pi-laptop");
+
+    mockAuthenticatedSession(owner.user);
+    const { app } = createApp();
+    const first = await announce(app, {
+      sessionId: "pi-owned-session",
+      agentPrincipalId: ownerPrincipal.id,
+      host: "pi-laptop",
+      title: "owner session",
+    });
+    expect(first.status).toBe(200);
+
+    mockAuthenticatedSession(stranger.user);
+    const takeover = await announce(app, {
+      sessionId: "pi-owned-session",
+      agentPrincipalId: strangerPrincipal.id,
+      host: "pi-laptop",
+      title: "stranger session",
+    });
+    expect(takeover.status).toBe(409);
+
+    // The row still belongs to the original owner.
+    const [row] = await db
+      .select()
+      .from(schema.agentSessionPresenceTable)
+      .where(eq(schema.agentSessionPresenceTable.sessionId, "pi-owned-session"));
+    expect(row!.agentPrincipalId).toBe(ownerPrincipal.id);
+    expect(row!.title).toBe("owner session");
+  });
+
+  it("a web caller cannot force-rebind a session actively bound by another account", async () => {
+    const owner = await createWorkspaceMember({ role: "admin" });
+    const stranger = await createWorkspaceMember({ role: "admin" });
+    const { project: ownerProject } = await createProjectFixture({
+      workspaceId: owner.workspace.id,
+    });
+    const { project: strangerProject } = await createProjectFixture({
+      workspaceId: stranger.workspace.id,
+    });
+    const ownerTask = await createTask(ownerProject.id, "Owner bound card");
+    const strangerTask = await createTask(strangerProject.id, "Stranger card");
+    const ownerPrincipal = await seedPrincipal(owner.user.id, "pi-laptop");
+    const strangerPrincipal = await seedPrincipal(stranger.user.id, "pi-laptop");
+    const ownerKey = "test-api-key-forcebind-owner";
+    await createApiKeyForUser(owner.user.id, ownerKey);
+
+    mockAuthenticatedSessions(owner.user, {});
+    const { app } = createApp();
+    const bindResponse = await app.request("/api/agent-session/bindings", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": ownerKey },
+      body: JSON.stringify({
+        taskId: ownerTask.id,
+        agentPrincipalId: ownerPrincipal.id,
+        sessionId: "pi-forcebind-target",
+      }),
+    });
+    expect(bindResponse.status).toBe(200);
+
+    // The stranger announces the session id (owner never announced, so the
+    // presence insert succeeds) — then their web bind must be refused.
+    mockAuthenticatedSession(stranger.user);
+    const strangerAnnounce = await announce(app, {
+      sessionId: "pi-forcebind-target",
+      agentPrincipalId: strangerPrincipal.id,
+      host: "pi-laptop",
+    });
+    expect(strangerAnnounce.status).toBe(200);
+
+    const forceBind = await app.request("/api/agent-session/bindings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        taskId: strangerTask.id,
+        agentPrincipalId: strangerPrincipal.id,
+        sessionId: "pi-forcebind-target",
+      }),
+    });
+    expect(forceBind.status).toBe(409);
+
+    // The owner's binding survives untouched.
+    const [binding] = await db
+      .select()
+      .from(schema.agentSessionBindingTable)
+      .where(
+        and(
+          eq(schema.agentSessionBindingTable.sessionId, "pi-forcebind-target"),
+          eq(schema.agentSessionBindingTable.status, "active"),
+        ),
+      );
+    expect(binding!.agentPrincipalId).toBe(ownerPrincipal.id);
+    expect(binding!.taskId).toBe(ownerTask.id);
   });
 
   it("an announce whose sweep roll triggers deletes ancient rows inline", async () => {

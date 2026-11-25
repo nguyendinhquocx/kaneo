@@ -50,6 +50,7 @@ import {
 } from "./delivery-service";
 import {
   announceAgentSessionPresence,
+  assertSessionNotBoundToOtherPrincipal,
   assertSessionPresenceForWebBind,
   listAgentSessionRoster,
 } from "./presence-service";
@@ -243,6 +244,9 @@ app.post(
     // bind still works before the first announce tick lands.
     if (!requestActorIsAgent(c)) {
       await assertSessionPresenceForWebBind(getUserId(c), body.sessionId);
+      // And a web caller may never revoke someone else's active binding by
+      // rebinding a colliding session id (ownership isolation).
+      await assertSessionNotBoundToOtherPrincipal(getUserId(c), body.sessionId);
     }
     const binding = await bindAgentSession({
       userId: getUserId(c),
