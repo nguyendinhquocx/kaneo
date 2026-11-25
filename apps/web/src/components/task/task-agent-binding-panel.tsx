@@ -502,7 +502,7 @@ export default function TaskAgentBindingPanel({
 
   // S2: bound — dot/title/host/model + Unbind / Change (focus/tap reachable).
   const metadataUnavailable = !roster.isLoading && !boundSession;
-  const unavailableLabel = "Unavailable";
+  const unavailableLabel = t("tasks:properties.agents.sessionDetailsUnavailable");
   const statusText =
     pendingLabel ??
     (online
@@ -560,7 +560,7 @@ export default function TaskAgentBindingPanel({
       </div>
       {metadataUnavailable ? (
         <span className="text-[10px] text-muted-foreground" role="status">
-          Session details unavailable
+          {t("tasks:properties.agents.sessionDetailsUnavailable")}
         </span>
       ) : null}
       <div className="flex min-w-0 flex-wrap items-center gap-1">

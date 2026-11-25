@@ -1854,6 +1854,7 @@
         "unbindTitle": "De agent van deze kaart loskoppelen?",
         "unbindBody": "Sessie {{sessionId}} stopt met het synchroniseren van deze kaart en de subtaken.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Sessiegegevens niet beschikbaar",
         "affectedCard": "Betroffen kaart: #{{number}} {{title}}",
         "bindFailed": "Kan de sessie niet koppelen",
         "unbindFailed": "Kan de sessie niet ontkoppelen",

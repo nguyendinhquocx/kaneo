@@ -1854,6 +1854,7 @@
         "unbindTitle": "Gỡ agent khỏi card này?",
         "unbindBody": "Session {{sessionId}} sẽ ngừng đồng bộ card này và các subtask.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Chưa có thông tin chi tiết phiên",
         "affectedCard": "Card bị ảnh hưởng: #{{number}} {{title}}",
         "bindFailed": "Không gán được session",
         "unbindFailed": "Không gỡ được session",

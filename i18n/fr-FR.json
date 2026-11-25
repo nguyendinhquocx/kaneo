@@ -1854,6 +1854,7 @@
         "unbindTitle": "Détacher l'agent de cette carte ?",
         "unbindBody": "La session {{sessionId}} cessera de synchroniser cette carte et ses sous-tâches.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Détails de la session indisponibles",
         "affectedCard": "Carte concernée : #{{number}} {{title}}",
         "bindFailed": "Impossible de rattacher la session",
         "unbindFailed": "Impossible de détacher la session",

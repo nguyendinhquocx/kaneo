@@ -1854,6 +1854,7 @@
         "unbindTitle": "¿Desvincular el agente de esta tarjeta?",
         "unbindBody": "La sesión {{sessionId}} dejará de sincronizar esta tarjeta y sus subtareas.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Detalles de la sesión no disponibles",
         "affectedCard": "Tarjeta afectada: #{{number}} {{title}}",
         "bindFailed": "No se pudo vincular la sesión",
         "unbindFailed": "No se pudo desvincular la sesión",

@@ -1854,6 +1854,7 @@
         "unbindTitle": "이 카드에서 에이전트 연결을 해제할까요?",
         "unbindBody": "세션 {{sessionId}}은(는) 이 카드와 하위 작업 동기화를 중단합니다.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "세션 정보를 사용할 수 없습니다",
         "affectedCard": "영향 받는 카드: #{{number}} {{title}}",
         "bindFailed": "세션을 연결하지 못했습니다",
         "unbindFailed": "세션 연결 해제에 실패했습니다",

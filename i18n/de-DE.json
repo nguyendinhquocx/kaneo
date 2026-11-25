@@ -1854,6 +1854,7 @@
         "unbindTitle": "Agent von dieser Karte trennen?",
         "unbindBody": "Sitzung {{sessionId}} synchronisiert diese Karte und ihre Unteraufgaben nicht mehr.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Sitzungsdetails nicht verfügbar",
         "affectedCard": "Betroffene Karte: #{{number}} {{title}}",
         "bindFailed": "Sitzung konnte nicht gebunden werden",
         "unbindFailed": "Sitzung konnte nicht getrennt werden",

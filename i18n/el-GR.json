@@ -1854,6 +1854,7 @@
         "unbindTitle": "Αποσύνδεση του agent από αυτή την κάρτα;",
         "unbindBody": "Η συνεδρία {{sessionId}} θα σταματήσει τον συγχρονισμό αυτής της κάρτας και των υποεργιών της.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Δεν υπάρχουν διαθέσιμες λεπτομέρειες συνεδρίας",
         "affectedCard": "Επηρεζόμενη κάρτα: #{{number}} {{title}}",
         "bindFailed": "Δεν έγινε η σύνδεση της συνεδρίας",
         "unbindFailed": "Δεν έγινε η αποσύνδεση της συνεδρίας",

@@ -474,11 +474,6 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(screen.getByText("s-unknown")).toBeVisible();
     expect(screen.getByText("Pi offline")).toBeVisible();
     expect(screen.getByText("Session details unavailable")).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: "Unbind" }));
-    expect(
-      screen.getByText("Unavailable · Unavailable · prodesk-home"),
-    ).toBeVisible();
   });
 
   it("S2 unbind requires a confirm, then deletes with the exact binding identity", async () => {

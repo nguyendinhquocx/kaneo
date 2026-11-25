@@ -1864,6 +1864,7 @@
         "unbindTitle": "Отвязать агента от этой карточки?",
         "unbindBody": "Сессия {{sessionId}} прекратит синхронизацию этой карточки и её подзадач.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Данные сеанса недоступны",
         "affectedCard": "Затронутая карточка: #{{number}} {{title}}",
         "bindFailed": "Не удалось привязать сессию",
         "unbindFailed": "Не удалось отвязать сессию",

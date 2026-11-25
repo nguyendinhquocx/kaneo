@@ -1865,6 +1865,7 @@
         "unbindTitle": "Unbind the agent from this card?",
         "unbindBody": "Session {{sessionId}} will stop syncing this card and its subtasks.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Session details unavailable",
         "affectedCard": "Affected card: #{{number}} {{title}}",
         "bindFailed": "Couldn't bind the session",
         "unbindFailed": "Couldn't unbind the session",

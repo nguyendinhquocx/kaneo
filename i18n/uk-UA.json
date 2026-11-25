@@ -1856,6 +1856,7 @@
         "unbindTitle": "Відв'язати агента від цієї картки?",
         "unbindBody": "Сесія {{sessionId}} припинить синхронізацію цієї картки та її підзадач.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Деталі сеансу недоступні",
         "affectedCard": "Заторкнута картка: #{{number}} {{title}}",
         "bindFailed": "Не вдалося прив'язати сесію",
         "unbindFailed": "Не вдалося відв'язати сесію",

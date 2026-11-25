@@ -1854,6 +1854,7 @@
         "unbindTitle": "Да го одврзам агентот од оваа картичка?",
         "unbindBody": "Сесијата {{sessionId}} ќе престане да ја синхронизира оваа картичка и нејзините подзадачи.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Деталите за сесијата не се достапни",
         "affectedCard": "Засегната картичка: #{{number}} {{title}}",
         "bindFailed": "Сесијата не се поврза",
         "unbindFailed": "Сесијата не се одврза",

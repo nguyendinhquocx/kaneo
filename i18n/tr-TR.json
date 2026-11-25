@@ -1854,6 +1854,7 @@
         "unbindTitle": "Ajan bu karttan ayrılsın mı?",
         "unbindBody": "{{sessionId}} oturumu bu kartı ve alt görevlerini senkronize etmeyi bırakacak.",
         "sessionContext": "{{cwd}} · {{model}} · {{host}}",
+        "sessionDetailsUnavailable": "Oturum ayrıntıları kullanılamıyor",
         "affectedCard": "Etkilenen kart: #{{number}} {{title}}",
         "bindFailed": "Oturum bağlanamadı",
         "unbindFailed": "Oturum ayrılamadı",
