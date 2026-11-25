@@ -12,6 +12,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  seedSessionPresence,
 } from "./helpers/fixtures";
 
 // SPEC-2026-11-10-kaneo-card-agent-collaboration T4: session binding +
@@ -37,6 +38,12 @@ async function bindCard(
   userId: string,
 ) {
   const principal = await seedPrincipal(userId);
+  // SPEC-2026-11-25 D3: the session must have presence before a web bind.
+  await seedSessionPresence({
+    userId,
+    sessionId: "pi-session-a",
+    agentPrincipalId: principal.id,
+  });
   const response = await app.request("/api/agent-session/bindings", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -624,6 +631,11 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
     // The root binding owns its whole live subtree; no second session may
     // bind directly to a descendant and race the root writer.
     const overlappingPrincipal = await seedPrincipal(admin.user.id);
+    await seedSessionPresence({
+      userId: admin.user.id,
+      sessionId: "pi-session-child",
+      agentPrincipalId: overlappingPrincipal.id,
+    });
     const overlappingBind = await app.request("/api/agent-session/bindings", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -755,6 +767,11 @@ describe("API integration: agent session card binding (SPEC T4)", () => {
       })
       .returning({ id: schema.taskRunTable.id });
     const livePrincipal = await seedPrincipal(admin.user.id);
+    await seedSessionPresence({
+      userId: admin.user.id,
+      sessionId: "pi-session-z",
+      agentPrincipalId: livePrincipal.id,
+    });
     const bindDuringRun = await app.request("/api/agent-session/bindings", {
       method: "POST",
       headers: { "content-type": "application/json" },

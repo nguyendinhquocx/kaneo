@@ -1959,18 +1959,16 @@ export const agentSessionBindingTable = pgTable(
     revokedAt: timestamp("revoked_at", { mode: "date" }),
     revokedReason: text("revoked_reason"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
     revision: integer("revision").notNull().default(1),
   },
   (table) => [
-    uniqueIndex("agent_session_binding_active_task_unique").on(
-      table.taskId,
-    ).where(sql`status = 'active'`),
-    uniqueIndex("agent_session_binding_active_session_unique").on(
-      table.sessionId,
-    ).where(sql`status = 'active'`),
+    uniqueIndex("agent_session_binding_active_task_unique")
+      .on(table.taskId)
+      .where(sql`status = 'active'`),
+    uniqueIndex("agent_session_binding_active_session_unique")
+      .on(table.sessionId)
+      .where(sql`status = 'active'`),
     index("agent_session_binding_principal_idx").on(table.agentPrincipalId),
     index("agent_session_binding_session_idx").on(table.sessionId),
   ],
@@ -2002,9 +2000,7 @@ export const agentSessionDeliveryTable = pgTable(
     enqueuedAt: timestamp("enqueued_at", { mode: "date" }),
     expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => [
     unique("agent_session_delivery_action_key_unique").on(
@@ -2012,6 +2008,37 @@ export const agentSessionDeliveryTable = pgTable(
       table.clientActionKey,
     ),
     index("agent_session_delivery_state_idx").on(table.bindingId, table.state),
+  ],
+);
+
+// SPEC-2026-11-25-kaneo-ui-agent-binding D1: extension self-registration so
+// the web UI can offer unbound live sessions for bind-from-card. Deliberately
+// free of foreign keys (tasks especially): presence is ephemeral discovery
+// data; every read TTL-filters on last_seen_at and a lazy sweep removes rows
+// stale for 7 days. When bound, the heartbeat piggybacks this upsert instead
+// of the extension announcing, so a restored/resumed bound session still
+// shows up in the picker without ever announcing.
+export const agentSessionPresenceTable = pgTable(
+  "agent_session_presence",
+  {
+    sessionId: text("session_id").primaryKey(),
+    agentPrincipalId: text("agent_principal_id").notNull(),
+    host: text("host").notNull(),
+    title: text("title").notNull().default(""),
+    cwd: text("cwd").notNull().default(""),
+    model: text("model").notNull().default(""),
+    firstSeenAt: timestamp("first_seen_at", {
+      mode: "date",
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+    lastSeenAt: timestamp("last_seen_at", { mode: "date", withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("agent_session_presence_last_seen_idx").on(table.lastSeenAt),
   ],
 );
 

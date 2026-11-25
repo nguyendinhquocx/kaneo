@@ -29,6 +29,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  seedSessionPresence,
 } from "./helpers/fixtures";
 
 const pngSignature = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -49,6 +50,12 @@ async function bindCard(
     })
     .returning();
   if (!principal) throw new Error("Principal fixture failed to create");
+  // SPEC-2026-11-25 D3: presence required before a web bind.
+  await seedSessionPresence({
+    userId,
+    sessionId: "pi-session-live",
+    agentPrincipalId: principal.id,
+  });
   const response = await app.request("/api/agent-session/bindings", {
     method: "POST",
     headers: { "content-type": "application/json" },

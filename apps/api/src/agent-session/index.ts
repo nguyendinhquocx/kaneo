@@ -48,6 +48,11 @@ import {
   getLatestDeliveryForComment,
   queueCommentDelivery,
 } from "./delivery-service";
+import {
+  announceAgentSessionPresence,
+  assertSessionPresenceForWebBind,
+  listAgentSessionRoster,
+} from "./presence-service";
 
 const app = new Hono();
 
@@ -73,7 +78,9 @@ async function authorizeBindingWorkspace(c: Context, next: Next) {
   const [binding] = await db
     .select({ projectId: schema.agentSessionBindingTable.projectId })
     .from(schema.agentSessionBindingTable)
-    .where(eq(schema.agentSessionBindingTable.id, c.req.param("bindingId") ?? ""))
+    .where(
+      eq(schema.agentSessionBindingTable.id, c.req.param("bindingId") ?? ""),
+    )
     .limit(1);
   if (!binding) throw new HTTPException(409, { message: "stale_binding" });
   const [project] = await db
@@ -87,9 +94,9 @@ async function authorizeBindingWorkspace(c: Context, next: Next) {
 }
 
 async function authorizeBindTask(c: Context, next: Next) {
-  const body = (c.req as unknown as { valid: (target: string) => unknown }).valid(
-    "json",
-  ) as { taskId?: string };
+  const body = (
+    c.req as unknown as { valid: (target: string) => unknown }
+  ).valid("json") as { taskId?: string };
   const [task] = await db
     .select({ projectId: schema.taskTable.projectId })
     .from(schema.taskTable)
@@ -107,7 +114,10 @@ async function authorizeBindTask(c: Context, next: Next) {
 }
 
 async function authorizeCardBody(c: Context, next: Next) {
-  const body = (await c.req.raw.clone().json().catch(() => ({}))) as Record<string, unknown>;
+  const body = (await c.req.raw
+    .clone()
+    .json()
+    .catch(() => ({}))) as Record<string, unknown>;
   const bindingId = typeof body.bindingId === "string" ? body.bindingId : "";
   const [binding] = await db
     .select({ projectId: schema.agentSessionBindingTable.projectId })
@@ -152,7 +162,9 @@ const getUserId = (c: { get: (key: string) => unknown }) =>
 
 async function assertBindingPrincipalOwner(userId: string, bindingId: string) {
   const [binding] = await db
-    .select({ agentPrincipalId: schema.agentSessionBindingTable.agentPrincipalId })
+    .select({
+      agentPrincipalId: schema.agentSessionBindingTable.agentPrincipalId,
+    })
     .from(schema.agentSessionBindingTable)
     .where(eq(schema.agentSessionBindingTable.id, bindingId))
     .limit(1);
@@ -224,6 +236,14 @@ app.post(
   authorizeBindTask,
   async (c) => {
     const body = c.req.valid("json");
+    // SPEC-2026-11-25 D3: a browser/session-cookie caller may only bind a
+    // session that its own extension announced recently — arbitrary session
+    // strings cannot be targeted from the web UI. API-key/extension callers
+    // (requestActorIsAgent) keep the old path so a cold-start /kaneo-card
+    // bind still works before the first announce tick lands.
+    if (!requestActorIsAgent(c)) {
+      await assertSessionPresenceForWebBind(getUserId(c), body.sessionId);
+    }
     const binding = await bindAgentSession({
       userId: getUserId(c),
       taskId: body.taskId,
@@ -231,6 +251,56 @@ app.post(
       sessionId: body.sessionId,
     });
     return c.json(binding);
+  },
+);
+
+// SPEC-2026-11-25 T1: presence announce + roster. Both are user-scoped
+// (no workspace) like /bindings; the announce principal is proved against
+// the caller's own active principal rows.
+app.post(
+  "/sessions/announce",
+  describeRoute({
+    operationId: "announceAgentSession",
+    tags: ["Agent Sessions"],
+    description:
+      "Unbound Pi session self-registers presence; returns an active binding for this session when one exists so the extension can adopt it",
+  }),
+  validator(
+    "json",
+    v.object({
+      sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+      agentPrincipalId: v.pipe(v.string(), v.minLength(1)),
+      host: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+      title: v.optional(v.pipe(v.string(), v.maxLength(300))),
+      cwd: v.optional(v.pipe(v.string(), v.maxLength(500))),
+      model: v.optional(v.pipe(v.string(), v.maxLength(200))),
+    }),
+  ),
+  async (c) => {
+    const body = c.req.valid("json");
+    const result = await announceAgentSessionPresence({
+      userId: getUserId(c),
+      sessionId: body.sessionId,
+      agentPrincipalId: body.agentPrincipalId,
+      host: body.host,
+      title: body.title,
+      cwd: body.cwd,
+      model: body.model,
+    });
+    return c.json(result);
+  },
+);
+
+app.get(
+  "/sessions/roster",
+  describeRoute({
+    operationId: "listAgentSessionRoster",
+    tags: ["Agent Sessions"],
+    description:
+      "Live (TTL-filtered) agent sessions of the authenticated user with their active binding when bound",
+  }),
+  async (c) => {
+    return c.json(await listAgentSessionRoster(getUserId(c)));
   },
 );
 
@@ -336,7 +406,15 @@ app.get(
     v.object({
       sessionId: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
       generation: queryGeneration,
-      waitMs: v.optional(v.pipe(v.string(), v.transform(Number), v.integer(), v.minValue(0), v.maxValue(25_000))),
+      waitMs: v.optional(
+        v.pipe(
+          v.string(),
+          v.transform(Number),
+          v.integer(),
+          v.minValue(0),
+          v.maxValue(25_000),
+        ),
+      ),
     }),
   ),
   async (c) => {
@@ -527,7 +605,10 @@ app.post(
 
 app.post(
   "/card/subtasks",
-  describeRoute({ operationId: "kaneoCardCreateSubtask", tags: ["Agent Card"] }),
+  describeRoute({
+    operationId: "kaneoCardCreateSubtask",
+    tags: ["Agent Card"],
+  }),
   validator(
     "json",
     v.object({
@@ -742,7 +823,10 @@ app.post(
 
 app.post(
   "/card/comments/create",
-  describeRoute({ operationId: "kaneoCardCreateComment", tags: ["Agent Card"] }),
+  describeRoute({
+    operationId: "kaneoCardCreateComment",
+    tags: ["Agent Card"],
+  }),
   validator(
     "json",
     v.object({

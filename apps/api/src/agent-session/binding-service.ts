@@ -7,9 +7,10 @@
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
-import { resolveTaskSubtreeScope } from "../share/task-share-access";
 import { isTaskAgentControlled } from "../share/full-access";
+import { resolveTaskSubtreeScope } from "../share/task-share-access";
 import { assertUserWorkspacePermission } from "../utils/require-workspace-permission";
+import { upsertPresenceFromHeartbeat } from "./presence-service";
 
 export const STALE_BINDING_CODE = "stale_binding";
 
@@ -18,7 +19,8 @@ const staleBinding = () =>
     message: STALE_BINDING_CODE,
   });
 
-export type AgentSessionBinding = typeof schema.agentSessionBindingTable.$inferSelect;
+export type AgentSessionBinding =
+  typeof schema.agentSessionBindingTable.$inferSelect;
 type BindingTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type BindingExecutor = typeof db | BindingTransaction;
 
@@ -100,7 +102,6 @@ async function assertNoLiveFormalRun(
   }
 }
 
-
 function presentBinding(binding: AgentSessionBinding) {
   return {
     bindingId: binding.id,
@@ -141,7 +142,10 @@ export async function bindAgentSession(input: {
     // where a formal run claims after the preflight but before the bind row
     // inserts.
     const [lockedTask] = await tx
-      .select({ id: schema.taskTable.id, projectId: schema.taskTable.projectId })
+      .select({
+        id: schema.taskTable.id,
+        projectId: schema.taskTable.projectId,
+      })
       .from(schema.taskTable)
       .where(eq(schema.taskTable.id, input.taskId))
       .for("update")
@@ -167,7 +171,9 @@ export async function bindAgentSession(input: {
           ),
         ),
       );
-    const priorTaskIds = [...new Set(candidateBindings.map((item) => item.taskId))]
+    const priorTaskIds = [
+      ...new Set(candidateBindings.map((item) => item.taskId)),
+    ]
       .filter((id) => id !== input.taskId)
       .sort();
     if (priorTaskIds.length > 0) {
@@ -355,7 +361,10 @@ async function loadOwnedBinding(
   } catch (error) {
     // Deleted, moved, inaccessible, or newly formal-run-controlled cards all
     // become the same typed stale-binding response, never generic task work.
-    if (error instanceof HTTPException && [403, 404, 409].includes(error.status)) {
+    if (
+      error instanceof HTTPException &&
+      [403, 404, 409].includes(error.status)
+    ) {
       throw staleBinding();
     }
     throw error;
@@ -391,12 +400,7 @@ export async function unbindAgentSession(input: {
     input.generation,
   );
   await db.transaction(async (tx) => {
-    await lockBindingIdentity(
-      tx,
-      binding,
-      input.sessionId,
-      input.generation,
-    );
+    await lockBindingIdentity(tx, binding, input.sessionId, input.generation);
     await tx
       .update(schema.agentSessionDeliveryTable)
       .set({ state: "stale", updatedAt: new Date() })
@@ -428,7 +432,10 @@ export async function unbindAgentSession(input: {
         and(
           eq(schema.agentSessionBindingTable.id, binding.id),
           eq(schema.agentSessionBindingTable.status, "active"),
-          eq(schema.agentSessionBindingTable.bindingGeneration, binding.bindingGeneration),
+          eq(
+            schema.agentSessionBindingTable.bindingGeneration,
+            binding.bindingGeneration,
+          ),
         ),
       )
       .returning({ id: schema.agentSessionBindingTable.id });
@@ -450,12 +457,7 @@ export async function heartbeatAgentSessionBinding(input: {
     input.generation,
   );
   return db.transaction(async (tx) => {
-    await lockBindingIdentity(
-      tx,
-      binding,
-      input.sessionId,
-      input.generation,
-    );
+    await lockBindingIdentity(tx, binding, input.sessionId, input.generation);
     const [row] = await tx
       .update(schema.agentSessionBindingTable)
       .set({ lastHeartbeatAt: new Date(), updatedAt: new Date() })
@@ -463,12 +465,20 @@ export async function heartbeatAgentSessionBinding(input: {
         and(
           eq(schema.agentSessionBindingTable.id, binding.id),
           eq(schema.agentSessionBindingTable.status, "active"),
-          eq(schema.agentSessionBindingTable.bindingGeneration, input.generation),
+          eq(
+            schema.agentSessionBindingTable.bindingGeneration,
+            input.generation,
+          ),
           eq(schema.agentSessionBindingTable.sessionId, input.sessionId),
         ),
       )
       .returning();
     if (!row) throw staleBinding();
+    // SPEC-2026-11-25 D2: the heartbeat piggybacks presence so bound sessions
+    // stay in the roster without an announce loop. UPSERT covers a session
+    // that resumed already bound (never announced); same transaction, so any
+    // failure rolls back together with the heartbeat timestamp.
+    await upsertPresenceFromHeartbeat(tx, row);
     return presentBinding(row);
   });
 }
@@ -498,7 +508,10 @@ async function loadScopedBinding(input: {
     // formal agent-control) stale the binding instead of leaking a 404 or
     // falling back to an unscoped task route. Unexpected infrastructure
     // failures still surface normally.
-    if (error instanceof HTTPException && [403, 404, 409].includes(error.status)) {
+    if (
+      error instanceof HTTPException &&
+      [403, 404, 409].includes(error.status)
+    ) {
       throw staleBinding();
     }
     throw error;
@@ -545,7 +558,9 @@ export async function findActiveBindingForTask(taskId: string) {
           eq(schema.taskRelationTable.relationType, "subtask"),
         ),
       );
-    const parentIds = [...new Set(parentEdges.map((edge) => edge.sourceTaskId))];
+    const parentIds = [
+      ...new Set(parentEdges.map((edge) => edge.sourceTaskId)),
+    ];
     if (parentIds.length === 0) return null;
     const sameProjectParents = await db
       .select({ id: schema.taskTable.id })

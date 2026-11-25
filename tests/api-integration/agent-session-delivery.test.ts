@@ -11,6 +11,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  seedSessionPresence,
 } from "./helpers/fixtures";
 
 // SPEC-2026-11-10-kaneo-card-agent-collaboration T5: durable comment delivery.
@@ -75,6 +76,12 @@ async function bindTask(
   taskId: string,
 ) {
   const principal = await seedPrincipal(userId);
+  // SPEC-2026-11-25 D3: the session must have presence before a web bind.
+  await seedSessionPresence({
+    userId,
+    sessionId: "pi-delivery-session",
+    agentPrincipalId: principal.id,
+  });
   const response = await app.request("/api/agent-session/bindings", {
     method: "POST",
     headers: { "content-type": "application/json" },

@@ -106,6 +106,7 @@ export async function resetTestDatabase() {
         "share_link",
         "execution_manifest",
         "agent_principal",
+        "agent_session_presence",
         "github_integration",
         "integration",
         "invitation",

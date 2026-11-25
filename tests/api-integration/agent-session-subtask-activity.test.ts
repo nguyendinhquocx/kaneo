@@ -8,6 +8,7 @@ import { resetTestDatabase } from "./helpers/database";
 import {
   createProjectFixture,
   createWorkspaceMember,
+  seedSessionPresence,
 } from "./helpers/fixtures";
 
 type BindingContext = {
@@ -99,6 +100,12 @@ async function setupBoundSubtask(
   if (!principal) throw new Error("Principal fixture failed to create");
 
   const sessionId = `pi-child-activity-session-${randomUUID()}`;
+  // SPEC-2026-11-25 D3: presence required before a web bind.
+  await seedSessionPresence({
+    userId: admin.user.id,
+    sessionId,
+    agentPrincipalId: principal.id,
+  });
   const bind = await app.request("/api/agent-session/bindings", {
     method: "POST",
     headers: { "content-type": "application/json" },

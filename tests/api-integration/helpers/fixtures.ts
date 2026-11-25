@@ -126,3 +126,25 @@ export async function getTaskContentRevision(taskId: string): Promise<number> {
   }
   return row.contentRevision;
 }
+
+// SPEC-2026-11-25-kaneo-ui-agent-binding D3: a web (session-cookie) bind now
+// requires the target session to have announced presence for the caller.
+// Integration tests that bind through the session path seed the presence row
+// first, mirroring a real unbound session that announced at tick 0.
+export async function seedSessionPresence(input: {
+  userId: string;
+  sessionId: string;
+  agentPrincipalId: string;
+  host?: string;
+  title?: string;
+}) {
+  await db
+    .insert(schema.agentSessionPresenceTable)
+    .values({
+      sessionId: input.sessionId,
+      agentPrincipalId: input.agentPrincipalId,
+      host: input.host ?? "test-host",
+      title: input.title ?? "",
+    })
+    .onConflictDoNothing();
+}
