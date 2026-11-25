@@ -62,11 +62,25 @@ vi.mock("@/hooks/queries/project/use-get-projects", () => ({
 vi.mock("@/hooks/queries/agent-session/use-get-task-binding-status", () => ({
   useGetTaskBindingStatus: () => ({ data: { bound: false, online: false } }),
 }));
+const rosterSessions = vi.hoisted(() => ({
+  list: [] as Array<{
+    sessionId: string;
+    host: string;
+    title: string;
+    cwd: string;
+    model: string;
+    lastSeenAt: string;
+    agentPrincipalId: string;
+    binding: null;
+  }>,
+}));
+
 vi.mock("@/hooks/queries/agent-session/use-get-agent-session-roster", () => ({
   useGetAgentSessionRoster: () => ({
-    data: { sessions: [] },
+    data: { sessions: rosterSessions.list },
     isLoading: false,
     isError: false,
+    isStale: true,
     refetch: vi.fn(),
   }),
 }));
@@ -197,6 +211,70 @@ describe("task properties in full share mode", () => {
       }).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "marker:task-1" })).toBeNull();
+  });
+
+  it("SPEC-2026-11-25: mounts the agents panel in BOTH sidebar layouts (S1)", () => {
+    rosterSessions.list = [
+      {
+        sessionId: "s-1",
+        host: "pi-laptop",
+        title: "live session",
+        cwd: "D:/work",
+        model: "glm",
+        lastSeenAt: new Date().toISOString(),
+        agentPrincipalId: "p1",
+        binding: null,
+      },
+    ];
+    try {
+      render(
+        <TaskPropertiesSidebar
+          taskId="task-1"
+          projectId="project-1"
+          workspaceId="workspace-1"
+        />,
+      );
+      // Desktop block (after Labels) + mobile row both render in the DOM;
+      // CSS (lg:hidden / display contents) decides visibility per viewport.
+      // This suite's i18n mock resolves keys verbatim.
+      const buttons = screen.getAllByRole("button", {
+        name: "tasks:properties.agents.assign · tasks:properties.agents.runningCount",
+      });
+      expect(buttons).toHaveLength(2);
+    } finally {
+      rosterSessions.list = [];
+    }
+  });
+
+  it("SPEC-2026-11-25: share mode renders no agents control at all", () => {
+    rosterSessions.list = [
+      {
+        sessionId: "s-1",
+        host: "pi-laptop",
+        title: "live session",
+        cwd: "D:/work",
+        model: "glm",
+        lastSeenAt: new Date().toISOString(),
+        agentPrincipalId: "p1",
+        binding: null,
+      },
+    ];
+    try {
+      render(
+        <ShareCapabilityProvider token="full-token" projectId="project-1">
+          <TaskPropertiesSidebar
+            taskId="task-1"
+            projectId="project-1"
+            workspaceId=""
+          />
+        </ShareCapabilityProvider>,
+      );
+      expect(
+        screen.queryByRole("button", { name: /Assign agent/ }),
+      ).toBeNull();
+    } finally {
+      rosterSessions.list = [];
+    }
   });
 
   it("exposes the compact marker action on authenticated task properties", () => {

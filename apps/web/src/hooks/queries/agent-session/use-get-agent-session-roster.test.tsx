@@ -37,6 +37,16 @@ afterEach(() => {
 });
 
 describe("useGetAgentSessionRoster", () => {
+  it("stays disabled when the caller passes enabled=false (bound, picker closed)", async () => {
+    const wrapper = makeWrapper();
+    const { result } = renderHook(
+      () => useGetAgentSessionRoster({ enabled: false }),
+      { wrapper },
+    );
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(getRoster).not.toHaveBeenCalled();
+  });
+
   it("fetches once on mount and never polls in the background", async () => {
     const wrapper = makeWrapper();
     const { result } = renderHook(() => useGetAgentSessionRoster(), {

@@ -27,7 +27,14 @@ const rosterQuery = vi.hoisted(() => ({
   data: null as null | { sessions: AgentSessionRosterEntry[] },
   isLoading: false,
   isError: false,
+  isStale: true,
   refetch: vi.fn(async () => ({}) as never),
+}));
+
+const taskQuery = vi.hoisted(() => ({
+  data: { id: "task-1", number: 1, title: "Panel card" } as
+    | { id: string; number: number; title: string }
+    | undefined,
 }));
 
 const bindMutation = vi.hoisted(() => ({
@@ -53,6 +60,9 @@ const toast = vi.hoisted(() => ({ error: vi.fn(), message: vi.fn() }));
 
 vi.mock("@/hooks/queries/agent-session/use-get-task-binding-status", () => ({
   useGetTaskBindingStatus: () => bindingQuery,
+}));
+vi.mock("@/hooks/queries/task/use-get-task", () => ({
+  default: () => ({ data: taskQuery.data }),
 }));
 vi.mock("@/hooks/queries/agent-session/use-get-agent-session-roster", () => ({
   useGetAgentSessionRoster: () => rosterQuery,
@@ -145,6 +155,9 @@ beforeEach(() => {
   rosterQuery.data = { sessions: [] };
   rosterQuery.isLoading = false;
   rosterQuery.isError = false;
+  rosterQuery.isStale = true;
+  taskQuery.data = { id: "task-1", number: 1, title: "Panel card" };
+  rosterQuery.refetch.mockClear();
   bindMutation.mutateAsync.mockClear();
   unbindMutation.mutateAsync.mockClear();
   toast.error.mockClear();
@@ -183,6 +196,21 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(button).toBeVisible();
     // Ghost property-row affordance: chevron, not a static text node.
     expect(button.querySelector("svg")).not.toBeNull();
+  });
+
+  it("opening the picker refetches only when the roster cache is stale", async () => {
+    rosterQuery.data = { sessions: [liveLaptop()] };
+    render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    fireEvent.click(screen.getByRole("button", { name: /Assign agent/ }));
+    await screen.findByText("fix kaneo build");
+    expect(rosterQuery.refetch).toHaveBeenCalledTimes(1);
+
+    rosterQuery.isStale = false;
+    fireEvent.click(screen.getByRole("button", { name: /Assign agent/ })); // close
+    fireEvent.click(screen.getByRole("button", { name: /Assign agent/ })); // reopen
+    await vi.waitFor(() => {
+      expect(rosterQuery.refetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("S1 popover groups sessions by host and offers both", async () => {
@@ -359,6 +387,11 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
       await screen.findByText(
         "Session s-laptop-1 will stop syncing this card and its subtasks.",
       ),
+    ).toBeVisible();
+    // Acceptance: the confirm names the affected card AND the session context.
+    expect(screen.getByText("Affected card: #1 Panel card")).toBeVisible();
+    expect(
+      screen.getByText("D:/work/kaneo · glm-5.3-flash · pi-laptop"),
     ).toBeVisible();
     expect(unbindMutation.mutateAsync).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Unbind" }));

@@ -28,6 +28,7 @@ import { useBindAgentSession } from "@/hooks/mutations/agent-session/use-bind-ag
 import { useUnbindAgentSession } from "@/hooks/mutations/agent-session/use-unbind-agent-session";
 import { useGetAgentSessionRoster } from "@/hooks/queries/agent-session/use-get-agent-session-roster";
 import { useGetTaskBindingStatus } from "@/hooks/queries/agent-session/use-get-task-binding-status";
+import useGetTask from "@/hooks/queries/task/use-get-task";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -83,28 +84,46 @@ export default function TaskAgentBindingPanel({
 }: TaskAgentBindingPanelProps) {
   const { t } = useTranslation();
   const { data: bindingStatus } = useGetTaskBindingStatus(taskId);
-  const roster = useGetAgentSessionRoster();
-  const bindMutation = useBindAgentSession();
-  const unbindMutation = useUnbindAgentSession();
+  const { data: task } = useGetTask(taskId);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [pending, setPending] = useState<PendingBind | null>(null);
   const [clock, setClock] = useState(() => Date.now());
 
-  // Re-render at most once per 15s while a bind is pending so "waiting" can
-  // age into "disconnected" without any polling of its own — the binding
-  // status query refetches on its own schedule; the interval dies with the
-  // pending state.
+  const bound = bindingStatus?.bound === true;
+  const online = bindingStatus?.online === true;
+
+  const bindMutation = useBindAgentSession();
+  const unbindMutation = useUnbindAgentSession();
+  // Roster fetch policy (D4): eager-once while unbound (S0/S1 decision), and
+  // while the bound popover is open for "change session". No background poll.
+  const roster = useGetAgentSessionRoster({
+    enabled: !bound || pickerOpen,
+  });
+
+  const pendingStatus = resolvePendingStatus({
+    pending,
+    bound,
+    bindingGeneration: bindingStatus?.bindingGeneration,
+    online,
+    clock,
+  });
+
+  // Re-render at most once per 15s while the bind is still "waiting" so the
+  // label can age into "disconnected"; the interval dies once resolved.
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || pendingStatus !== "waiting") return;
     const timer = setInterval(() => setClock(Date.now()), 15_000);
     timer.unref?.();
     return () => clearInterval(timer);
-  }, [pending]);
+  }, [pending, pendingStatus]);
 
-  const bound = bindingStatus?.bound === true;
-  const online = bindingStatus?.online === true;
+  // Retire the intermediate state the moment it resolves: the new generation
+  // reported online, moved on elsewhere, or the card became unbound again.
+  useEffect(() => {
+    if (pending && pendingStatus === null) setPending(null);
+  }, [pending, pendingStatus]);
 
   const sessions = useMemo(() => {
     const all = roster.data?.sessions ?? [];
@@ -213,13 +232,6 @@ export default function TaskAgentBindingPanel({
     });
 
   // Waiting/connected/disconnected resolution for a UI-initiated bind (D4).
-  const pendingStatus = resolvePendingStatus({
-    pending,
-    bound,
-    bindingGeneration: bindingStatus?.bindingGeneration,
-    online,
-    clock,
-  });
   const pendingLabel = pendingStatus
     ? t(`tasks:properties.agents.${pendingStatus}`)
     : null;
@@ -399,6 +411,8 @@ export default function TaskAgentBindingPanel({
           open={pickerOpen}
           onOpenChange={(open) => {
             setPickerOpen(open);
+            // D4: a stale cache is refreshed the moment the picker opens.
+            if (open && roster.isStale) void roster.refetch();
             if (!open) setSearch("");
           }}
         >
@@ -549,6 +563,21 @@ export default function TaskAgentBindingPanel({
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+            <span>
+              {t("tasks:properties.agents.affectedCard", {
+                number: task?.number ?? "?",
+                title: task?.title ?? "",
+              })}
+            </span>
+            <span>
+              {t("tasks:properties.agents.sessionContext", {
+                cwd: boundSession?.cwd || "—",
+                model: boundSession?.model || "—",
+                host: bindingStatus?.hostId || "—",
+              })}
+            </span>
+          </div>
           <AlertDialogFooter>
             <AlertDialogClose
               render={<Button type="button" variant="outline" size="sm" />}
