@@ -13,11 +13,9 @@ import {
   createWorkspaceMember,
 } from "./helpers/fixtures";
 import {
-  announceAgentSessionPresence,
   PRESENCE_TTL_MS,
   sweepStalePresence,
 } from "../../apps/api/src/agent-session/presence-service";
-import { bindAgentSession } from "../../apps/api/src/agent-session/binding-service";
 
 // SPEC-2026-11-25-kaneo-ui-agent-binding T1: presence announce/roster, the
 // web-caller bind ownership guard, and the heartbeat presence piggyback.
@@ -83,6 +81,54 @@ async function createApiKeyForUser(userId: string, key: string) {
     updatedAt: new Date(),
     permissions: JSON.stringify({ task: ["update"] }),
   });
+}
+
+type AdvisoryLockIdentity = {
+  classid: string;
+  objid: string;
+  objsubid: string;
+};
+type PresenceTestTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function acquireSessionLockForTest(
+  tx: PresenceTestTransaction,
+  sessionId: string,
+): Promise<AdvisoryLockIdentity> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`session:${sessionId}`}))`,
+  );
+  const result = await tx.execute(sql`
+    select classid::text, objid::text, objsubid::text
+    from pg_locks
+    where pid = pg_backend_pid()
+      and locktype = 'advisory'
+      and granted
+    limit 1
+  `);
+  const rows = (result as { rows?: AdvisoryLockIdentity[] }).rows ?? [];
+  if (!rows[0]) throw new Error("test did not acquire the session advisory lock");
+  return rows[0];
+}
+
+async function waitForAdvisoryWaiters(
+  lock: AdvisoryLockIdentity,
+  minimum: number,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const result = await db.execute(sql`
+      select count(*)::int as count
+      from pg_locks
+      where locktype = 'advisory'
+        and not granted
+        and classid = ${lock.classid}::oid
+        and objid = ${lock.objid}::oid
+        and objsubid = ${lock.objsubid}::smallint
+    `);
+    const rows = (result as { rows?: Array<{ count: number | string }> }).rows ?? [];
+    if (Number(rows[0]?.count ?? 0) >= minimum) return true;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return false;
 }
 
 describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
@@ -199,42 +245,62 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     const firstPrincipal = await seedPrincipal(firstOwner.user.id, "pi-laptop");
     const secondPrincipal = await seedPrincipal(secondOwner.user.id, "prodesk-home");
     const sessionId = "pi-session-cross-account-announce";
+    mockAuthenticatedSessions(firstOwner.user, {
+      "first-account": firstOwner.user,
+      "second-account": secondOwner.user,
+    });
+    const { app } = createApp();
 
-    const results = await Promise.allSettled([
-      announceAgentSessionPresence({
-        userId: firstOwner.user.id,
+    let releaseLock!: () => void;
+    let publishLock!: (identity: AdvisoryLockIdentity) => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const lockReady = new Promise<AdvisoryLockIdentity>((resolve) => {
+      publishLock = resolve;
+    });
+    const lockHolder = db.transaction(async (tx) => {
+      publishLock(await acquireSessionLockForTest(tx, sessionId));
+      await gate;
+    });
+    const lockIdentity = await lockReady;
+
+    const firstRequest = announce(
+      app,
+      {
         sessionId,
         agentPrincipalId: firstPrincipal.id,
         host: "pi-laptop",
         title: "first account",
-      }),
-      announceAgentSessionPresence({
-        userId: secondOwner.user.id,
+      },
+      { authorization: "Bearer first-account" },
+    );
+    const secondRequest = announce(
+      app,
+      {
         sessionId,
         agentPrincipalId: secondPrincipal.id,
         host: "prodesk-home",
         title: "second account",
-      }),
-    ]);
-    const successes = results.filter(
-      (result): result is PromiseFulfilledResult<{ binding: null }> =>
-        result.status === "fulfilled",
+      },
+      { authorization: "Bearer second-account" },
     );
-    const failures = results.filter(
-      (result): result is PromiseRejectedResult => result.status === "rejected",
-    );
-    expect(successes).toHaveLength(1);
-    expect(failures).toHaveLength(1);
-    expect((failures[0]!.reason as { status?: number }).status).toBe(409);
 
+    const bothQueued = await waitForAdvisoryWaiters(lockIdentity, 2);
+    releaseLock();
+    await lockHolder;
+    const responses = await Promise.all([firstRequest, secondRequest]);
+
+    expect(bothQueued).toBe(true);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
     const [row] = await db
       .select()
       .from(schema.agentSessionPresenceTable)
       .where(eq(schema.agentSessionPresenceTable.sessionId, sessionId));
     expect(row).toBeDefined();
-    const winningPrincipalId =
-      row!.title === "first account" ? firstPrincipal.id : secondPrincipal.id;
-    expect(row!.agentPrincipalId).toBe(winningPrincipalId);
+    const winner =
+      row!.title === "first account" ? firstPrincipal : secondPrincipal;
+    expect(row!.agentPrincipalId).toBe(winner.id);
   });
 
   it("rechecks web-bind ownership if another account binds after route preflight", async () => {
@@ -263,18 +329,15 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     });
 
     let releasePriorTransaction!: () => void;
-    let signalSessionLockHeld!: () => void;
+    let publishLock!: (identity: AdvisoryLockIdentity) => void;
     const releaseGate = new Promise<void>((resolve) => {
       releasePriorTransaction = resolve;
     });
-    const lockHeld = new Promise<void>((resolve) => {
-      signalSessionLockHeld = resolve;
+    const lockReady = new Promise<AdvisoryLockIdentity>((resolve) => {
+      publishLock = resolve;
     });
     const competingTransaction = db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtext(${`session:${sessionId}`}))`,
-      );
-      signalSessionLockHeld();
+      publishLock(await acquireSessionLockForTest(tx, sessionId));
       await releaseGate;
       await tx.insert(schema.agentSessionBindingTable).values({
         taskId: priorTask.id,
@@ -284,7 +347,7 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
         sessionId,
       });
     });
-    await lockHeld;
+    const lockIdentity = await lockReady;
 
     const webBindRequest = app.request("/api/agent-session/bindings", {
       method: "POST",
@@ -301,22 +364,7 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
     // the route enters its transaction critical section.
     let observedWait = false;
     try {
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        const query = await db.execute(sql`
-          select count(*)::int as count
-          from pg_stat_activity
-          where datname = current_database()
-            and pid <> pg_backend_pid()
-            and wait_event_type = 'Lock'
-            and wait_event = 'advisory'
-        `);
-        const rows = (query as { rows?: Array<{ count: number | string }> }).rows ?? [];
-        if (Number(rows[0]?.count ?? 0) > 0) {
-          observedWait = true;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      }
+      observedWait = await waitForAdvisoryWaiters(lockIdentity, 1);
     } finally {
       releasePriorTransaction();
     }
@@ -336,105 +384,6 @@ describe("API integration: agent session presence (SPEC-2026-11-25 T1)", () => {
       );
     expect(activeBinding?.taskId).toBe(priorTask.id);
     expect(activeBinding?.agentPrincipalId).toBe(priorPrincipal.id);
-  });
-
-  it("serializes concurrent announcements so one account cannot take over a session id", async () => {
-    const firstOwner = await createWorkspaceMember({ role: "admin" });
-    const secondOwner = await createWorkspaceMember({ role: "admin" });
-    const firstPrincipal = await seedPrincipal(firstOwner.user.id, "pi-laptop");
-    const secondPrincipal = await seedPrincipal(secondOwner.user.id, "prodesk-home");
-    const sessionId = "pi-session-cross-account-announce";
-
-    const results = await Promise.allSettled([
-      announceAgentSessionPresence({
-        userId: firstOwner.user.id,
-        sessionId,
-        agentPrincipalId: firstPrincipal.id,
-        host: "pi-laptop",
-        title: "first account",
-      }),
-      announceAgentSessionPresence({
-        userId: secondOwner.user.id,
-        sessionId,
-        agentPrincipalId: secondPrincipal.id,
-        host: "prodesk-home",
-        title: "second account",
-      }),
-    ]);
-    const successes = results.filter(
-      (result): result is PromiseFulfilledResult<{ binding: null }> =>
-        result.status === "fulfilled",
-    );
-    const failures = results.filter(
-      (result): result is PromiseRejectedResult => result.status === "rejected",
-    );
-    expect(successes).toHaveLength(1);
-    expect(failures).toHaveLength(1);
-    expect((failures[0]!.reason as { status?: number }).status).toBe(409);
-
-    const [row] = await db
-      .select()
-      .from(schema.agentSessionPresenceTable)
-      .where(eq(schema.agentSessionPresenceTable.sessionId, sessionId));
-    expect(row).toBeDefined();
-    const winningPrincipalId =
-      row!.title === "first account" ? firstPrincipal.id : secondPrincipal.id;
-    expect(row!.agentPrincipalId).toBe(winningPrincipalId);
-  });
-
-  it("rechecks web-bind ownership inside the locked transaction after route preflight", async () => {
-    const priorOwner = await createWorkspaceMember({ role: "admin" });
-    const webOwner = await createWorkspaceMember({ role: "admin" });
-    const { project: priorProject } = await createProjectFixture({
-      workspaceId: priorOwner.workspace.id,
-    });
-    const { project: webProject } = await createProjectFixture({
-      workspaceId: webOwner.workspace.id,
-    });
-    const priorTask = await createTask(priorProject.id, "Prior owner task");
-    const webTask = await createTask(webProject.id, "Web target task");
-    const priorPrincipal = await seedPrincipal(priorOwner.user.id, "pi-laptop");
-    const webPrincipal = await seedPrincipal(webOwner.user.id, "prodesk-home");
-    const sessionId = "pi-session-bind-preflight-race";
-
-    // Model the valid presence row observed by route preflight, then let a
-    // concurrent legacy/API-key bind commit under the same session id. The
-    // final web service call must reject before revoking that prior binding.
-    await db.insert(schema.agentSessionPresenceTable).values({
-      sessionId,
-      agentPrincipalId: webPrincipal.id,
-      host: "prodesk-home",
-      title: "web target",
-    });
-    await bindAgentSession({
-      userId: priorOwner.user.id,
-      taskId: priorTask.id,
-      agentPrincipalId: priorPrincipal.id,
-      sessionId,
-      isWebCaller: false,
-    });
-
-    await expect(
-      bindAgentSession({
-        userId: webOwner.user.id,
-        taskId: webTask.id,
-        agentPrincipalId: webPrincipal.id,
-        sessionId,
-        isWebCaller: true,
-      }),
-    ).rejects.toMatchObject({ status: 409 });
-
-    const [stillActive] = await db
-      .select()
-      .from(schema.agentSessionBindingTable)
-      .where(
-        and(
-          eq(schema.agentSessionBindingTable.sessionId, sessionId),
-          eq(schema.agentSessionBindingTable.status, "active"),
-        ),
-      );
-    expect(stillActive?.taskId).toBe(priorTask.id);
-    expect(stillActive?.agentPrincipalId).toBe(priorPrincipal.id);
   });
 
   it("announce with a principal not owned by the caller is a 403", async () => {
