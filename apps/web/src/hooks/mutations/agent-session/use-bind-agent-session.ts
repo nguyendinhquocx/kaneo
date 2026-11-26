@@ -8,6 +8,14 @@ export function useBindAgentSession() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: bindAgentSessionToTask,
+    onMutate: async ({ taskId }) => {
+      // A pre-bind status fetch can finish after the bind response and replace
+      // the new generation with an old online/unbound cache snapshot.
+      await queryClient.cancelQueries({
+        queryKey: ["task-agent-binding", taskId],
+        exact: true,
+      });
+    },
     onSuccess: () => {
       // Server truth flipped immediately; refresh the status + roster views.
       void queryClient.invalidateQueries({ queryKey: ["task-agent-binding"] });

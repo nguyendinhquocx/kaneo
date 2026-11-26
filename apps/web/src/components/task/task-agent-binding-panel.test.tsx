@@ -536,7 +536,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(screen.queryByText("Pi connected")).toBeNull();
 
     // The server flipped to the mutation's generation, but it has not yet
-    // heartbeated.
+    // heartbeated. This observation arms pending-state resolution.
     bindingQuery.data = {
       ...bindingQuery.data,
       online: false,
@@ -548,10 +548,32 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
       screen.getByText("Assigned · waiting for the session"),
     ).toBeVisible();
 
+    // A late stale response for the older online generation must not clear
+    // pending or make the prior session appear connected.
+    bindingQuery.data = {
+      ...bindingQuery.data,
+      online: true,
+      bindingId: "binding-old",
+      bindingGeneration: 1,
+    };
+    rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    expect(
+      screen.getByText("Assigned · waiting for the session"),
+    ).toBeVisible();
+    expect(screen.queryByText("Pi connected")).toBeNull();
+    // The connectivity dot must not paint the stale generation green either.
+    expect(document.querySelector("span.bg-success")).toBeNull();
+
     // The adopted session heartbeats the new generation → connected.
-    bindingQuery.data = { ...bindingQuery.data, online: true };
+    bindingQuery.data = {
+      ...bindingQuery.data,
+      online: true,
+      bindingId: "binding-new",
+      bindingGeneration: 2,
+    };
     rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     expect(screen.getByText("Pi connected")).toBeVisible();
+    expect(document.querySelector("span.bg-success")).not.toBeNull();
     expect(screen.queryByText("Assigned · waiting for the session")).toBeNull();
   });
 
@@ -581,28 +603,39 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(
       resolvePendingStatus({ ...base, online: true, clock: 1_000_000 + 5000 }),
     ).toBeNull();
-    // A mismatching generation (even a newer one) is not proof that this bind
-    // was observed; a stale unbound cache must keep pending too.
-    expect(
-      resolvePendingStatus({
-        ...base,
-        bindingGeneration: 3,
-        online: true,
-        clock: 1_000_000 + 5000,
-      }),
-    ).toBe("waiting");
+    // A lower, stale online generation can never resolve the newer bind.
     expect(
       resolvePendingStatus({
         ...base,
         pending: { ...pending, observed: true },
+        bindingGeneration: 1,
+        online: true,
+        clock: 1_000_000 + 5000,
+      }),
+    ).toBe("waiting");
+    // A newer generation proves the server superseded this bind.
+    expect(
+      resolvePendingStatus({
+        ...base,
         bindingGeneration: 3,
         online: true,
         clock: 1_000_000 + 5000,
       }),
     ).toBeNull();
+    // An unbound cache before observing the target generation stays pending;
+    // an unbound status after observing it is authoritative.
     expect(
       resolvePendingStatus({ ...base, bound: false, clock: 1_000_000 + 5000 }),
     ).toBe("waiting");
+    expect(
+      resolvePendingStatus({
+        ...base,
+        pending: { ...pending, observed: true },
+        bound: false,
+        bindingGeneration: undefined,
+        clock: 1_000_000 + 5000,
+      }),
+    ).toBeNull();
   });
 
   it("bind failure toasts and leaves the state untouched (S1 stays)", async () => {

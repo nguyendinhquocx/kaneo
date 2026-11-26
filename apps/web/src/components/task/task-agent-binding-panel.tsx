@@ -63,13 +63,30 @@ export function resolvePendingStatus(input: {
   const { pending, bound, bindingGeneration, online, clock } = input;
   if (!pending) return null;
   const expired = clock - pending.since > PENDING_DISCONNECT_MS;
-  // The status query may still hold the pre-bind generation (including its
-  // online bit) or an unbound cache entry. Keep waiting until it observes the
-  // generation returned by the bind mutation; old presence is not new presence.
-  if (!bound || bindingGeneration !== pending.bindingGeneration) {
-    if (pending.observed) return null;
+  // An older generation is never authority to resolve a newer bind, even if
+  // that old row is online. A higher generation proves the server superseded
+  // this mutation; an unbound response is authoritative only after the exact
+  // mutation generation was observed (the bind mutation cancels pre-bind reads).
+  if (
+    typeof bindingGeneration === "number" &&
+    bindingGeneration < pending.bindingGeneration
+  ) {
     return expired ? "disconnected" : "waiting";
   }
+  if (
+    bindingGeneration === undefined ||
+    bindingGeneration !== pending.bindingGeneration
+  ) {
+    if (
+      bindingGeneration !== undefined &&
+      bindingGeneration > pending.bindingGeneration
+    )
+      return null;
+    if (pending.observed && !bound) return null;
+    return expired ? "disconnected" : "waiting";
+  }
+  if (!bound)
+    return pending.observed ? null : expired ? "disconnected" : "waiting";
   if (online) return null;
   return expired ? "disconnected" : "waiting";
 }
@@ -129,16 +146,28 @@ export default function TaskAgentBindingPanel({
   // a connected status or a later server-side change may retire it.
   useEffect(() => {
     if (!pending) return;
-    if (bindingStatus?.bindingGeneration === pending.bindingGeneration) {
-      if (pendingStatus === null) {
-        setPending(null);
-      } else if (!pending.observed) {
-        setPending({ ...pending, observed: true });
-      }
+    const generation = bindingStatus?.bindingGeneration;
+    const matchingGeneration = generation === pending.bindingGeneration;
+    const superseded =
+      typeof generation === "number" && generation > pending.bindingGeneration;
+    const confirmedUnbound = pending.observed && bindingStatus?.bound === false;
+
+    if (
+      pendingStatus === null &&
+      (matchingGeneration || superseded || confirmedUnbound)
+    ) {
+      setPending(null);
       return;
     }
-    if (pending.observed && pendingStatus === null) setPending(null);
-  }, [pending, pendingStatus, bindingStatus?.bindingGeneration]);
+    if (matchingGeneration && !pending.observed) {
+      setPending({ ...pending, observed: true });
+    }
+  }, [
+    pending,
+    pendingStatus,
+    bindingStatus?.bindingGeneration,
+    bindingStatus?.bound,
+  ]);
 
   const sessions = useMemo(() => {
     const all = roster.data?.sessions ?? [];
@@ -272,6 +301,10 @@ export default function TaskAgentBindingPanel({
   const pendingLabel = pendingStatus
     ? t(`tasks:properties.agents.${pendingStatus}`)
     : null;
+  const connectionOnline = pendingStatus === null && online;
+  // The connectivity indicator must follow the same resolution as the label:
+  // while a pending bind is unresolved, a stale generation's online bit must
+  // not paint the session as connected.
 
   // S0: successful empty roster keeps the card pixel-identical. An initial
   // load failure is different: expose an accessible retry so the empty cache
@@ -502,7 +535,9 @@ export default function TaskAgentBindingPanel({
 
   // S2: bound — dot/title/host/model + Unbind / Change (focus/tap reachable).
   const metadataUnavailable = !roster.isLoading && !boundSession;
-  const unavailableLabel = t("tasks:properties.agents.sessionDetailsUnavailable");
+  const unavailableLabel = t(
+    "tasks:properties.agents.sessionDetailsUnavailable",
+  );
   const statusText =
     pendingLabel ??
     (online
@@ -510,7 +545,6 @@ export default function TaskAgentBindingPanel({
       : t("tasks:detail.agentBinding.offline"));
   const title =
     boundSession?.title || bindingStatus?.sessionId || unavailableLabel;
-
   const panel = (
     <div
       className={cn(
@@ -529,7 +563,7 @@ export default function TaskAgentBindingPanel({
           aria-hidden="true"
           className={cn(
             "size-1.5 shrink-0 rounded-full",
-            online ? "bg-success" : "bg-muted-foreground/50",
+            connectionOnline ? "bg-success" : "bg-muted-foreground/50",
           )}
         />
         <Tooltip>
