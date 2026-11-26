@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "spec": "SPEC-2026-11-10-kaneo-card-agent-collaboration",
+  "wave": "card-agent-collab-r7",
+  "source_sha": "1e800ab2fef42e647aa1a832f693ccde696cfc07",
+  "base_source_sha": "6edc3bce47e70b14c2db34e5df77755e8bf1bbe7",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-1e800ab2-card-agent-collab-r7@sha256:993a79ffcf87f0a90a9acc6dfcec1b74874063e9ecfe4eeb53f0530fed305188",
+  "candidate_manifest_digest": "sha256:993a79ffcf87f0a90a9acc6dfcec1b74874063e9ecfe4eeb53f0530fed305188",
+  "candidate_compose_sha256": "3f5e0989241b5d73df9e29d7fc2fba30e9f1e0b2afece97b82be78434ce5993c",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "R7 candidate built from committed source after tests; .wave-cardagent-r7 excluded by Dockerfile explicit COPY rules.",
+  "verify": [
+    "web typecheck + full suite 53 files / 167 tests PASS; Vite build PASS",
+    "subtask relation CAS regression test + duplicate-submit guard focused tests PASS",
+    "API typecheck + 264 unit PASS; i18n:check PASS",
+    "extension Node suite 84/84 PASS; source commit 1ed4c8d4 merged to python/main at 7ca57c63"
+  ],
+  "migration_head_before": {
+    "id": 59,
+    "count": 59,
+    "tag": "0056_agent_session_delivery_generation",
+    "hash": "a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f"
+  },
+  "migration_head_after": {
+    "id": 59,
+    "count": 59,
+    "tag": "0056_agent_session_delivery_generation",
+    "hash": "a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f"
+  },
+  "deployment_lane": "fixed .wave-cardagent-r7 bundle; pre/post encrypted snapshot + private R2 mirror; hash-pinned adapters; guarded digest compose flip; read-only migration verifier.",
+  "rollback": "previous R5 image ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-6edc3bce-card-agent-collab-r5@sha256:d1623209cd2bcc57f3fbe304923f0ae0913de40185a96b5ff0ae19fb4ff588a2; no migrations in R7; restore only via verified fresh-target workflow."
+}

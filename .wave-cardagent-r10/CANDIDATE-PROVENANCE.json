@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "spec": "SPEC-2026-11-10-kaneo-card-agent-collaboration",
+  "wave": "card-agent-collab-r10",
+  "source_sha": "da107aa4b7dbfb526bdbde20bfde9522afdb870a",
+  "base_source_sha": "071cb51c5d1882a7ebb48637e16c4547ab36a340",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-da107aa4-card-agent-collab-r10@sha256:ab61b5e07d903ef88bea0b797a8cdc72e0915192bea7eae7d92dfae311eece8f",
+  "candidate_manifest_digest": "sha256:ab61b5e07d903ef88bea0b797a8cdc72e0915192bea7eae7d92dfae311eece8f",
+  "candidate_compose_sha256": "f24c4851381ab13900a38d31fa11afa5c11807050c54a4c376a2ecd59d8da536",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "R10 candidate built from committed source; .wave-cardagent-r10 excluded by Dockerfile explicit COPY rules.",
+  "verify": [
+    "API: focused integration 9 files / 59 tests PASS incl. 10 new UAT regression tests (subtask date validation + comment-bound asset upload)",
+    "API unit 264/264 PASS; tsc --noEmit PASS; biome PASS on touched files",
+    "Web/extension source unchanged from R9 gates (web 54 files / 175 tests, extension 89/89)"
+  ],
+  "migration_head_before": {
+    "id": 59,
+    "count": 59,
+    "tag": "0056_agent_session_delivery_generation",
+    "hash": "a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f"
+  },
+  "migration_head_after": {
+    "id": 59,
+    "count": 59,
+    "tag": "0056_agent_session_delivery_generation",
+    "hash": "a4b63b1aadb626ca8c99e033964add7a06094b0d8cc07fb2bccf9d39cf1dca5f"
+  },
+  "deployment_lane": "fixed .wave-cardagent-r10 bundle; pre/post encrypted snapshot + private R2 mirror; hash-pinned adapters; guarded digest compose flip; read-only migration verifier.",
+  "rollback": "previous R9 image ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-071cb51c-card-agent-collab-r9@sha256:dcdf49e614f38b1da211e66cceb52cee302dd4e5ce0c517959d17d919fb7aeb8; no migrations in R10; restore only via verified fresh-target workflow."
+}

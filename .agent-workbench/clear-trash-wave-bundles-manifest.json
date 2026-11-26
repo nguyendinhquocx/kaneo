@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "roots": ["D:/pcloud/workspace/code/kaneo"],
+  "explicit_exclusions": [
+    "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r7",
+    "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r8",
+    "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r9",
+    "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r10",
+    "D:/pcloud/workspace/code/kaneo/plans/ui-visual-exploration"
+  ],
+  "entries": [
+    {
+      "source": "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r2",
+      "action": "clear",
+      "owner": "kaneo",
+      "reason": "R2 guarded-deploy bundle (11 files, 124K): superseded by R7-R10 bundles; rollback authority is GHCR image pins in APPLY-RECEIPT r8/r9/r10, not old bundle dirs; no live reference in apps/packages/scripts/docs/tests"
+    },
+    {
+      "source": "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r3",
+      "action": "clear",
+      "owner": "kaneo",
+      "reason": "R3 guarded-deploy bundle (11 files, 124K): superseded by R7-R10; no live reference"
+    },
+    {
+      "source": "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r4",
+      "action": "clear",
+      "owner": "kaneo",
+      "reason": "R4 guarded-deploy bundle (11 files, 120K): superseded by R7-R10; no live reference"
+    },
+    {
+      "source": "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r5",
+      "action": "clear",
+      "owner": "kaneo",
+      "reason": "R5 guarded-deploy bundle (11 files, 120K): superseded by R7-R10; no live reference"
+    }
+  ]
+}

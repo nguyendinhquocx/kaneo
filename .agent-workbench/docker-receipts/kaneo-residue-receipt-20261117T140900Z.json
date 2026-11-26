@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "operation": "kaneo-host-residue-clear",
+  "contract": "Deploy Residue Contract (clear-trash)",
+  "executed_at_utc": "2026-11-17 14:09Z",
+  "host": "prodesk-home",
+  "summary": {
+    "paths_deleted": 34,
+    "bytes_reclaimed_du": 2408448,
+    "bytes_human": "~2.30MB",
+    "safety_tar": "/home/quoc/receipts/triage-20261118-kaneo-waves/kaneo-residue-backup-20261117T140900Z.tar.gz",
+    "safety_tar_sha256": "d311eacd8ac3b09eb86bc640c9abe2bb6a1b3ccff4bc4d237148cd36cdcce812",
+    "safety_tar_entries": 270
+  },
+  "canonical_moves": {
+    "kaneo-wave-share-assetfix": "laptop kaneo repo .wave-share-assetfix @ 8f153290 (github-main/kaneo/prodesk-production, pushed)",
+    "kaneo-wave-uat-r4fix2": "laptop kaneo repo .wave-uat-r4fix2 @ 8f153290",
+    "kaneo-wave-fullshare-survey.sh": "laptop .wave-fullshare/kaneo-wave-fullshare-survey.sh @ 8f153290",
+    "int1/uatfix3-7 bundles": "already canonical in laptop .wave-* (provenance + .pins.json verified present)"
+  },
+  "deleted": {
+    "kaneo-wave-int1": {
+      "bytes": 126976,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-fullshare": {
+      "bytes": 114688,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-uatfix3": {
+      "bytes": 106496,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-uatfix4": {
+      "bytes": 102400,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-uatfix5": {
+      "bytes": 106496,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-uatfix6": {
+      "bytes": 110592,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-uatfix7": {
+      "bytes": 110592,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-share-assetfix": {
+      "bytes": 184320,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-uat-r4fix2": {
+      "bytes": 94208,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo-wave-fullshare-survey.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/backup-kaneo.sh.new.pre-r4.bak": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/backup-kaneo.sh.new.pre-r4fix.bak": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/deploy-kaneo-r10e.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/deploy-kaneo-u4.sh": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/deploy-kaneo-u5.sh": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/deploy-kaneo-uat2.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/deploy-kaneo-uat3.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/deploy-kaneo-uat-repair.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-r4-apply.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-r4-apply.log": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-r4-repin.sh": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-r4fix-apply.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-r4fix-apply.log": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-r4fix-repin.sh": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-repair2-apply.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-repair2-apply.log": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-repair2-repin.sh": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/uat-repair3-apply.log": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/run-r10e-rollout.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/inspect-kaneo-api-keys.sh": {
+      "bytes": 4096,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/bundle-manifest.json": {
+      "bytes": 8192,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/host-ops": {
+      "bytes": 364544,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/host-ops-next": {
+      "bytes": 348160,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    },
+    "kaneo/release-execution-source": {
+      "bytes": 503808,
+      "guard": "exact-path rm -rf after tar backup + integrity check + re-verify"
+    }
+  },
+  "kept": {
+    "kaneo/ops-src": "KEEP - identical to installed /usr/local/lib/home-server-recovery scripts (canonical ops source)",
+    "kaneo/release": "KEEP - root-owned, modified 2026-11-14, likely r10 activate artifact; sudo-gated, owner review",
+    "kaneo/staging": "KEEP/OUT_OF_SCOPE - active r10 wave staging + history, not in directive scope",
+    "kaneo-projects": "KEEP - deliverables of kaneo native execution runs (todoX/shopX/E2E fixture, kaneo project IDs)",
+    ".kaneo-dispatcher-service-incoming-v3": "PROTECTED - runtime state of active dispatcher service (directive)"
+  },
+  "observations": [
+    "kaneo-agent-worktree-cleanup.service is FAILED while its timer stays active - separate issue, not touched",
+    "bundle-manifest.json at ~/kaneo root described Sep supervisor-auth bundle (stale vs r10); deleted with tar backup",
+    "release-execution-source unreferenced by units/cron/scripts (grep empty); user-owned; superseded by ops-src==installed"
+  ]
+}

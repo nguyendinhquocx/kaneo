@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "plan_id": "ct-20261116-215148-28a2cb85",
+  "created_at": "2026-11-16T14:51:48+00:00",
+  "scope": "project",
+  "roots": [
+    "D:\\pcloud\\workspace\\code\\kaneo"
+  ],
+  "keep_paths": [],
+  "requested_keep_paths": [],
+  "include_dependencies": false,
+  "manifest_path": "D:\\pcloud\\workspace\\code\\kaneo\\.agent-workbench\\clear-trash-wave-bundles-manifest.json",
+  "explicit_exclusions": [
+    "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r7",
+    "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r8",
+    "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r9",
+    "D:/pcloud/workspace/code/kaneo/.wave-cardagent-r10",
+    "D:/pcloud/workspace/code/kaneo/plans/ui-visual-exploration"
+  ],
+  "entries": [
+    {
+      "path": "D:\\pcloud\\workspace\\code\\kaneo\\.wave-cardagent-r2",
+      "root": "D:\\pcloud\\workspace\\code\\kaneo",
+      "relative": ".wave-cardagent-r2",
+      "kind": "dir",
+      "category": "loose-file",
+      "action": "clear",
+      "reason": "R2 guarded-deploy bundle (11 files, 124K): superseded by R7-R10 bundles; rollback authority is GHCR image pins in APPLY-RECEIPT r8/r9/r10, not old bundle dirs; no live reference in apps/packages/scripts/docs/tests",
+      "group": null,
+      "bytes": 99559,
+      "mtime_ns": 1794795684393316200,
+      "size_at_plan": null,
+      "owner": "kaneo"
+    },
+    {
+      "path": "D:\\pcloud\\workspace\\code\\kaneo\\.wave-cardagent-r3",
+      "root": "D:\\pcloud\\workspace\\code\\kaneo",
+      "relative": ".wave-cardagent-r3",
+      "kind": "dir",
+      "category": "loose-file",
+      "action": "clear",
+      "reason": "R3 guarded-deploy bundle (11 files, 124K): superseded by R7-R10; no live reference",
+      "group": null,
+      "bytes": 100289,
+      "mtime_ns": 1794801663837418900,
+      "size_at_plan": null,
+      "owner": "kaneo"
+    },
+    {
+      "path": "D:\\pcloud\\workspace\\code\\kaneo\\.wave-cardagent-r4",
+      "root": "D:\\pcloud\\workspace\\code\\kaneo",
+      "relative": ".wave-cardagent-r4",
+      "kind": "dir",
+      "category": "loose-file",
+      "action": "clear",
+      "reason": "R4 guarded-deploy bundle (11 files, 120K): superseded by R7-R10; no live reference",
+      "group": null,
+      "bytes": 98424,
+      "mtime_ns": 1794807135121972000,
+      "size_at_plan": null,
+      "owner": "kaneo"
+    },
+    {
+      "path": "D:\\pcloud\\workspace\\code\\kaneo\\.wave-cardagent-r5",
+      "root": "D:\\pcloud\\workspace\\code\\kaneo",
+      "relative": ".wave-cardagent-r5",
+      "kind": "dir",
+      "category": "loose-file",
+      "action": "clear",
+      "reason": "R5 guarded-deploy bundle (11 files, 120K): superseded by R7-R10; no live reference",
+      "group": null,
+      "bytes": 98741,
+      "mtime_ns": 1794817916610936500,
+      "size_at_plan": null,
+      "owner": "kaneo"
+    }
+  ],
+  "protected": [],
+  "warnings": [],
+  "blocking_issues": [],
+  "filesystems": [
+    {
+      "root": "D:\\pcloud\\workspace\\code\\kaneo",
+      "free_before": 192968957952,
+      "total": 535342084096
+    }
+  ],
+  "summary": {
+    "keep_bytes": 0,
+    "clear_bytes": 397013,
+    "uncertain_bytes": 0,
+    "entry_counts": {
+      "clear": 4
+    },
+    "protected_count": 0,
+    "projected_free_after": [
+      {
+        "root": "D:\\pcloud\\workspace\\code\\kaneo",
+        "free_before": 192968957952,
+        "total": 535342084096,
+        "projected_free_after": 192969354965,
+        "projected_clear_bytes": 397013
+      }
+    ]
+  }
+}

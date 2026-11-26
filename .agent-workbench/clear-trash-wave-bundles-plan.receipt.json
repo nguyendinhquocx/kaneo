@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "plan_id": "ct-20261116-215148-28a2cb85",
+  "applied_at": "2026-11-16T14:52:22+00:00",
+  "deleted": [
+    {
+      "path": "D:\\pcloud\\workspace\\code\\kaneo\\.wave-cardagent-r2",
+      "bytes": 99559,
+      "category": "loose-file"
+    },
+    {
+      "path": "D:\\pcloud\\workspace\\code\\kaneo\\.wave-cardagent-r3",
+      "bytes": 100289,
+      "category": "loose-file"
+    },
+    {
+      "path": "D:\\pcloud\\workspace\\code\\kaneo\\.wave-cardagent-r4",
+      "bytes": 98424,
+      "category": "loose-file"
+    },
+    {
+      "path": "D:\\pcloud\\workspace\\code\\kaneo\\.wave-cardagent-r5",
+      "bytes": 98741,
+      "category": "loose-file"
+    }
+  ],
+  "moved": [],
+  "triaged": [],
+  "skipped": [],
+  "errors": [],
+  "actual_removed_bytes_logical": 397013,
+  "actual_moved_bytes_logical": 0,
+  "actual_triaged_bytes_logical": 0,
+  "free_before": {
+    "D:\\pcloud\\workspace\\code\\kaneo": 192968888320
+  },
+  "free_after": {
+    "D:\\pcloud\\workspace\\code\\kaneo": 192969388032
+  }
+}

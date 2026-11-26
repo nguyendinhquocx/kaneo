@@ -1,0 +1,103 @@
+Flow LR
+
+Wireframe #owner-card landscape
+  AppBar
+    Toolbar
+      Typography h6 "Dự án / CARD-42"
+  Stack column spacing=2
+    Typography h5 "Card công việc"
+    Stack row spacing=2
+      Typography caption "Đang làm · Ưu tiên thường · Pi session: đang kết nối"
+      Button "Chia sẻ" text startIcon=Share to=#share-dialog
+      Button "Nhánh" text
+
+    Typography body1 "Mô tả card và hướng dẫn công việc."
+    List subheader="Công việc con"
+      ListItem "Đọc code hiện tại · Chưa xong"
+      ListItem "Sửa luồng comment · Chưa xong"
+      ListItem "Viết test · Hoàn thành"
+    List subheader="Hoạt động"
+      Stack row spacing=2
+        Typography "Cộng tác viên: Cần sửa luồng gửi comment"
+        Button "Gửi cho Pi" text to=#comment-queued
+        Button "Copy link" text
+        Button "Sửa" text
+        Button "Xóa" text
+      Typography caption "Card được tạo · 2 phút trước"
+
+Wireframe #share-dialog portrait
+  Dialog sm
+    DialogHeader "Chia sẻ card"
+    DialogContent
+      Typography body2 "Người nhận chỉ thấy card này và cây công việc con."
+      Stack row spacing=2
+        Button "Xem" outlined
+        Button "Sửa" contained
+      Typography caption "Ai có link đều có quyền đã chọn; người nhận không cần đăng nhập."
+      Typography caption "Subtask tạo thêm sau này cũng được chia sẻ."
+      Button "Tạo link" contained
+      List subheader="Link hiện có"
+        ListItem "Sửa · Hết hạn sau 30 ngày"
+        Stack row spacing=2
+          Button "Sao chép" text
+          Button "Thu hồi" text
+    DialogActions
+      Button "Đóng" text to=#owner-card
+
+Wireframe #guest-card-view portrait
+  AppBar
+    Toolbar
+      Typography h6 "CARD-42 · Card được chia sẻ"
+  Stack column spacing=2
+    Typography h5 "Card công việc"
+    Typography caption "Đang làm · Ưu tiên thường"
+    Typography body1 "Mô tả card và hướng dẫn công việc."
+    List subheader="Công việc con"
+      ListItem "Đọc code hiện tại · Chưa xong"
+      ListItem "Sửa luồng comment · Chưa xong"
+      ListItem "Viết test · Hoàn thành"
+    List subheader="Hoạt động"
+      ListItem "Link holder: Cần thêm case lỗi"
+
+Wireframe #guest-card-edit portrait
+  AppBar
+    Toolbar
+      Typography h6 "CARD-42 · Card được chia sẻ"
+  Stack column spacing=2
+    Typography h5 "Card công việc"
+    Typography caption "Đang làm · Ưu tiên thường"
+    Typography body1 "Mô tả card và hướng dẫn công việc."
+    Stack row spacing=2
+      Typography caption "Marker: ❌×1 · ⭕×2"
+      Button "Đổi marker" text
+      Button "Tải tệp" text
+    List subheader="Công việc con"
+      ListItem "Đọc code hiện tại · Chưa xong"
+      ListItem "Sửa luồng comment · Chưa xong"
+      ListItem "Viết test · Hoàn thành"
+      Button "Thêm công việc con" text
+    List subheader="Hoạt động"
+      ListItem "Link holder: Cần thêm case lỗi"
+      TextField "Để lại bình luận"
+      Button "Gửi bình luận" contained
+    Typography caption "Không có nút xóa, gán người, sửa quan hệ hay gửi cho Pi."
+
+Wireframe #comment-queued landscape
+  AppBar
+    Toolbar
+      Typography h6 "Dự án / CARD-42"
+  Stack column spacing=2
+    Stack row spacing=2
+      Typography caption "Đang làm · Pi session: đang kết nối"
+      Button "Chia sẻ" text startIcon=Share to=#share-dialog
+  Stack column spacing=2
+    Typography h5 "Hoạt động"
+    Card elevation=0
+      Stack row spacing=2
+        Typography "quoc · Cần sửa luồng gửi comment"
+        Spacer
+        Button "Đã xếp vào Pi" text disabled
+        Button "Copy link" text
+        Button "Sửa" text
+        Button "Xóa" text
+      Typography caption "Pi laptop nhận ở lượt model tiếp theo; nội dung comment giữ nguyên."
