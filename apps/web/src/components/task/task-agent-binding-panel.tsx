@@ -99,6 +99,8 @@ type ConfirmState =
 // panel keeps a tiny local title memory (sessionId -> last seen title) and
 // falls back to the raw id only when the session was never seen.
 const SESSION_TITLES_KEY = "kaneo:session-titles";
+// Recency-bounded memory: session-id churn cannot grow the blob forever.
+const SESSION_TITLES_MAX = 64;
 
 function readCachedSessionTitle(sessionId: string | undefined): string | null {
   if (!sessionId || typeof window === "undefined") return null;
@@ -120,15 +122,27 @@ function rememberSessionTitle(
 ) {
   if (!sessionId || !title || typeof window === "undefined") return;
   try {
-    const raw = window.localStorage.getItem(SESSION_TITLES_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : {};
-    if (typeof parsed !== "object" || parsed === null) return;
-    const map = parsed as Record<string, string>;
+    let map: Record<string, string> = {};
+    try {
+      const raw = window.localStorage.getItem(SESSION_TITLES_KEY);
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed === "object" && parsed !== null) {
+          map = parsed as Record<string, string>;
+        }
+      }
+    } catch {
+      // Corrupted cache: rebuild instead of blocking every future write.
+      map = {};
+    }
     if (map[sessionId] === title) return;
-    window.localStorage.setItem(
-      SESSION_TITLES_KEY,
-      JSON.stringify({ ...map, [sessionId]: title }),
-    );
+    map[sessionId] = title;
+    const entries = Object.entries(map);
+    const bounded =
+      entries.length > SESSION_TITLES_MAX
+        ? Object.fromEntries(entries.slice(-SESSION_TITLES_MAX))
+        : map;
+    window.localStorage.setItem(SESSION_TITLES_KEY, JSON.stringify(bounded));
   } catch {
     // Cache is best-effort decoration; never break the panel over it.
   }
@@ -318,8 +332,7 @@ export default function TaskAgentBindingPanel({
   };
 
   // Waiting/connected/disconnected resolution for a UI-initiated bind (D4).
-  // The dot is the only surface for this state — no status text row.
-  // The dot is the only surface for this state — no status text row.
+  // The dot is the only visual surface for this state — no status text row.
   const connectionOnline = pendingStatus === null && online;
 
   // S0: successful empty roster keeps the card pixel-identical. An initial
@@ -427,7 +440,6 @@ export default function TaskAgentBindingPanel({
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder=""
                   className="h-8 border-none bg-transparent pl-7 text-xs shadow-none focus-visible:ring-0"
                   aria-label={t("tasks:properties.agents.searchPlaceholder")}
                 />
@@ -467,7 +479,9 @@ export default function TaskAgentBindingPanel({
             {t("tasks:properties.agents.rebindTitle")}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {confirm?.kind === "rebind" ? confirm.session.title : ""}
+            {confirm?.kind === "rebind"
+              ? confirm.session.title || confirm.session.sessionId
+              : ""}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -515,9 +529,10 @@ export default function TaskAgentBindingPanel({
               size="sm"
               aria-label={accessibleLabel}
               aria-haspopup="dialog"
-              // Same type scale as the "Nhãn" section label; the hover
-              // highlight hugs the text instead of the whole row.
-              className="h-auto min-h-11 w-fit justify-start gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium text-foreground/70 hover:text-foreground sm:min-h-7"
+              // Same type scale as the "Nhãn" section label at every
+              // breakpoint (the Button base scales up to sm:text-sm); the
+              // hover highlight hugs the text instead of the whole row.
+              className="h-auto min-h-11 w-fit justify-start gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium text-foreground/70 hover:text-foreground sm:min-h-7 sm:text-xs"
             >
               <span className="truncate">
                 {t("tasks:properties.agents.heading")}
@@ -558,16 +573,21 @@ export default function TaskAgentBindingPanel({
           connectionOnline ? "bg-success" : "bg-muted-foreground/50",
         )}
       />
+      {/* The dot is the only visual surface for connectivity, but screen
+          readers still get a state label without any visible text row. */}
+      <span className="sr-only">
+        {connectionOnline
+          ? t("tasks:detail.agentBinding.online")
+          : t("tasks:detail.agentBinding.offline")}
+      </span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
-            aria-label={title}
-            className="min-w-0 flex-1 appearance-none truncate rounded-sm border-0 bg-transparent p-0 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+          <span
+            className="min-w-0 flex-1 truncate text-xs font-medium text-foreground"
             title={title}
           >
             {title}
-          </button>
+          </span>
         </TooltipTrigger>
         <TooltipContent>
           <span className="block max-w-64 break-all">{title}</span>

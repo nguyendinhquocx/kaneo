@@ -210,6 +210,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     // No chevron, no count text on-screen — the visible label is just Agents.
     expect(button.querySelector("svg")).toBeNull();
     expect(screen.queryByText("2 running")).toBeNull();
+    expect(screen.getByText("Agents")).toBeVisible();
   });
 
   it("opening the picker refetches only when the roster cache is stale", async () => {
@@ -333,6 +334,10 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
       name: "Search sessions…",
     });
     expect(search).toBeVisible();
+    // Search sits outside the scroll container: scrolled rows can never
+    // bleed under it, and it renders no visible placeholder hint.
+    expect(search.closest(".overflow-y-auto")).toBeNull();
+    expect(search).not.toHaveAttribute("placeholder");
     fireEvent.change(search, { target: { value: "proj-3" } });
     expect(screen.getByText("session 3")).toBeVisible();
     expect(screen.queryByText("session 4")).toBeNull();
@@ -375,7 +380,6 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(await screen.findByText("Rebind this session?")).toBeVisible();
     // The session name appears in the row AND as the dialog's sole context.
     expect(screen.getAllByText("desk work").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText("desk work").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("/srv/ops · luna · prodesk-home")).toBeNull();
     expect(screen.queryByText("Affected card: #7 Other card")).toBeNull();
 
@@ -393,7 +397,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(unbindMutation.mutateAsync).not.toHaveBeenCalled();
   });
 
-  it("bound session title is keyboard-focusable and has a visible focus cue", () => {
+  it("bound session title is a plain span with a full-text title attribute", () => {
     const title = "a long bound session title that can be truncated";
     bindingQuery.data = {
       bound: true,
@@ -405,16 +409,11 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     };
     rosterQuery.data = { sessions: [liveLaptop({ title })] };
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
-    const titleControl = screen.getByText(title);
-    expect(titleControl.tagName).toBe("BUTTON");
-    expect((titleControl as HTMLButtonElement).tabIndex).toBe(0);
-    expect(titleControl).toHaveAttribute("title", title);
-    expect(titleControl.className).toContain("focus-visible:outline");
-    expect(titleControl.querySelector("button, a, input")).toBeNull();
-
-    titleControl.focus();
-    fireEvent.keyDown(titleControl, { key: "Enter" });
-    expect(document.activeElement).toBe(titleControl);
+    const titleNode = screen.getByText(title);
+    // No interactive role: the title has no action, so it must not trap Tab.
+    expect(titleNode.tagName).toBe("SPAN");
+    expect(titleNode).toHaveAttribute("title", title);
+    expect(titleNode.closest("button, a, input")).toBeNull();
   });
 
   it("S2 shows one quiet row: dot, title, host hint, actions (no status text)", () => {
@@ -431,8 +430,10 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(screen.getByText("fix kaneo build")).toBeVisible();
     // Host is a plain right-aligned hint in the SAME row; no status text.
     expect(screen.getByText("pi-laptop")).toBeVisible();
-    expect(screen.queryByText("Pi connected")).toBeNull();
-    expect(screen.queryByText("Pi offline")).toBeNull();
+    // Connectivity lives in the dot + an sr-only state label, never a row.
+    const sr = document.querySelector(".sr-only");
+    expect(sr?.textContent).toBe("Pi connected");
+    expect(document.querySelector("[role='status']")).toBeNull();
     expect(screen.getByRole("button", { name: "Unbind" })).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Change session" }),
@@ -667,6 +668,28 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     });
     // Still unbound: the picker row is still offered, no S2 block popped in.
     expect(screen.getByRole("button", { name: /Assign agent/ })).toBeVisible();
+  });
+
+  it("a live bound session's title is remembered for later offline display", async () => {
+    bindingQuery.data = {
+      bound: true,
+      online: true,
+      hostId: "pi-laptop",
+      bindingId: "binding-1",
+      sessionId: "s-laptop-1",
+      bindingGeneration: 1,
+    };
+    rosterQuery.data = { sessions: [liveLaptop()] };
+    render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    expect(screen.getByText("fix kaneo build")).toBeVisible();
+    // Write-through: the live session pins its title into the local memory.
+    await vi.waitFor(() => {
+      const raw = window.localStorage.getItem("kaneo:session-titles");
+      expect(JSON.parse(raw ?? "{}")).toMatchObject({
+        "s-laptop-1": "fix kaneo build",
+      });
+    });
+    window.localStorage.clear();
   });
 
   it("i18n keys used by the panel exist in the en-US reference", async () => {
