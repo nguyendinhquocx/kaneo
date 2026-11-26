@@ -382,9 +382,11 @@ export default function TaskPropertiesSidebar({
           </div>
         )}
 
-        {/* Compact modal keeps the Agents row in its compact property slot. */}
+        {/* Compact modal keeps the Agents row in its compact property slot.
+            The wrapper aligns the row's text with the section labels below
+            (px-5 + the panel's own px-2 == the label's 28px indent). */}
         {compact && !shareCapability && task && (
-          <div className="contents">
+          <div className="px-5">
             <TaskAgentBindingPanel taskId={task.id} layout="row" />
           </div>
         )}

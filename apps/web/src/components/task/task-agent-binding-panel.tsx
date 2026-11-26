@@ -1,4 +1,4 @@
-import { ChevronRight, Loader2, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -10,7 +10,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,7 +27,6 @@ import { useBindAgentSession } from "@/hooks/mutations/agent-session/use-bind-ag
 import { useUnbindAgentSession } from "@/hooks/mutations/agent-session/use-unbind-agent-session";
 import { useGetAgentSessionRoster } from "@/hooks/queries/agent-session/use-get-agent-session-roster";
 import { useGetTaskBindingStatus } from "@/hooks/queries/agent-session/use-get-task-binding-status";
-import useGetTask from "@/hooks/queries/task/use-get-task";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -96,6 +94,46 @@ type ConfirmState =
   | { kind: "unbind" }
   | null;
 
+// Owner polish r3: an offline bound session must still show its NAME, not a
+// raw session id. The live roster forgets a session after its TTL, so the
+// panel keeps a tiny local title memory (sessionId -> last seen title) and
+// falls back to the raw id only when the session was never seen.
+const SESSION_TITLES_KEY = "kaneo:session-titles";
+
+function readCachedSessionTitle(sessionId: string | undefined): string | null {
+  if (!sessionId || typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SESSION_TITLES_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as unknown;
+    if (typeof map !== "object" || map === null) return null;
+    const title = (map as Record<string, unknown>)[sessionId];
+    return typeof title === "string" && title.length > 0 ? title : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberSessionTitle(
+  sessionId: string | undefined,
+  title: string | null | undefined,
+) {
+  if (!sessionId || !title || typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(SESSION_TITLES_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    if (typeof parsed !== "object" || parsed === null) return;
+    const map = parsed as Record<string, string>;
+    if (map[sessionId] === title) return;
+    window.localStorage.setItem(
+      SESSION_TITLES_KEY,
+      JSON.stringify({ ...map, [sessionId]: title }),
+    );
+  } catch {
+    // Cache is best-effort decoration; never break the panel over it.
+  }
+}
+
 type TaskAgentBindingPanelProps = {
   taskId: string;
   /** "block" = desktop sidebar column, "row" = mobile full-width row. */
@@ -108,7 +146,6 @@ export default function TaskAgentBindingPanel({
 }: TaskAgentBindingPanelProps) {
   const { t } = useTranslation();
   const { data: bindingStatus } = useGetTaskBindingStatus(taskId);
-  const { data: task } = useGetTask(taskId);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState<ConfirmState>(null);
@@ -197,6 +234,12 @@ export default function TaskAgentBindingPanel({
     [sessions, bindingStatus?.sessionId],
   );
 
+  // Memory for offline display: every time the bound session is live, pin its
+  // title so later disconnections keep the readable name.
+  useEffect(() => {
+    rememberSessionTitle(bindingStatus?.sessionId, boundSession?.title ?? null);
+  }, [bindingStatus?.sessionId, boundSession?.title]);
+
   // Re-filter an open picker locally at the next roster TTL boundary. This is
   // a one-shot timer, not network polling; changing `clock` schedules the next
   // nearest expiry if more than one session remains.
@@ -225,16 +268,6 @@ export default function TaskAgentBindingPanel({
         .includes(query),
     );
   }, [sessions, search]);
-
-  const groupedByHost = useMemo(() => {
-    const groups = new Map<string, AgentSessionRosterEntry[]>();
-    for (const session of filteredSessions) {
-      const group = groups.get(session.host) ?? [];
-      group.push(session);
-      groups.set(session.host, group);
-    }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredSessions]);
 
   const handleBind = async (session: AgentSessionRosterEntry) => {
     setPickerOpen(false);
@@ -284,27 +317,10 @@ export default function TaskAgentBindingPanel({
     }
   };
 
-  const sessionContextLabel = (session: AgentSessionRosterEntry) =>
-    t("tasks:properties.agents.sessionContext", {
-      cwd: session.cwd || "—",
-      model: session.model || "—",
-      host: session.host,
-    });
-
-  const affectedCardLabel = (session: AgentSessionRosterEntry) =>
-    t("tasks:properties.agents.affectedCard", {
-      number: session.binding?.taskNumber ?? "?",
-      title: session.binding?.taskTitle ?? "",
-    });
-
   // Waiting/connected/disconnected resolution for a UI-initiated bind (D4).
-  const pendingLabel = pendingStatus
-    ? t(`tasks:properties.agents.${pendingStatus}`)
-    : null;
+  // The dot is the only surface for this state — no status text row.
+  // The dot is the only surface for this state — no status text row.
   const connectionOnline = pendingStatus === null && online;
-  // The connectivity indicator must follow the same resolution as the label:
-  // while a pending bind is unresolved, a stale generation's online bit must
-  // not paint the session as connected.
 
   // S0: successful empty roster keeps the card pixel-identical. An initial
   // load failure is different: expose an accessible retry so the empty cache
@@ -335,7 +351,7 @@ export default function TaskAgentBindingPanel({
     <button
       key={session.sessionId}
       type="button"
-      className="group flex min-h-11 w-full rounded-md text-left focus-visible:outline-none sm:min-h-9"
+      className="group flex min-h-11 w-full items-start text-left focus-visible:outline-none sm:min-h-9"
       onClick={() => {
         if (session.binding) {
           setConfirm({ kind: "rebind", session });
@@ -344,7 +360,8 @@ export default function TaskAgentBindingPanel({
         void handleBind(session);
       }}
     >
-      <span className="flex w-fit max-w-full min-w-0 flex-col gap-0.5 rounded-md px-2 py-1.5 group-focus-visible:bg-accent/50 group-hover:bg-accent/50">
+      {/* Hover/press highlight hugs the content only, never the full width. */}
+      <span className="flex min-w-0 max-w-full flex-col gap-0.5 rounded-md px-2 py-1.5 group-focus-visible:bg-accent/50 group-hover:bg-accent/50">
         <span className="flex min-w-0 items-center gap-1.5">
           <span
             aria-hidden="true"
@@ -352,14 +369,11 @@ export default function TaskAgentBindingPanel({
             className="size-1.5 shrink-0 rounded-full bg-success"
           />
           <span
-            className="min-w-0 flex-1 truncate text-xs font-medium"
+            className="min-w-0 truncate text-xs font-medium"
             title={session.title}
           >
             {session.title || session.sessionId}
           </span>
-          <Badge variant="outline" className="shrink-0 px-1 py-0 text-[9px]">
-            {session.host}
-          </Badge>
         </span>
         <span
           className="truncate pl-3 text-[10px] text-muted-foreground"
@@ -371,11 +385,15 @@ export default function TaskAgentBindingPanel({
             : ""}
         </span>
       </span>
+      {/* Host stays as a right-aligned plain hint — no pill chrome. */}
+      <span className="ml-auto shrink-0 py-1.5 pl-2 pr-2 text-[10px] text-muted-foreground">
+        {session.host}
+      </span>
     </button>
   );
 
   const pickerContent = (
-    <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
+    <div className="flex flex-col">
       {roster.isLoading ? (
         <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
@@ -394,14 +412,13 @@ export default function TaskAgentBindingPanel({
             {t("tasks:properties.agents.retry")}
           </Button>
         </div>
-      ) : sessions.length === 0 ? (
-        <div className="px-2 py-2 text-xs text-muted-foreground">
-          {t("tasks:properties.agents.empty")}
-        </div>
       ) : (
         <>
+          {/* The search box lives OUTSIDE the scroll container so scrolled
+              rows can never bleed under it; it is borderless with no hint
+              text — the icon alone carries the affordance. */}
           {searchVisible ? (
-            <div className="sticky top-0 bg-popover pb-1">
+            <div className="px-1 pb-1">
               <div className="relative">
                 <Search
                   className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -410,27 +427,28 @@ export default function TaskAgentBindingPanel({
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder={t("tasks:properties.agents.searchPlaceholder")}
-                  className="h-8 pl-7 text-xs"
+                  placeholder=""
+                  className="h-8 border-none bg-transparent pl-7 text-xs shadow-none focus-visible:ring-0"
                   aria-label={t("tasks:properties.agents.searchPlaceholder")}
                 />
               </div>
             </div>
           ) : null}
-          {groupedByHost.length === 0 ? (
-            <div className="px-2 py-2 text-xs text-muted-foreground">
-              {t("tasks:properties.agents.empty")}
-            </div>
-          ) : (
-            groupedByHost.map(([host, group]) => (
-              <div key={host} className="flex flex-col gap-0.5">
-                <span className="px-2 pt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {host}
-                </span>
-                {group.map(renderSessionRow)}
+          <div className="max-h-64 overflow-y-auto">
+            {sessions.length === 0 ? (
+              <div className="px-2 py-2 text-xs text-muted-foreground">
+                {t("tasks:properties.agents.empty")}
               </div>
-            ))
-          )}
+            ) : filteredSessions.length === 0 ? (
+              <div className="px-2 py-2 text-xs text-muted-foreground">
+                {t("tasks:properties.agents.empty")}
+              </div>
+            ) : (
+              // Hosts are already the primary sort; a per-row right hint
+              // makes the grouped heading redundant chrome.
+              filteredSessions.map(renderSessionRow)
+            )}
+          </div>
         </>
       )}
     </div>
@@ -449,21 +467,9 @@ export default function TaskAgentBindingPanel({
             {t("tasks:properties.agents.rebindTitle")}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {confirm?.kind === "rebind"
-              ? t("tasks:properties.agents.rebindBody", {
-                  sessionId: confirm.session.sessionId,
-                  number: confirm.session.binding?.taskNumber ?? "?",
-                  cardTitle: confirm.session.binding?.taskTitle ?? "",
-                })
-              : ""}
+            {confirm?.kind === "rebind" ? confirm.session.title : ""}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        {confirm?.kind === "rebind" ? (
-          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-            <span>{sessionContextLabel(confirm.session)}</span>
-            <span>{affectedCardLabel(confirm.session)}</span>
-          </div>
-        ) : null}
         <AlertDialogFooter>
           <AlertDialogClose
             render={<Button type="button" variant="outline" size="sm" />}
@@ -509,15 +515,13 @@ export default function TaskAgentBindingPanel({
               size="sm"
               aria-label={accessibleLabel}
               aria-haspopup="dialog"
-              className="h-auto min-h-11 w-full justify-start gap-1.5 px-2 py-1 text-left text-xs font-medium sm:min-h-7 sm:w-full"
+              // Same type scale as the "Nhãn" section label; the hover
+              // highlight hugs the text instead of the whole row.
+              className="h-auto min-h-11 w-fit justify-start gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium text-foreground/70 hover:text-foreground sm:min-h-7"
             >
               <span className="truncate">
                 {t("tasks:properties.agents.heading")}
               </span>
-              <ChevronRight
-                className="ml-auto size-3.5 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
             </Button>
           </PopoverTrigger>
           <PopoverContent
@@ -533,102 +537,83 @@ export default function TaskAgentBindingPanel({
     );
   }
 
-  // S2: bound — dot/title/host/model + Unbind / Change (focus/tap reachable).
-  const metadataUnavailable = !roster.isLoading && !boundSession;
-  const unavailableLabel = t(
-    "tasks:properties.agents.sessionDetailsUnavailable",
-  );
-  const statusText =
-    pendingLabel ??
-    (online
-      ? t("tasks:detail.agentBinding.online")
-      : t("tasks:detail.agentBinding.offline"));
+  // S2: bound — one quiet row: dot + name + right-aligned host hint and the
+  // two compact actions. The connectivity state lives in the dot alone.
+  const cachedTitle = readCachedSessionTitle(bindingStatus?.sessionId);
   const title =
-    boundSession?.title || bindingStatus?.sessionId || unavailableLabel;
+    boundSession?.title || cachedTitle || bindingStatus?.sessionId || "";
+  const hostHint = boundSession?.host || bindingStatus?.hostId || "";
   const panel = (
     <div
       className={cn(
-        "flex min-w-0 flex-col gap-1",
+        "flex min-w-0 items-center gap-1.5",
         layout === "block" && "px-2",
         layout === "row" && "w-full px-2 pb-2",
       )}
     >
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            connectionOnline ? "bg-success" : "bg-muted-foreground/50",
-          )}
-        />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label={title}
-              className="min-w-0 appearance-none truncate rounded-sm border-0 bg-transparent p-0 text-left text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
-              title={title}
-            >
-              {title}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <span className="block max-w-64 break-all">{title}</span>
-          </TooltipContent>
-        </Tooltip>
-        {bindingStatus?.hostId ? (
-          <Badge variant="outline" className="shrink-0 px-1 py-0 text-[9px]">
-            {bindingStatus.hostId}
-          </Badge>
-        ) : null}
-      </div>
-      {metadataUnavailable ? (
-        <span className="text-[10px] text-muted-foreground" role="status">
-          {t("tasks:properties.agents.sessionDetailsUnavailable")}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-1.5 shrink-0 rounded-full",
+          connectionOnline ? "bg-success" : "bg-muted-foreground/50",
+        )}
+      />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={title}
+            className="min-w-0 flex-1 appearance-none truncate rounded-sm border-0 bg-transparent p-0 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+            title={title}
+          >
+            {title}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <span className="block max-w-64 break-all">{title}</span>
+        </TooltipContent>
+      </Tooltip>
+      {hostHint ? (
+        <span className="shrink-0 text-[10px] text-muted-foreground">
+          {hostHint}
         </span>
       ) : null}
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
-        <span className="text-[10px] text-muted-foreground" role="status">
-          {statusText}
-        </span>
-        <span className="min-w-2 flex-1" />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 px-1.5 text-[10px]"
-          disabled={unbindMutation.isPending}
-          onClick={() => setConfirm({ kind: "unbind" })}
-        >
-          {t("tasks:properties.agents.unbind")}
-        </Button>
-        <Popover
-          open={pickerOpen}
-          onOpenChange={(open) => {
-            setPickerOpen(open);
-            if (open && roster.isStale) void roster.refetch();
-            if (!open) setSearch("");
-          }}
-        >
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-[10px]"
-            >
-              {t("tasks:properties.agents.change")}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            className="w-72 p-1"
-            aria-label={t("tasks:properties.agents.pickerLabel")}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-6 shrink-0 px-1.5 text-[10px] text-muted-foreground hover:text-foreground sm:text-[10px]"
+        disabled={unbindMutation.isPending}
+        onClick={() => setConfirm({ kind: "unbind" })}
+      >
+        {t("tasks:properties.agents.unbind")}
+      </Button>
+      <Popover
+        open={pickerOpen}
+        onOpenChange={(open) => {
+          setPickerOpen(open);
+          if (open && roster.isStale) void roster.refetch();
+          if (!open) setSearch("");
+        }}
+      >
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 px-1.5 text-[10px] text-muted-foreground hover:text-foreground sm:text-[10px]"
           >
-            {pickerContent}
-          </PopoverContent>
-        </Popover>
-      </div>
+            {t("tasks:properties.agents.change")}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-72 p-1"
+          aria-label={t("tasks:properties.agents.pickerLabel")}
+        >
+          {pickerContent}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 
@@ -647,27 +632,7 @@ export default function TaskAgentBindingPanel({
             <AlertDialogTitle>
               {t("tasks:properties.agents.unbindTitle")}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("tasks:properties.agents.unbindBody", {
-                sessionId: bindingStatus?.sessionId ?? "",
-              })}
-            </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-            <span>
-              {t("tasks:properties.agents.affectedCard", {
-                number: task?.number ?? "?",
-                title: task?.title ?? "",
-              })}
-            </span>
-            <span>
-              {t("tasks:properties.agents.sessionContext", {
-                cwd: boundSession?.cwd || unavailableLabel,
-                model: boundSession?.model || unavailableLabel,
-                host: bindingStatus?.hostId || unavailableLabel,
-              })}
-            </span>
-          </div>
           <AlertDialogFooter>
             <AlertDialogClose
               render={<Button type="button" variant="outline" size="sm" />}

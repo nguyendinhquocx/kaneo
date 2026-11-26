@@ -200,15 +200,16 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("S1 renders the ghost picker button with the live-session count and a chevron", () => {
+  it("S1 renders the quiet Agents trigger with the live-session count in its accessible name", () => {
     rosterQuery.data = { sessions: [liveLaptop(), liveDeskBound()] };
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     const button = screen.getByRole("button", {
       name: "Assign agent · 2 running",
     });
     expect(button).toBeVisible();
-    // Ghost property-row affordance: chevron, not a static text node.
-    expect(button.querySelector("svg")).not.toBeNull();
+    // No chevron, no count text on-screen — the visible label is just Agents.
+    expect(button.querySelector("svg")).toBeNull();
+    expect(screen.queryByText("2 running")).toBeNull();
   });
 
   it("opening the picker refetches only when the roster cache is stale", async () => {
@@ -328,7 +329,9 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     rosterQuery.data = { sessions: many };
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     fireEvent.click(screen.getByRole("button", { name: /Assign agent/ }));
-    const search = await screen.findByPlaceholderText("Search sessions…");
+    const search = await screen.findByRole("textbox", {
+      name: "Search sessions…",
+    });
     expect(search).toBeVisible();
     fireEvent.change(search, { target: { value: "proj-3" } });
     expect(screen.getByText("session 3")).toBeVisible();
@@ -344,7 +347,9 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     fireEvent.click(screen.getByRole("button", { name: /Assign agent/ }));
     await screen.findByText("fix kaneo build");
-    expect(screen.queryByPlaceholderText("Search sessions…")).toBeNull();
+    expect(
+      screen.queryByRole("textbox", { name: "Search sessions…" }),
+    ).toBeNull();
   });
 
   it("S1 binding an unbound session is a single POST with the roster principal", async () => {
@@ -360,20 +365,19 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     });
   });
 
-  it("rebinding a bound session requires one confirm naming card + session context, then a single POST", async () => {
+  it("rebinding a bound session requires one confirm naming the target session, then a single POST", async () => {
     rosterQuery.data = { sessions: [liveDeskBound()] };
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     fireEvent.click(screen.getByRole("button", { name: /Assign agent/ }));
     fireEvent.click(await screen.findByText("desk work"));
 
-    // One confirm dialog naming the affected card AND the session context.
-    expect(
-      await screen.findByText(
-        's-desk-1 is currently bound to card #7 "Other card". Move it to this card?',
-      ),
-    ).toBeVisible();
-    expect(screen.getByText("/srv/ops · luna · prodesk-home")).toBeVisible();
-    expect(screen.getByText("Affected card: #7 Other card")).toBeVisible();
+    // One confirm dialog; the target session name is the only context.
+    expect(await screen.findByText("Rebind this session?")).toBeVisible();
+    // The session name appears in the row AND as the dialog's sole context.
+    expect(screen.getAllByText("desk work").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("desk work").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("/srv/ops · luna · prodesk-home")).toBeNull();
+    expect(screen.queryByText("Affected card: #7 Other card")).toBeNull();
 
     expect(bindMutation.mutateAsync).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Change session" }));
@@ -413,7 +417,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(document.activeElement).toBe(titleControl);
   });
 
-  it("S2 shows dot, title, host badge, and the online status (no model label)", () => {
+  it("S2 shows one quiet row: dot, title, host hint, actions (no status text)", () => {
     bindingQuery.data = {
       bound: true,
       online: true,
@@ -425,10 +429,10 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     rosterQuery.data = { sessions: [liveLaptop()] };
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     expect(screen.getByText("fix kaneo build")).toBeVisible();
-    expect(screen.getAllByText("pi-laptop").length).toBeGreaterThan(0);
-    // Model labels are gone from the panel identity row.
-    expect(screen.queryByText("glm-5.3-flash")).toBeNull();
-    expect(screen.getByText("Pi connected")).toBeVisible();
+    // Host is a plain right-aligned hint in the SAME row; no status text.
+    expect(screen.getByText("pi-laptop")).toBeVisible();
+    expect(screen.queryByText("Pi connected")).toBeNull();
+    expect(screen.queryByText("Pi offline")).toBeNull();
     expect(screen.getByRole("button", { name: "Unbind" })).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Change session" }),
@@ -457,9 +461,10 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(screen.queryByText("glm-5.3-flash")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Unbind" }));
+    // Trimmed confirm: no cwd/model/host re-description block.
     expect(
-      await screen.findByText("D:/work/kaneo · glm-5.3-flash · pi-laptop"),
-    ).toBeVisible();
+      screen.queryByText("D:/work/kaneo · glm-5.3-flash · pi-laptop"),
+    ).toBeNull();
   });
 
   it("S2 falls back explicitly when the bound session is absent from the live roster", () => {
@@ -473,9 +478,30 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     };
     rosterQuery.data = { sessions: [] };
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    // No cache entry: the raw id is the honest fallback.
     expect(screen.getByText("s-unknown")).toBeVisible();
-    expect(screen.getByText("Pi offline")).toBeVisible();
-    expect(screen.getByText("Session details unavailable")).toBeVisible();
+    expect(screen.getByText("prodesk-home")).toBeVisible();
+    expect(screen.queryByText("Session details unavailable")).toBeNull();
+  });
+
+  it("an offline bound session keeps its remembered name instead of the raw id", () => {
+    window.localStorage.setItem(
+      "kaneo:session-titles",
+      JSON.stringify({ "s-offline-1": "remembered session" }),
+    );
+    bindingQuery.data = {
+      bound: true,
+      online: false,
+      hostId: "pi-laptop",
+      bindingId: "binding-off",
+      sessionId: "s-offline-1",
+      bindingGeneration: 7,
+    };
+    rosterQuery.data = { sessions: [] };
+    render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
+    expect(screen.getByText("remembered session")).toBeVisible();
+    expect(screen.queryByText("s-offline-1")).toBeNull();
+    window.localStorage.clear();
   });
 
   it("S2 unbind requires a confirm, then deletes with the exact binding identity", async () => {
@@ -491,15 +517,15 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     fireEvent.click(screen.getByRole("button", { name: "Unbind" }));
     expect(
-      await screen.findByText(
+      await screen.findByText("Unbind the agent from this card?"),
+    ).toBeVisible();
+    // Trimmed confirm: no re-description block, no affected-card line.
+    expect(
+      screen.queryByText(
         "Session s-laptop-1 will stop syncing this card and its subtasks.",
       ),
-    ).toBeVisible();
-    // Acceptance: the confirm names the affected card AND the session context.
-    expect(screen.getByText("Affected card: #1 Panel card")).toBeVisible();
-    expect(
-      screen.getByText("D:/work/kaneo · glm-5.3-flash · pi-laptop"),
-    ).toBeVisible();
+    ).toBeNull();
+    expect(screen.queryByText("Affected card: #1 Panel card")).toBeNull();
     expect(unbindMutation.mutateAsync).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Unbind" }));
     await vi.waitFor(() => {
@@ -532,10 +558,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
       bindingGeneration: 1,
     };
     rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
-    expect(
-      screen.getByText("Assigned · waiting for the session"),
-    ).toBeVisible();
-    expect(screen.queryByText("Pi connected")).toBeNull();
+    expect(document.querySelector("span.bg-success")).toBeNull();
 
     // The server flipped to the mutation's generation, but it has not yet
     // heartbeated. This observation arms pending-state resolution.
@@ -546,9 +569,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
       bindingGeneration: 2,
     };
     rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
-    expect(
-      screen.getByText("Assigned · waiting for the session"),
-    ).toBeVisible();
+    expect(document.querySelector("span.bg-success")).toBeNull();
 
     // A late stale response for the older online generation must not clear
     // pending or make the prior session appear connected.
@@ -559,10 +580,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
       bindingGeneration: 1,
     };
     rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
-    expect(
-      screen.getByText("Assigned · waiting for the session"),
-    ).toBeVisible();
-    expect(screen.queryByText("Pi connected")).toBeNull();
+    expect(document.querySelector("span.bg-success")).toBeNull();
     // The connectivity dot must not paint the stale generation green either.
     expect(document.querySelector("span.bg-success")).toBeNull();
 
@@ -574,9 +592,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
       bindingGeneration: 2,
     };
     rerender(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
-    expect(screen.getByText("Pi connected")).toBeVisible();
     expect(document.querySelector("span.bg-success")).not.toBeNull();
-    expect(screen.queryByText("Assigned · waiting for the session")).toBeNull();
   });
 
   it("the pending status ages: waiting until 2x TTL, then disconnected, null once connected", () => {
@@ -667,16 +683,10 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
       "loading",
       "loadError",
       "retry",
-      "waiting",
-      "disconnected",
       "change",
       "unbind",
       "rebindTitle",
-      "rebindBody",
       "unbindTitle",
-      "unbindBody",
-      "sessionContext",
-      "affectedCard",
       "bindFailed",
       "unbindFailed",
       "pickerLabel",
