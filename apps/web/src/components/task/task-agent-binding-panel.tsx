@@ -616,6 +616,7 @@ export default function TaskAgentBindingPanel({
           open={pickerOpen}
           onOpenChange={(open) => {
             setPickerOpen(open);
+            if (open && roster.isStale) void roster.refetch();
             if (!open) setSearch("");
           }}
         >
