@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "spec": "SPEC-2026-11-25-kaneo-ui-agent-binding",
+  "wave": "ui-agent-polish-r2",
+  "source_sha": "03cc5a714a5761ec47c56aa51a75ebbc21a65e5c",
+  "base_source_sha": "d9975628",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-03cc5a71-ui-agent-polish-r2@sha256:4e45af76b1a7a28f9f9c6353017275a9b24b540c90e000e5abb7115b3c3ccbca",
+  "candidate_manifest_digest": "sha256:4e45af76b1a7a28f9f9c6353017275a9b24b540c90e000e5abb7115b3c3ccbca",
+  "candidate_compose_sha256": "e3197984dd8973a6b77e933e851e56991bb6e5bb02da3c8a2caad72a75af9848",
+  "source_archive_sha256": "9a76119e9f40a7ac9a3474d37421d685c1daf5524d4d831b78c96ff8422f8155",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "Built from git archive of committed source 03cc5a71 only; source archive SHA-256 verified byte-identical on ProDesk before extraction.",
+  "build": {
+    "builder": "ProDesk native Docker Buildx",
+    "command": "docker buildx build --platform linux/amd64 --no-cache --push --label org.opencontainers.image.revision=03cc5a714a5761ec47c56aa51a75ebbc21a65e5c --label org.opencontainers.image.source=https://github.com/nguyendinhquocx/kaneo -f Dockerfile.kaneo -t ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-03cc5a71-ui-agent-polish-r2 .",
+    "result": "PASS; digest 4e45af76… pulled and revision label verified on ProDesk before apply.",
+    "github_actions": "unchanged (disabled)",
+    "docker_scout": "not run"
+  },
+  "verify": [
+    "Web 208/208 (incl. updated panel/sidebar suites for the quiet trigger, no model labels, content-fit hover), typecheck PASS, biome PASS, i18n sync PASS, production web build PASS.",
+    "Owner live feedback applied: no model names anywhere, no Agents heading, unbound trigger reads only Agents with the sibling Marker type scale (count kept as aria-label), picker rows highlight content-fit instead of the full popover width."
+  ],
+  "deployment_lane": "R10 guarded apply 2026-11-26: PLAN blocked 3x on stale current pins carried from the r1 bundle (wrapper sha, current source revision, metadata source revision) — each corrected against a fresh production survey before any mutation; APPLY 8/8 PASS, exact digest pin, healthy; compose 0a699c3b… -> e3197984…; pre/post snapshots kaneo-20261126T115855Z / kaneo-20261126T115923Z both verify PASS; /api/health ok. No migration change (0057 remains head).",
+  "live_smoke": "Container healthy with candidate pin; UI bundle identical to the locally verified build (208/208).",
+  "extension_sync": "unchanged (3be74819 already synced to both runtimes).",
+  "rollback": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-d9975628-ui-agent-binding-r1@sha256:be955119313ba9e7a86c3890bec964061254051c1e316af8448a97978f370ddf + Compose 0a699c3b14ad988a0d82a022e078ee6e1d41f1e603f45af530cb3e89feb81100; no migration change."
+}
