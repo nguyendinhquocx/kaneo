@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "spec": "SPEC-2026-11-25-kaneo-ui-agent-binding",
+  "wave": "ui-agent-polish-r3",
+  "source_sha": "ce629fe13cc35c9b55724813b341ec8db5cafc0d",
+  "base_source_sha": "03cc5a71",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-ce629fe1-ui-agent-polish-r3@sha256:c4e4e4b6c9cfcaa79ae2c27c00c280d4dd881563ccd67f2594006cf2235afb2e",
+  "candidate_manifest_digest": "sha256:c4e4e4b6c9cfcaa79ae2c27c00c280d4dd881563ccd67f2594006cf2235afb2e",
+  "candidate_compose_sha256": "18432de3d979f85230479ea7e71110a9a6027e96b4aefa82cf78629f9a2705ed",
+  "source_archive_sha256": "4f1f90e8a496e98cac335da0973e38b902d37ecbb096c39a0d29cd1fbaf17c74",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "Built from git archive of committed sources 6bf1f6b4+ce629fe1 only; source archive SHA-256 verified byte-identical on ProDesk before extraction.",
+  "build": {
+    "builder": "ProDesk native Docker Buildx",
+    "command": "docker buildx build --platform linux/amd64 --no-cache --push --label org.opencontainers.image.revision=ce629fe13cc35c9b55724813b341ec8db5cafc0d --label org.opencontainers.image.source=https://github.com/nguyendinhquocx/kaneo -f Dockerfile.kaneo -t ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-ce629fe1-ui-agent-polish-r3 .",
+    "result": "PASS; digest c4e4e4b6 pulled and revision label verified on ProDesk before apply.",
+    "github_actions": "unchanged (disabled)",
+    "docker_scout": "not run"
+  },
+  "verify": [
+    "Web 210/210 (write-through title-cache test added; span-title, search-outside-scroll, exact Agents text pinned), typecheck PASS, biome PASS, i18n sync PASS (7 dead keys removed across 13 locales), production web build PASS.",
+    "Dual review before deploy per owner instruction: GLM-5.3-Flash APPROVED, GPT-6.1-Luna NEEDS REVISION -> all findings fixed in ce629fe1 (sm:text-xs scale fix, 64-entry recency-bounded self-healing cache, rebind id fallback, sr-only dot state, span title, placeholder removal, duplicate assert/comment cleanup)."
+  ],
+  "deployment_lane": "R10 guarded apply 2026-11-26: PLAN PASS first attempt (pins surveyed fresh: wrapper a0050a09, compose e3197984, metadata 03cc5a71); APPLY PASS, exact digest pin, healthy; compose e3197984 -> 18432de3; pre/post snapshots kaneo-20261126T135731Z / kaneo-20261126T135800Z both verify PASS; /api/health 200. No migration change (0057 remains head).",
+  "live_smoke": "Container healthy with candidate pin; UI bundle identical to the locally verified build (210/210).",
+  "extension_sync": "unchanged (3be74819 already synced to both runtimes).",
+  "rollback": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-03cc5a71-ui-agent-polish-r2@sha256:4e45af76b1a7a28f9f9c6353017275a9b24b540c90e000e5abb7115b3c3ccbca + Compose e3197984dd8973a6b77e933e851e56991bb6e5bb02da3c8a2caad72a75af9848; no migration change."
+}
