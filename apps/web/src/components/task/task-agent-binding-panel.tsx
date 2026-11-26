@@ -335,7 +335,7 @@ export default function TaskAgentBindingPanel({
     <button
       key={session.sessionId}
       type="button"
-      className="flex min-h-11 w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none sm:min-h-9"
+      className="group flex min-h-11 w-full rounded-md text-left focus-visible:outline-none sm:min-h-9"
       onClick={() => {
         if (session.binding) {
           setConfirm({ kind: "rebind", session });
@@ -344,35 +344,32 @@ export default function TaskAgentBindingPanel({
         void handleBind(session);
       }}
     >
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span
-          aria-hidden="true"
-          title={session.lastSeenAt}
-          className="size-1.5 shrink-0 rounded-full bg-success"
-        />
-        <span
-          className="min-w-0 flex-1 truncate text-xs font-medium"
-          title={session.title}
-        >
-          {session.title || session.sessionId}
-        </span>
-        <Badge variant="outline" className="shrink-0 px-1 py-0 text-[9px]">
-          {session.host}
-        </Badge>
-        {session.model ? (
-          <span className="shrink-0 text-[10px] text-muted-foreground">
-            {session.model}
+      <span className="flex w-fit max-w-full min-w-0 flex-col gap-0.5 rounded-md px-2 py-1.5 group-focus-visible:bg-accent/50 group-hover:bg-accent/50">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            title={session.lastSeenAt}
+            className="size-1.5 shrink-0 rounded-full bg-success"
+          />
+          <span
+            className="min-w-0 flex-1 truncate text-xs font-medium"
+            title={session.title}
+          >
+            {session.title || session.sessionId}
           </span>
-        ) : null}
-      </span>
-      <span
-        className="truncate pl-3 text-[10px] text-muted-foreground"
-        title={session.cwd}
-      >
-        {session.cwd}
-        {session.binding
-          ? ` · #${session.binding.taskNumber ?? "?"} ${session.binding.taskTitle ?? ""}`
-          : ""}
+          <Badge variant="outline" className="shrink-0 px-1 py-0 text-[9px]">
+            {session.host}
+          </Badge>
+        </span>
+        <span
+          className="truncate pl-3 text-[10px] text-muted-foreground"
+          title={session.cwd}
+        >
+          {session.cwd}
+          {session.binding
+            ? ` · #${session.binding.taskNumber ?? "?"} ${session.binding.taskTitle ?? ""}`
+            : ""}
+        </span>
       </span>
     </button>
   );
@@ -486,10 +483,11 @@ export default function TaskAgentBindingPanel({
     </AlertDialog>
   );
 
-  // S1: unbound with at least one live session — a ghost property-row button.
+  // S1: unbound with at least one live session — a quiet property-row trigger
+  // matching the sibling "Marker" ghost button (same type scale, no noise).
   if (!bound) {
     const count = sessions.length;
-    const label = `${t("tasks:properties.agents.assign")} · ${t(
+    const accessibleLabel = `${t("tasks:properties.agents.assign")} · ${t(
       "tasks:properties.agents.runningCount",
       { count },
     )}`;
@@ -509,13 +507,15 @@ export default function TaskAgentBindingPanel({
               type="button"
               variant="ghost"
               size="sm"
-              aria-label={label}
+              aria-label={accessibleLabel}
               aria-haspopup="dialog"
-              className="h-auto min-h-11 w-full justify-start gap-1.5 px-1.5 py-1 text-left text-xs font-semibold text-muted-foreground hover:text-foreground sm:min-h-7 sm:w-full"
+              className="h-auto min-h-11 w-full justify-start gap-1.5 px-2 py-1 text-left text-xs font-medium sm:min-h-7 sm:w-full"
             >
-              <span className="truncate">{label}</span>
+              <span className="truncate">
+                {t("tasks:properties.agents.heading")}
+              </span>
               <ChevronRight
-                className="ml-auto size-3.5 shrink-0"
+                className="ml-auto size-3.5 shrink-0 text-muted-foreground"
                 aria-hidden="true"
               />
             </Button>
@@ -553,11 +553,6 @@ export default function TaskAgentBindingPanel({
         layout === "row" && "w-full px-2 pb-2",
       )}
     >
-      {layout === "block" ? (
-        <span className="text-xs font-medium text-foreground/70">
-          {t("tasks:properties.agents.heading")}
-        </span>
-      ) : null}
       <div className="flex min-w-0 items-center gap-1.5">
         <span
           aria-hidden="true"
@@ -585,11 +580,6 @@ export default function TaskAgentBindingPanel({
           <Badge variant="outline" className="shrink-0 px-1 py-0 text-[9px]">
             {bindingStatus.hostId}
           </Badge>
-        ) : null}
-        {boundSession?.model ? (
-          <span className="shrink-0 truncate text-[10px] text-muted-foreground">
-            {boundSession.model}
-          </span>
         ) : null}
       </div>
       {metadataUnavailable ? (

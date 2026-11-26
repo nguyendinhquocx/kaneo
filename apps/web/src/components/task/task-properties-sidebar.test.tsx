@@ -323,7 +323,9 @@ describe("task properties in full share mode", () => {
           />
         </ShareCapabilityProvider>,
       );
-      expect(screen.queryByRole("button", { name: /Assign agent/ })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /agents\.assign/ }),
+      ).toBeNull();
     } finally {
       rosterSessions.list = [];
     }

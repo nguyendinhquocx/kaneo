@@ -413,7 +413,7 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     expect(document.activeElement).toBe(titleControl);
   });
 
-  it("S2 shows dot, title, host badge, model, and the online status", () => {
+  it("S2 shows dot, title, host badge, and the online status (no model label)", () => {
     bindingQuery.data = {
       bound: true,
       online: true,
@@ -426,7 +426,8 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     expect(screen.getByText("fix kaneo build")).toBeVisible();
     expect(screen.getAllByText("pi-laptop").length).toBeGreaterThan(0);
-    expect(screen.getByText("glm-5.3-flash")).toBeVisible();
+    // Model labels are gone from the panel identity row.
+    expect(screen.queryByText("glm-5.3-flash")).toBeNull();
     expect(screen.getByText("Pi connected")).toBeVisible();
     expect(screen.getByRole("button", { name: "Unbind" })).toBeVisible();
     expect(
@@ -452,7 +453,8 @@ describe("TaskAgentBindingPanel (SPEC-2026-11-25 T3)", () => {
     render(<TaskAgentBindingPanel taskId="task-1" layout="block" />);
     expect(rosterQuery.enabled).not.toBe(false);
     expect(screen.getByText("fix kaneo build")).toBeVisible();
-    expect(screen.getByText("glm-5.3-flash")).toBeVisible();
+    // Model names are not part of the panel anymore; identity is title + host.
+    expect(screen.queryByText("glm-5.3-flash")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Unbind" }));
     expect(
