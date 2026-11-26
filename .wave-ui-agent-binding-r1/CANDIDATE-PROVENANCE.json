@@ -1,0 +1,31 @@
+{
+  "schema_version": 3,
+  "spec": "SPEC-2026-11-25-kaneo-ui-agent-binding",
+  "wave": "ui-agent-binding-r1",
+  "source_sha": "d997562815fc1940a0682c4f3555765bafa75ef3",
+  "base_source_sha": "59d0905b",
+  "candidate_image": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-d9975628-ui-agent-binding-r1@sha256:be955119313ba9e7a86c3890bec964061254051c1e316af8448a97978f370ddf",
+  "candidate_manifest_digest": "sha256:be955119313ba9e7a86c3890bec964061254051c1e316af8448a97978f370ddf",
+  "candidate_compose_sha256": "0a699c3b14ad988a0d82a022e078ee6e1d41f1e603f45af530cb3e89feb81100",
+  "source_archive_sha256": "200f886dac6c5fff3bfaf67aef3cc150472efa348554bd4845d76e53e4d12dc2",
+  "platform": "linux/amd64",
+  "dockerfile": "Dockerfile.kaneo",
+  "dirty_state": "Built from git archive of committed source d9975628 only; local unrelated/untracked files excluded. Source archive SHA-256 verified byte-identical on ProDesk before extraction.",
+  "build": {
+    "builder": "ProDesk native Docker Buildx",
+    "command": "docker buildx build --platform linux/amd64 --no-cache --push --label org.opencontainers.image.revision=d997562815fc1940a0682c4f3555765bafa75ef3 --label org.opencontainers.image.source=https://github.com/nguyendinhquocx/kaneo -f Dockerfile.kaneo -t ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-d9975628-ui-agent-binding-r1 .",
+    "result": "PASS; GHCR digest be955119… verified by pull-on-ProDesk + revision label equals full source commit; first attempt used a short-SHA revision label and was rebuilt with the full SHA before apply.",
+    "github_actions": "Actions remains disabled for the repository (HTTP 422); candidate built on the native ProDesk builder as in previous waves.",
+    "docker_scout": "not run"
+  },
+  "verify": [
+    "Independent reviewers: API Argon + Sonnet APPROVED (d2eabc90/23307330); extension Sonnet APPROVED (3be74819); Web Luna findings resolved through 01642524 + runtime-discovered d9975628.",
+    "API integration 323/323 (--maxWorkers=2); Web 208/208; extension 113/113; tsc/build/i18n PASS.",
+    "UAT 9/9 PASS on local stack (migration 0057 e03ce7c2…, receipts in working spec): bind/adopt, unbind clean, ProDesk cross-host, race convergence, roster TTL, S0 pixel-identical vs 90bc84b4, resume re-adopt UPSERT, cross-cwd, cold-start /kaneo-card.",
+    "Migration 0057_agent_session_presence introduced: expected head id=60 hash e03ce7c2eac9e8448c632d2d0ede0a8add655824aa8c73e1d11043e3f67104fa verified on production after apply."
+  ],
+  "deployment_lane": "R10 guarded apply 2026-11-26: PLAN PASS (metadata/compose/wrapper/backup-receipt guards all green); APPLY 8/8 PASS, container recreated with exact digest pin, healthy; migration verifier upgraded to 0057 pins PASS; Compose d06808c5 -> 0a699c3b; pre/post encrypted snapshots kaneo-20261126T043217Z / kaneo-20261126T043245Z both verify PASS; https://kaneo.quoc.app/api/health ok. R2 mirror remains a separate owner gate.",
+  "live_smoke": "PASS 2026-11-26 on production: roster 200; throwaway card created via API-key path, UI-contract bind POST (isAgent exempt) -> binding gen 1, adopted by laptop session (online:true within one announce cycle); card deleted -> binding-status fails closed, unbind returns documented 409 stale_binding, extension tombstone cleared itself (roster binding=no next cycle); session closed; binding #169 li.quoc.app untouched. Caveat: server-side orphan binding rows on deleted tasks are not auto-revoked (logged as backlog candidate, non-blocking).",
+  "extension_sync": "Laptop runtime D->C synced 3be74819 (+README 766feac7) with .pre-uat backups, suite 113/113; ProDesk runtime synced via tar over SSH with .pre-uat-20261126T040135 backup, announce suite 14/14 on ProDesk (typebox/pi-ai/partial-json staged under ~/node_modules for the standalone test runner).",
+  "rollback": "ghcr.io/nguyendinhquocx/kaneo-vi-mcp:2.14.0-candidate-59d0905b-child-activity-context-r1@sha256:089e604ea365212a6525043ea3e59c5284a2c94698110bf3a7a404e74eca3258 + Compose d06808c581ffbe7904873a24325eac7239369a4069ec9dd002201b5c02c8fd58; migration 0057 is additive-only (new table + index), previous image tolerates the new table."
+}
