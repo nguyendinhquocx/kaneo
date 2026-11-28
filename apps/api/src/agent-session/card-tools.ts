@@ -111,6 +111,16 @@ async function lockBindingScope(
   expectedBinding: AgentSessionBinding,
   targetTaskId: string,
 ): Promise<BindingScope> {
+  // Serialize every binding-scope write through one transaction-scoped
+  // advisory lock. SELECT ... FOR UPDATE with ORDER BY cannot guarantee lock
+  // acquisition order (Postgres locks rows in scan order, not output order),
+  // so parallel agent waves touching the same subtree deadlocked on these
+  // tuple locks (11 deadlocks / 48h, all on this query). The advisory lock
+  // makes same-scope operations strictly sequential; different scopes keep
+  // independent keys and never contend. Released at commit/rollback.
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`binding-scope:${expectedBinding.taskId}`}))`,
+  );
   let initial: BindingScope;
   try {
     initial = await resolveTaskSubtreeScope(
